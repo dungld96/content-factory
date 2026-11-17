@@ -66,6 +66,12 @@ export const ApiErrorCode = {
   UserNotFound: 'USER_NOT_FOUND',
   /** The user is already a member of the project. */
   AlreadyMember: 'ALREADY_MEMBER',
+
+  // --- M1: versions and assets (ADR-0010) ---
+  /** The version is already approved (U5); `error.current` carries its state. */
+  AlreadyApproved: 'ALREADY_APPROVED',
+  /** The draft is numbered below the current master (U2): base a new draft on it instead. */
+  StaleDraft: 'STALE_DRAFT',
 } as const;
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];
 
@@ -87,6 +93,8 @@ export const apiErrorResponseSchema = z
       correlationId: z.string(),
       /** Present on `VALIDATION_FAILED` only. */
       details: z.array(validationIssueSchema).optional(),
+      /** The resource's current state, when the conflict depends on it (e.g. ALREADY_APPROVED). */
+      current: z.unknown().optional(),
     }),
   })
   .meta({ id: 'ApiErrorResponse' });

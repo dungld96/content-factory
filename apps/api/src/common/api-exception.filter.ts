@@ -50,6 +50,7 @@ interface CodedBody {
   message?: unknown;
   retryable?: unknown;
   details?: unknown;
+  current?: unknown;
 }
 
 function isIssueList(value: unknown): value is ValidationIssue[] {
@@ -85,6 +86,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
     let message = 'An unexpected error occurred.';
     let retryable: boolean | undefined;
     let details: ValidationIssue[] | undefined;
+    let current: unknown;
 
     if (!(exception instanceof HttpException)) {
       const mapped = mapDatabaseError(exception);
@@ -108,6 +110,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
         if (typeof coded.code === 'string') code = coded.code;
         if (typeof coded.retryable === 'boolean') retryable = coded.retryable;
         if (isIssueList(coded.details)) details = coded.details;
+        if (status < 500) current = coded.current;
         if (typeof coded.message === 'string') message = coded.message;
         else if (Array.isArray(coded.message)) message = coded.message.join('; ');
       } else if (typeof body === 'string') {
@@ -136,6 +139,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
         retryable: retryable ?? RETRYABLE_STATUSES.has(status),
         correlationId,
         ...(details ? { details } : {}),
+        ...(current === undefined ? {} : { current }),
       },
     };
     res.status(status).json(payload);

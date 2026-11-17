@@ -909,7 +909,7 @@ Delivery is split into five review slices; each is reviewed before the next star
 | M1a   | 1     | Database roles, schema, `init_m1` migration with triggers, presence/drift tests, direct-SQL and concurrency suites | Done, reviewed (owner, 2026-11-17) |
 | M1b   | 2–3   | API foundation (contracts, validation, error mapper, pagination, ETag, OpenAPI, helmet) and auth                   | Implemented, awaiting review       |
 | M1c   | 4–5   | `ProjectAccess`, projects, members (last owner), channels, content items                                           | Implemented, awaiting review       |
-| M1d   | 6–7   | Characters, environments, versions and approval, asset links; assets, lineage, usages, archive                     | Not started                        |
+| M1d   | 6–7   | Characters, environments, versions and approval, asset links; assets, lineage, usages, archive                     | Implemented, awaiting review       |
 | M1e   | 8–10  | Seed, permission-matrix test, web (login, projects, logout, E2E), docs                                             | Not started                        |
 
 1. Database roles (U3: `acf_migrator` / `acf_app`), the schema, the `init_m1` migration with the triggers,

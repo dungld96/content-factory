@@ -27,3 +27,4 @@ export {
   PostgresSqlState,
   type DatabaseErrorInfo,
 } from './errors.js';
+export { uuidv7 } from './uuid.js';

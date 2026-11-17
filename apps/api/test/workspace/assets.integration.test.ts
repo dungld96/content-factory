@@ -1,0 +1,172 @@
+// Asset metadata, lineage, usages and archive rules (design package §4.2, §4.3, §7).
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import type { AssetDto, AssetUsageDto, LineageResponse, Page } from '@acf/contracts';
+
+import { newAsset } from '../support/workspace.js';
+import { bodyOf, codeOf, workspaceContext, type WorkspaceContext } from './shared.js';
+
+let ctx: WorkspaceContext;
+beforeAll(async () => {
+  ctx = await workspaceContext();
+});
+afterAll(async () => {
+  await ctx.close();
+});
+
+const register = (projectId: string, extra: Record<string, unknown> = {}) =>
+  ctx.as('editor', 'POST', `/projects/${projectId}/assets`, { body: newAsset(projectId, extra) });
+
+describe('registration', () => {
+  it('registers metadata with an ETag', async () => {
+    const f = await ctx.fixture();
+    const res = await register(f.projectId, { label: 'front', metadata: { pose: 'front' } });
+    expect(res.status).toBe(201);
+    expect(bodyOf<AssetDto>(res)).toMatchObject({
+      assetType: 'reference',
+      sourceType: 'upload',
+      sizeBytes: 123_456,
+      width: 1080,
+      height: 1920,
+      label: 'front',
+      metadata: { pose: 'front' },
+      approvalStatus: 'pending',
+      archivedAt: null,
+    });
+    expect(res.headers.get('etag')).toMatch(/^W\/"\d+"$/);
+  });
+
+  it.each([
+    [
+      'a storage key outside the project',
+      (p: string) => ({ storageKey: `projects/other/${p}.png` }),
+    ],
+    ['a path traversal segment', (p: string) => ({ storageKey: `projects/${p}/../x.png` })],
+    ['a MIME type that does not match the asset type', () => ({ mimeType: 'video/mp4' })],
+    ['a derived asset without a source', () => ({ sourceType: 'derived' })],
+    ['a generated asset (M4 only)', () => ({ sourceType: 'generated' })],
+    ['an invalid checksum', () => ({ checksumSha256: 'ABC' })],
+    ['a size over 10 GiB', () => ({ sizeBytes: 11 * 1024 ** 3 })],
+  ])('rejects %s with 400', async (_name, extra) => {
+    const f = await ctx.fixture();
+    const res = await register(f.projectId, extra(f.projectId));
+    expect([res.status, codeOf(res)]).toEqual([400, 'VALIDATION_FAILED']);
+  });
+
+  it('rejects a duplicate storage key and a foreign source', async () => {
+    const f = await ctx.fixture();
+    const body = newAsset(f.projectId);
+    expect(
+      (await ctx.as('editor', 'POST', `/projects/${f.projectId}/assets`, { body })).status,
+    ).toBe(201);
+    const dup = await ctx.as('editor', 'POST', `/projects/${f.projectId}/assets`, {
+      body: { ...body, checksumSha256: 'f'.repeat(64) },
+    });
+    expect([dup.status, codeOf(dup)]).toEqual([409, 'STORAGE_KEY_TAKEN']);
+
+    const other = await ctx.fixture();
+    const foreign = await register(f.projectId, {
+      sourceType: 'derived',
+      sourceAssetId: other.assetId,
+    });
+    expect([foreign.status, codeOf(foreign)]).toEqual([422, 'REFERENCE_NOT_FOUND']);
+  });
+
+  it('only label and metadata are editable', async () => {
+    const f = await ctx.fixture();
+    const ok = await ctx.as('editor', 'PATCH', `/assets/${f.assetId}`, {
+      body: { label: 'front view' },
+    });
+    expect(bodyOf<AssetDto>(ok).label).toBe('front view');
+    const identity = await ctx.as('editor', 'PATCH', `/assets/${f.assetId}`, {
+      body: { storageKey: 'projects/x/y.png' },
+    });
+    expect(identity.status).toBe(400);
+  });
+
+  it('filters by asset type and paginates', async () => {
+    const f = await ctx.fixture();
+    await register(f.projectId, {
+      assetType: 'audio',
+      mimeType: 'audio/mpeg',
+      width: undefined,
+      height: undefined,
+    });
+    const audio = bodyOf<Page<AssetDto>>(
+      await ctx.as('viewer', 'GET', `/projects/${f.projectId}/assets?assetType=audio`),
+    );
+    expect(audio.data.map((a) => a.assetType)).toEqual(['audio']);
+    const page = bodyOf<Page<AssetDto>>(
+      await ctx.as('viewer', 'GET', `/projects/${f.projectId}/assets?limit=2`),
+    );
+    expect(page.data).toHaveLength(2);
+    expect(page.page.nextCursor).not.toBeNull();
+  });
+});
+
+describe('lineage', () => {
+  it('walks ancestors and paginates descendants breadth-first', async () => {
+    const f = await ctx.fixture();
+    const derive = async (source: string) =>
+      bodyOf<AssetDto>(
+        await register(f.projectId, { sourceType: 'derived', sourceAssetId: source }),
+      ).id;
+    const crop = await derive(f.assetId);
+    const cropSmall = await derive(crop);
+    const recolor = await derive(f.assetId);
+
+    const up = bodyOf<LineageResponse>(
+      await ctx.as('viewer', 'GET', `/assets/${cropSmall}/lineage?direction=ancestors`),
+    );
+    expect(up.data.map((n) => [n.depth, n.asset.id])).toEqual([
+      [1, crop],
+      [2, f.assetId],
+    ]);
+
+    const page1 = bodyOf<LineageResponse>(
+      await ctx.as('viewer', 'GET', `/assets/${f.assetId}/lineage?direction=descendants&limit=2`),
+    );
+    expect(page1.data.map((n) => n.depth)).toEqual([1, 1]);
+    expect(page1.data.map((n) => n.asset.id).sort()).toEqual([crop, recolor].sort());
+    const page2 = bodyOf<LineageResponse>(
+      await ctx.as(
+        'viewer',
+        'GET',
+        `/assets/${f.assetId}/lineage?direction=descendants&limit=2&cursor=${page1.page.nextCursor ?? ''}`,
+      ),
+    );
+    expect(page2.data.map((n) => [n.depth, n.asset.id])).toEqual([[2, cropSmall]]);
+    expect(page2.page.nextCursor).toBeNull();
+
+    const shallow = bodyOf<LineageResponse>(
+      await ctx.as('viewer', 'GET', `/assets/${f.assetId}/lineage?direction=descendants&depth=1`),
+    );
+    expect(shallow.data.every((n) => n.depth === 1)).toBe(true);
+  });
+});
+
+describe('usages and archive', () => {
+  it('lists usages and refuses to archive an asset used by an approved version', async () => {
+    const f = await ctx.fixture();
+    const usages = bodyOf<{ data: AssetUsageDto[] }>(
+      await ctx.as('viewer', 'GET', `/assets/${f.assetId}/usages`),
+    );
+    expect(usages.data.map((u) => [u.kind, u.reference, u.status]).sort()).toEqual([
+      ['character', 'primary', 'draft'],
+      ['environment', 'primary', 'draft'],
+    ]);
+
+    await ctx.as('editor', 'POST', `/character-versions/${f.characterVersionId}/approve`);
+    const res = await ctx.as('editor', 'POST', `/assets/${f.assetId}/archive`);
+    expect([res.status, codeOf(res)]).toEqual([409, 'ASSET_IN_USE']);
+
+    const spare = await ctx.as('editor', 'POST', `/assets/${f.spareAssetId}/archive`);
+    expect(spare.status).toBe(200);
+    const again = await ctx.as('editor', 'POST', `/assets/${f.spareAssetId}/archive`);
+    expect([again.status, codeOf(again)]).toEqual([409, 'ARCHIVED']);
+    const list = bodyOf<Page<AssetDto>>(
+      await ctx.as('viewer', 'GET', `/projects/${f.projectId}/assets`),
+    );
+    expect(list.data.some((a) => a.id === f.spareAssetId)).toBe(false);
+  });
+});

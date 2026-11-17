@@ -160,13 +160,37 @@ Archive the project (owner). It becomes read-only; there is no unarchive in M1 (
 
 ## 2. Characters and environments
 
-- `POST /projects/:projectId/characters`
-- `GET /projects/:projectId/characters`
-- `POST /characters/:characterId/versions`
-- `POST /projects/:projectId/environments`
-- `POST /environments/:environmentId/versions`
+Implemented in M1d (ADR-0010; design package §7). Characters and environments have the same
+endpoints; replace `characters`/`character-versions`/`characterId` with
+`environments`/`environment-versions`/`environmentId`. Schemas: `packages/contracts/src/brand.ts`.
+Reads need viewer; everything else needs editor. Changes under an archived character/environment
+(or project) return `409 ARCHIVED`.
 
-Reference asset upload should use a presigned upload flow. A version can be marked approved only by an authorized editor/admin.
+| Endpoint | Notes |
+|---|---|
+| `POST /projects/:projectId/characters` | `{ name, slug, description? }`; slug unique per project |
+| `GET /projects/:projectId/characters` | paginated; each item includes `master: { id, version, approvedAt } \| null` |
+| `GET /characters/:characterId`, `PATCH`, `POST …/archive` | name/slug/description only; the master is never client-writable |
+| `POST /characters/:characterId/versions` | new **draft**: `{ description, rules?, primaryAssetId?, assets? }`, or `{ basedOnVersionId }` to copy an older version (fields given override the copy) |
+| `GET /characters/:characterId/versions` | paginated, newest first |
+| `GET /character-versions/:versionId` | includes `assets: [{ assetId, sortOrder, note }]` |
+| `PATCH /character-versions/:versionId` | drafts only (`409 VERSION_IMMUTABLE`); `If-Match` |
+| `PUT /character-versions/:versionId/assets` | replaces a draft's links; changes the version's ETag; `If-Match` |
+| `POST /character-versions/:versionId/approve` | `If-Match` (the ETag the reviewer saw) |
+
+`rules` is the character's identity rules or the environment's visual rules (a JSON object, at
+most 50 KB).
+
+**Approval.** A draft becomes `approved` and the character's master in one transaction. The
+master is always the highest-numbered approved version (decision D1). Errors:
+`409 ALREADY_APPROVED` (with the version in `error.current`), `409 STALE_DRAFT` (the draft is
+numbered below the master: create a new draft `basedOnVersionId` it instead), `409 ASSET_ARCHIVED`,
+`412 PRECONDITION_FAILED`. Approved versions and their links never change. Rollback is
+append-only: base a new draft on the old version and approve it.
+
+Referenced assets must belong to the same project (`422 REFERENCE_NOT_FOUND`) and be active when
+first referenced (`409 ASSET_ARCHIVED`). An asset archived later can stay on a draft, but that
+draft cannot be approved (decision U4).
 
 ## 3. Content items
 
@@ -300,6 +324,27 @@ Request:
 All generation endpoints return a job ID and initial status. Do not hold an HTTP request open while waiting for long-running generation.
 
 ## 7. Assets and renders
+
+Implemented in M1d (metadata only; decision D8). Schemas: `packages/contracts/src/assets.ts`.
+
+| Endpoint | Role | Notes |
+|---|---|---|
+| `POST /projects/:projectId/assets` | editor | registers metadata; see rules below |
+| `GET /projects/:projectId/assets` | viewer | paginated; filters `assetType`, `contentItemId`, `includeArchived` |
+| `GET /assets/:assetId` | viewer | |
+| `GET /assets/:assetId/lineage` | viewer | `?direction=ancestors\|descendants&depth=1..50`; descendants are breadth-first and paginated (`limit`, `cursor`) |
+| `GET /assets/:assetId/usages` | viewer | character/environment versions referencing the asset (`primary` or `link`) |
+| `PATCH /assets/:assetId` | editor | `label`, `metadata` only; `If-Match` |
+| `POST /assets/:assetId/archive` | editor | `409 ASSET_IN_USE` while an approved version references it |
+
+Registration rules: `storageKey` must start with `projects/<projectId>/` and contain no `.`/`..`
+segments (`409 STORAGE_KEY_TAKEN` if already registered); `mimeType` must match `assetType`
+(e.g. `reference`/`image`: PNG, JPEG, WebP; `render`: MP4); `sizeBytes` ≤ 10 GiB;
+`checksumSha256` is 64 lowercase hex characters; `sourceType` is `upload`, `import` or `derived`
+(`generated` is reserved for provider jobs in M4); `derived` requires a `sourceAssetId` of the
+same project. File identity and lineage never change after registration.
+
+Planned for later milestones:
 
 - `GET /content/:contentId/assets`
 - `GET /assets/:assetId`

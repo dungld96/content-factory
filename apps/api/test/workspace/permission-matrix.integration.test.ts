@@ -1,7 +1,7 @@
-// Table-driven permission matrix (design package §8.2) for the M1c endpoints. Every row runs for
-// every caller: unauthenticated, non-member, viewer, editor, owner. Each call gets a fresh
-// fixture project, so destructive successes never affect another cell. M1e extends the table to
-// every route and asserts that the table covers all registered routes.
+// Table-driven permission matrix (design package §8.2). Every row runs for every caller:
+// unauthenticated, non-member, viewer, editor, owner. Each call gets a fresh fixture project, so
+// destructive successes never affect another cell. The table must cover every registered route
+// (asserted below); only the auth, health and OpenAPI routes are exempt (tested separately).
 import { randomUUID } from 'node:crypto';
 
 import type pg from 'pg';
@@ -16,10 +16,12 @@ import {
   userAdmin,
   type AuthTestApp,
 } from '../support/auth-app.js';
+import { OpenApiService } from '../../src/openapi/openapi.service.js';
 import {
   actAs,
   createFixture,
   emailOf,
+  newAsset,
   newContent,
   seedUsers,
   signInAll,
@@ -33,7 +35,7 @@ const CALLERS: readonly Caller[] = ['unauthenticated', 'outsider', 'viewer', 'ed
 interface Row {
   readonly method: string;
   readonly path: (f: Fixture, ids: Record<string, string>) => string;
-  readonly body?: () => unknown;
+  readonly body?: (f: Fixture) => unknown;
   /** Expected status for: unauthenticated, non-member, viewer, editor, owner. */
   readonly expect: readonly [number, number, number, number, number];
 }
@@ -140,7 +142,136 @@ const ROWS: Record<string, Row> = {
     path: (f) => `/content/${f.contentId}/archive`,
     expect: [401, 404, 403, 200, 200],
   },
+  ...versionedRows('characters', 'characterId', 'character-versions', (f) => [
+    f.characterId,
+    f.characterVersionId,
+  ]),
+  ...versionedRows('environments', 'environmentId', 'environment-versions', (f) => [
+    f.environmentId,
+    f.environmentVersionId,
+  ]),
+  'POST /projects/:projectId/assets': {
+    method: 'POST',
+    path: (f) => `/projects/${f.projectId}/assets`,
+    body: (f) => newAsset(f.projectId),
+    expect: [401, 404, 403, 201, 201],
+  },
+  'GET /projects/:projectId/assets': {
+    method: 'GET',
+    path: (f) => `/projects/${f.projectId}/assets`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'GET /assets/:assetId': {
+    method: 'GET',
+    path: (f) => `/assets/${f.assetId}`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'GET /assets/:assetId/lineage': {
+    method: 'GET',
+    path: (f) => `/assets/${f.assetId}/lineage`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'GET /assets/:assetId/usages': {
+    method: 'GET',
+    path: (f) => `/assets/${f.assetId}/usages`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'PATCH /assets/:assetId': {
+    method: 'PATCH',
+    path: (f) => `/assets/${f.assetId}`,
+    body: () => ({ label: 'front view' }),
+    expect: [401, 404, 403, 200, 200],
+  },
+  'POST /assets/:assetId/archive': {
+    method: 'POST',
+    path: (f) => `/assets/${f.spareAssetId}/archive`,
+    expect: [401, 404, 403, 200, 200],
+  },
 };
+
+/** The same eleven rows for characters and environments (design package §8.2). */
+function versionedRows(
+  plural: string,
+  idParam: string,
+  versions: string,
+  ids: (f: Fixture) => [string, string],
+): Record<string, Row> {
+  const parent = (f: Fixture) => ids(f)[0];
+  const draft = (f: Fixture) => ids(f)[1];
+  return {
+    [`POST /projects/:projectId/${plural}`]: {
+      method: 'POST',
+      path: (f) => `/projects/${f.projectId}/${plural}`,
+      body: () => ({ name: 'N', slug: slug() }),
+      expect: [401, 404, 403, 201, 201],
+    },
+    [`GET /projects/:projectId/${plural}`]: {
+      method: 'GET',
+      path: (f) => `/projects/${f.projectId}/${plural}`,
+      expect: [401, 404, 200, 200, 200],
+    },
+    [`GET /${plural}/:${idParam}`]: {
+      method: 'GET',
+      path: (f) => `/${plural}/${parent(f)}`,
+      expect: [401, 404, 200, 200, 200],
+    },
+    [`PATCH /${plural}/:${idParam}`]: {
+      method: 'PATCH',
+      path: (f) => `/${plural}/${parent(f)}`,
+      body: () => ({ name: 'Renamed' }),
+      expect: [401, 404, 403, 200, 200],
+    },
+    [`POST /${plural}/:${idParam}/archive`]: {
+      method: 'POST',
+      path: (f) => `/${plural}/${parent(f)}/archive`,
+      expect: [401, 404, 403, 200, 200],
+    },
+    [`POST /${plural}/:${idParam}/versions`]: {
+      method: 'POST',
+      path: (f) => `/${plural}/${parent(f)}/versions`,
+      body: () => ({ description: 'v2' }),
+      expect: [401, 404, 403, 201, 201],
+    },
+    [`GET /${plural}/:${idParam}/versions`]: {
+      method: 'GET',
+      path: (f) => `/${plural}/${parent(f)}/versions`,
+      expect: [401, 404, 200, 200, 200],
+    },
+    [`GET /${versions}/:versionId`]: {
+      method: 'GET',
+      path: (f) => `/${versions}/${draft(f)}`,
+      expect: [401, 404, 200, 200, 200],
+    },
+    [`PATCH /${versions}/:versionId`]: {
+      method: 'PATCH',
+      path: (f) => `/${versions}/${draft(f)}`,
+      body: () => ({ description: 'edited' }),
+      expect: [401, 404, 403, 200, 200],
+    },
+    [`PUT /${versions}/:versionId/assets`]: {
+      method: 'PUT',
+      path: (f) => `/${versions}/${draft(f)}/assets`,
+      body: (f) => ({ assets: [{ assetId: f.spareAssetId }] }),
+      expect: [401, 404, 403, 200, 200],
+    },
+    [`POST /${versions}/:versionId/approve`]: {
+      method: 'POST',
+      path: (f) => `/${versions}/${draft(f)}/approve`,
+      expect: [401, 404, 403, 200, 200],
+    },
+  };
+}
+
+/** Routes covered by their own suites (auth, health, OpenAPI), not by the role matrix. */
+const EXEMPT = new Set([
+  'POST /auth/login',
+  'POST /auth/logout',
+  'GET /auth/me',
+  'GET /auth/csrf',
+  'GET /health',
+  'GET /health/ready',
+  'GET /openapi.json',
+]);
 
 let api: AuthTestApp;
 let db: pg.Client;
@@ -169,7 +300,7 @@ describe.each(Object.entries(ROWS))('%s', (_route, row) => {
     'as %s -> %i',
     async (caller, expected) => {
       const fixture = await createFixture(db, ids);
-      const body = row.body?.();
+      const body = row.body?.(fixture);
       const res = await as(
         caller === 'unauthenticated' ? null : caller,
         row.method,
@@ -179,4 +310,15 @@ describe.each(Object.entries(ROWS))('%s', (_route, row) => {
       expect(res.status, JSON.stringify(res.json)).toBe(expected);
     },
   );
+});
+
+it('covers every registered route (design package §8.2 test obligation)', () => {
+  const registered = api.app
+    .get(OpenApiService)
+    .routes()
+    .filter((r) => !r.path.startsWith('/test-'))
+    .map((r) => `${r.method.toUpperCase()} ${r.path}`);
+  const missing = registered.filter((key) => !(key in ROWS) && !EXEMPT.has(key));
+  const stale = Object.keys(ROWS).filter((key) => !registered.includes(key));
+  expect({ missing, stale }).toEqual({ missing: [], stale: [] });
 });

@@ -71,6 +71,14 @@ D1 defines the master as the latest approved version.
   the invariant, and dropping the materializing write breaks it under RR
   (`docs/design/m1/evidence/`).
 
+- **Implementation note (M1d).** The approval transaction locks the parent with a plain
+  `SELECT … FOR NO KEY UPDATE` and reads the master's version number in a _separate_ statement.
+  Joining the master into the locking statement is wrong under READ COMMITTED: after waiting for
+  the lock, PostgreSQL re-checks only the locked row, so the joined master is stale and a
+  concurrent approval of a newer version goes unnoticed. The trigger still rejects the backward
+  pointer move (`AC003`), but the client gets `MASTER_CONFLICT` instead of `STALE_DRAFT`. A
+  concurrency test found this; it races approvals 100 times.
+
 ## Alternatives considered
 
 - **No pointer; derive the master by `max(version) WHERE approved`**: simpler, but the owner

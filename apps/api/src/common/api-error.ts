@@ -11,6 +11,8 @@ export interface ApiErrorOptions {
   /** Overrides the status-based default (e.g. a retryable 409). */
   readonly retryable?: boolean;
   readonly details?: readonly ValidationIssue[];
+  /** The resource's current state, when the conflict depends on it. */
+  readonly current?: unknown;
 }
 
 /** Body carried by {@link ApiError}; read by `ApiExceptionFilter`. */
@@ -19,6 +21,7 @@ export interface ApiErrorBody {
   readonly message: string;
   readonly retryable?: boolean;
   readonly details?: readonly ValidationIssue[];
+  readonly current?: unknown;
 }
 
 /** An HTTP error with an explicit API error code (docs/API_SPEC.md §10). */
@@ -29,6 +32,7 @@ export class ApiError extends HttpException {
       message: options.message,
       ...(options.retryable === undefined ? {} : { retryable: options.retryable }),
       ...(options.details === undefined ? {} : { details: options.details }),
+      ...(options.current === undefined ? {} : { current: options.current }),
     };
     super(body, options.status, cause === undefined ? undefined : { cause });
   }

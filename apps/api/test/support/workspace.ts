@@ -68,7 +68,21 @@ export interface Fixture {
   readonly projectId: string;
   readonly channelId: string;
   readonly contentId: string;
+  /** Reference image used as the primary asset of both drafts. */
+  readonly assetId: string;
+  /** Unused asset (safe to link or archive). */
+  readonly spareAssetId: string;
+  readonly characterId: string;
+  /** Draft v1 of the character. */
+  readonly characterVersionId: string;
+  readonly environmentId: string;
+  /** Draft v1 of the environment. */
+  readonly environmentVersionId: string;
 }
+
+/** `sha256`-shaped hex string for fixtures. */
+export const fakeChecksum = (seed: string) =>
+  Buffer.from(seed.padEnd(32, '0').slice(0, 32)).toString('hex');
 
 /**
  * A fresh project via SQL (as the migrator): owner/editor/viewer personas plus `target`
@@ -78,6 +92,24 @@ export async function createFixture(db: pg.Client, ids: Record<string, string>):
   const projectId = randomUUID();
   const channelId = randomUUID();
   const contentId = randomUUID();
+  const [
+    assetId,
+    spareAssetId,
+    characterId,
+    characterVersionId,
+    environmentId,
+    environmentVersionId,
+  ] = Array.from({ length: 6 }, () => randomUUID()) as [
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
+  const asset = (id: string, name: string) =>
+    `('${id}', '${projectId}', 'reference', 'upload', 'projects/${projectId}/${name}.png', 'image/png', 1000,
+      '${fakeChecksum(id)}', '${ids['owner']}', now())`;
   const slug = `p-${projectId.slice(0, 8)}`;
   await db.query(`BEGIN;
     INSERT INTO projects (id, name, slug, default_language, timezone, created_by_id, updated_at)
@@ -93,8 +125,31 @@ export async function createFixture(db: pg.Client, ids: Record<string, string>):
         aspect_ratio, language, brief, created_by_id, updated_at)
       VALUES ('${contentId}', '${projectId}', '${channelId}', 'Desk gadgets', 'short_video', 30, '9:16',
         'vi', '{"topic":"Desk gadgets"}', '${ids['owner']}', now());
+    INSERT INTO assets (id, project_id, asset_type, source_type, storage_key, mime_type, size_bytes,
+        checksum_sha256, created_by_id, updated_at)
+      VALUES ${asset(assetId, 'front')}, ${asset(spareAssetId, 'spare')};
+    INSERT INTO characters (id, project_id, name, slug, created_by_id, updated_at)
+      VALUES ('${characterId}', '${projectId}', 'Khánh', 'khanh', '${ids['owner']}', now());
+    INSERT INTO character_versions (id, project_id, character_id, version, description, primary_asset_id,
+        created_by_id, updated_at)
+      VALUES ('${characterVersionId}', '${projectId}', '${characterId}', 1, 'v1', '${assetId}', '${ids['owner']}', now());
+    INSERT INTO environments (id, project_id, name, slug, created_by_id, updated_at)
+      VALUES ('${environmentId}', '${projectId}', 'Office', 'office', '${ids['owner']}', now());
+    INSERT INTO environment_versions (id, project_id, environment_id, version, description, primary_asset_id,
+        created_by_id, updated_at)
+      VALUES ('${environmentVersionId}', '${projectId}', '${environmentId}', 1, 'v1', '${assetId}', '${ids['owner']}', now());
     COMMIT`);
-  return { projectId, channelId, contentId };
+  return {
+    projectId,
+    channelId,
+    contentId,
+    assetId,
+    spareAssetId,
+    characterId,
+    characterVersionId,
+    environmentId,
+    environmentVersionId,
+  };
 }
 
 export const validBrief = { topic: 'Useful desk gadgets', audience: 'Office workers' };
@@ -107,3 +162,20 @@ export const newContent = (channelId?: string) => ({
   language: 'vi',
   brief: validBrief,
 });
+
+/** A valid asset registration body for `projectId`. */
+export const newAsset = (projectId: string, extra: Record<string, unknown> = {}) => {
+  const id = randomUUID();
+  return {
+    assetType: 'reference',
+    sourceType: 'upload',
+    storageKey: `projects/${projectId}/uploads/${id}.png`,
+    mimeType: 'image/png',
+    sizeBytes: 123_456,
+    checksumSha256: fakeChecksum(id),
+    width: 1080,
+    height: 1920,
+    originalFilename: 'front.png',
+    ...extra,
+  };
+};
