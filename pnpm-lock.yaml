@@ -56,6 +56,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@acf/ai-core':
+        specifier: workspace:*
+        version: link:../../packages/ai-core
       '@acf/config':
         specifier: workspace:*
         version: link:../../packages/config

@@ -160,7 +160,8 @@ export async function inspector(): Promise<pg.Client> {
 export async function resetDatabase(db: pg.Client): Promise<void> {
   await db.query(`TRUNCATE users, sessions, projects, project_members, channels, characters,
     character_versions, character_version_assets, environments, environment_versions,
-    environment_version_assets, assets, content_items RESTART IDENTITY CASCADE`);
+    environment_version_assets, assets, content_items, ai_providers, ai_models,
+    ai_model_capabilities, ai_model_prices, ai_invocations, ai_usage_records RESTART IDENTITY CASCADE`);
 }
 
 export function userAdmin(): { users: UserAdminService; prisma: PrismaClient } {

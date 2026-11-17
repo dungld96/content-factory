@@ -49,6 +49,10 @@ export const ApiErrorCode = {
   /** A concurrent transaction changed the same rows; safe to retry. */
   ConcurrentModification: 'CONCURRENT_MODIFICATION',
 
+  // --- M2: AI usage ledger (ADR-0012) ---
+  /** Price and usage rows are append-only; an invocation's outcome is recorded once (AC011). */
+  LedgerImmutable: 'LEDGER_IMMUTABLE',
+
   // --- M1: authentication (ADR-0009) ---
   /** Unknown email, wrong password or disabled account (deliberately indistinguishable). */
   InvalidCredentials: 'INVALID_CREDENTIALS',

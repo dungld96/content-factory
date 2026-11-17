@@ -1,6 +1,6 @@
 # M2 Design Review Package — AI Core and Model Registry
 
-- Status: **Revision 1, approved by the owner (2026-11-17).** Implemented in slices M2a–M2d (§12).
+- Status: **Revision 1, approved by the owner (2026-11-17).** Implemented in slices M2a–M2d (§12); M2 implemented, awaiting review.
 - Date: 2026-11-17
 - Baseline: M1 approved (branch `claude/gracious-planck-kuf4pq`, `58cb986`)
 - Companion files:
@@ -375,8 +375,10 @@ model UsageRecord {                                  // append-only
   **every** metric with a non-zero quantity had a price; otherwise `unknown`. Both the reported and the
   estimated amount are kept (COST_STRATEGY §1: estimated vs actual separately).
 - An invocation row is written **before** the call (`started`, intent persisted, CLAUDE.md §7) and
-  updated once with the outcome. A crash in between leaves `started`; `LlmService` marks rows older
-  than the request deadline as `outcome_unknown` on the next start. OpenRouter has no idempotency
+  updated once with the outcome. A crash in between leaves `started`; `LlmService.markAbandoned()` marks rows older
+  than every deadline as `outcome_unknown` (error code `ABANDONED`); it runs explicitly
+  (`pnpm ai:registry invocations mark-abandoned`, later the M5 worker at start-up), never as an API
+  start-up side effect, so the API still starts with the database down (implementation note). OpenRouter has no idempotency
   key for chat completions, so an `outcome_unknown` call may have been charged: it is never silently
   re-sent (M5 decides).
 
@@ -468,14 +470,15 @@ failed_after_acceptance`); usage, if present, is still recorded because it may b
 
 ### 8.1 CLI (`pnpm ai:registry …`, runs with `DATABASE_URL` as `acf_app`)
 
-| Command                                                                                              | Effect                                                                                                                                                                                                                                                                 |
-| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `provider list` / `provider set-status <key> <status>`                                               | List; enable/disable/degrade a provider                                                                                                                                                                                                                                |
-| `model list [--provider]` / `model show <key>`                                                       | List models with active prices                                                                                                                                                                                                                                         |
-| `model import-openrouter <modelKey…> [--tier] [--apply]`                                             | Fetch the public catalog, show a diff (new model, metadata, price rows); writes only with `--apply`; new models `disabled`                                                                                                                                             |
-| `model set-status <key> <status>`                                                                    | Enable/disable a model                                                                                                                                                                                                                                                 |
-| `price add <modelKey> <metric> <usdPerUnit> --source --url [--effective-from] [--min-prompt-tokens]` | Manual price row (e.g. `manual_estimate`)                                                                                                                                                                                                                              |
-| `smoke llm <modelKey> --max-cost-usd <n>`                                                            | **Paid** call; refuses unless `ACF_PAID_SMOKE=1` and `OPENROUTER_API_KEY` are set, the model has prices for input and output, and the worst-case estimate (prompt tokens ≤ 200, `max_tokens` ≤ 64) is ≤ the cap. Records the invocation in a dedicated `smoke` project |
+| Command                                                                                              | Effect                                                                                                                                                                                                                                                                                                                                    |
+| ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider list` / `provider set-status <key> <status>`                                               | List; enable/disable/degrade a provider                                                                                                                                                                                                                                                                                                   |
+| `model list [--provider]` / `model show <key>`                                                       | List models with active prices                                                                                                                                                                                                                                                                                                            |
+| `model import-openrouter <modelKey…> [--tier] [--apply]`                                             | Fetch the public catalog, show a diff (new model, metadata, price rows); writes only with `--apply`; new models `disabled`                                                                                                                                                                                                                |
+| `model set-status <key> <status>`                                                                    | Enable/disable a model                                                                                                                                                                                                                                                                                                                    |
+| `price add <modelKey> <metric> <usdPerUnit> --source --url [--effective-from] [--min-prompt-tokens]` | Manual price row (e.g. `manual_estimate`)                                                                                                                                                                                                                                                                                                 |
+| `smoke <modelKey> --project <slug> --max-cost-usd <n>`                                               | **Paid** call; refuses unless `ACF_PAID_SMOKE=1` and `OPENROUTER_API_KEY` are set, the model has prices for input and output, and the worst case (fixed tiny prompt, prompt bytes + 32 tokens, `max_tokens` 16) is ≤ the cap. Records the invocation in the operator-named project (implementation note: no dedicated project is created) |
+| `invocations mark-abandoned`                                                                         | Marks `started` invocations past every deadline as `outcome_unknown` (`ABANDONED`)                                                                                                                                                                                                                                                        |
 
 The import never enables a model and never deletes price rows. Repeating it with unchanged
 prices writes nothing.
@@ -547,21 +550,35 @@ Keys never reach the web app (`web-env` does not accept them; a test asserts thi
 
 ### Risks
 
-| ID  | Risk                                                                                | Mitigation                                                                                         |
-| --- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| R1  | OpenRouter changes response fields or error types without notice                    | Lenient parsing, status-code fallback, contract tests; changelog watch is an operator task         |
-| R2  | Fixtures derived from docs differ from real responses                               | Recorded fixtures from the first manual smoke run replace or extend them                           |
-| R3  | Reported cost absent or BYOK → estimate only                                        | `cost_status` makes it explicit; unknown is never 0                                                |
-| R4  | A timed-out call was processed and charged                                          | `outcome_unknown`; never re-sent automatically; reconciliation via `GET /generation` is M7 work    |
-| R5  | Commercial-use terms differ per model, not per gateway                              | `data_policy_notes` per model; models stay `disabled` until the owner reviews terms and benchmarks |
-| R6  | Free variants (`:free`) have small daily quotas (50/day under 10 credits purchased) | `is_free_variant` flag; never used as production capacity (CLAUDE.md §2.14)                        |
-| R7  | No benchmark data yet                                                               | No defaults chosen; benchmarking is M8 / owner decision per model                                  |
+| ID  | Risk                                                                                                                           | Mitigation                                                                                                                                                           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | OpenRouter changes response fields or error types without notice                                                               | Lenient parsing, status-code fallback, contract tests; changelog watch is an operator task                                                                           |
+| R2  | Fixtures derived from docs differ from real responses                                                                          | Recorded fixtures from the first manual smoke run replace or extend them                                                                                             |
+| R3  | Reported cost absent or BYOK → estimate only                                                                                   | `cost_status` makes it explicit; unknown is never 0                                                                                                                  |
+| R4  | A timed-out call was processed and charged                                                                                     | `outcome_unknown`; never re-sent automatically; reconciliation via `GET /generation` is M7 work                                                                      |
+| R5  | Commercial-use terms differ per model, not per gateway                                                                         | `data_policy_notes` per model; models stay `disabled` until the owner reviews terms and benchmarks                                                                   |
+| R6  | Free variants (`:free`) have small daily quotas (50/day under 10 credits purchased)                                            | `is_free_variant` flag; never used as production capacity (CLAUDE.md §2.14)                                                                                          |
+| R7  | No benchmark data yet                                                                                                          | No defaults chosen; benchmarking is M8 / owner decision per model                                                                                                    |
+| R8  | OpenRouter prices are per upstream endpoint; the registry's model-level price can be below the real charge (verification §5.1) | Reported cost is authoritative and stored separately; smoke cap uses ×10; M7 decides `provider.max_price` or endpoint-level pricing before budgets rely on estimates |
+
+## 11.1 Implementation notes (deviations decided during M2b–M2d)
+
+- Invocation `error_code` is a `ProviderErrorCode`, or `ABANDONED` (process stopped mid-call) or
+  `INTERNAL_ERROR` (a non-provider exception in the adapter path; message sanitized).
+- Invocations are also append-once in the database: inserted as `started`, one outcome, immutable
+  identity, never deleted (`AC011`), in addition to the price and usage rows.
+- Routing failures (`RoutingError`) record no invocation: nothing was sent.
+- Prisma `Decimal#toString()` uses exponent notation for small values; the API converts with
+  `toFixed()` through `UsdAmount`, so prices are always plain decimal strings.
+- The catalog import skips price overrides with time conditions (`utc_*`) and price fields that
+  do not apply to text calls, and lists them as warnings; dynamic routers (`-1`) are refused.
+- Credential masking lives in `sanitizeProviderMessage` (§7.3 point 5).
 
 ## 12. Implementation plan (after approval; each slice reviewed before the next)
 
-| Slice | Scope                                                                                                                                                                     | Status      |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| M2a   | `packages/ai-core`: capabilities, interfaces, errors and policy table, `UsdAmount`, pricing/cost, routing filter, mock provider; unit tests; ESLint import rule           | Done        |
-| M2b   | Migration `m2_ai_registry` (tables, CHECKs, composite FKs, `AC011` trigger, grants); presence/drift tests; direct-SQL tests; lock-interaction test; M1 lock matrix re-run | Done        |
-| M2c   | OpenRouter adapter, config validation, redaction; fixture server and contract tests; network guard                                                                        | Done        |
-| M2d   | `RegistryService`, `LlmService`, CLI (incl. import and paid smoke), read-only endpoints, OpenAPI, permission-matrix rows, seed, docs                                      | Not started |
+| Slice | Scope                                                                                                                                                                     | Status |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| M2a   | `packages/ai-core`: capabilities, interfaces, errors and policy table, `UsdAmount`, pricing/cost, routing filter, mock provider; unit tests; ESLint import rule           | Done   |
+| M2b   | Migration `m2_ai_registry` (tables, CHECKs, composite FKs, `AC011` trigger, grants); presence/drift tests; direct-SQL tests; lock-interaction test; M1 lock matrix re-run | Done   |
+| M2c   | OpenRouter adapter, config validation, redaction; fixture server and contract tests; network guard                                                                        | Done   |
+| M2d   | `RegistryService`, `LlmService`, CLI (incl. import and paid smoke), read-only endpoints, OpenAPI, permission-matrix rows, seed, docs                                      | Done   |

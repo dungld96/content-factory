@@ -23,6 +23,13 @@ support. Pricing, quotas and terms change frequently (`docs/AI_PROVIDER_STRATEGY
   calls.
 - Provider credentials stay server-side; never logged, never returned to the frontend.
 
+## Implementation note (M2)
+
+Implemented for LLMs in M2: `packages/ai-core` holds the interfaces; the OpenRouter adapter is
+reachable only as `@acf/ai-core/openrouter`, which ESLint allows only in
+`apps/api/src/ai/providers`; tests use `MockLlmProvider` and a local fixture server, and a
+network guard keeps every test off real hosts. See `docs/design/M2-design-review-package.md`.
+
 ## Consequences
 
 - Adding a provider does not change content-domain code.

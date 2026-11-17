@@ -10,9 +10,11 @@
     "start": "node --env-file-if-exists=../../.env --enable-source-maps dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "user": "node --env-file-if-exists=../../.env --enable-source-maps dist/cli/user-cli.js",
-    "seed": "node --env-file-if-exists=../../.env --enable-source-maps dist/cli/seed.js"
+    "seed": "node --env-file-if-exists=../../.env --enable-source-maps dist/cli/seed.js",
+    "ai": "node --env-file-if-exists=../../.env --enable-source-maps dist/cli/ai-registry-cli.js"
   },
   "dependencies": {
+    "@acf/ai-core": "workspace:*",
     "@acf/config": "workspace:*",
     "@acf/contracts": "workspace:*",
     "@acf/database": "workspace:*",

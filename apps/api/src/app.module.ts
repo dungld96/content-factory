@@ -2,6 +2,7 @@ import { Module, type DynamicModule } from '@nestjs/common';
 
 import type { ApiEnv } from '@acf/config';
 
+import { AiModule } from './ai/ai.module.js';
 import { AssetsModule } from './assets/assets.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { BrandModule } from './brand/brand.module.js';
@@ -29,6 +30,7 @@ export class AppModule {
         ContentModule,
         BrandModule,
         AssetsModule,
+        AiModule,
       ],
     };
   }

@@ -63,6 +63,14 @@ Acceptance:
 - Mock tests do not make paid calls.
 - Provider errors are normalized.
 
+Delivery: `docs/design/M2-design-review-package.md` (revision 1, approved), slices M2a–M2d.
+
+M2 acceptance evidence: business code depends only on `@acf/ai-core` interfaces (ESLint forbids
+the vendor subpath outside `apps/api/src/ai/providers`; no vendor SDK is installed); no test can
+reach a real host (network guard) and the paid smoke test is manual, opt-in and cost-capped;
+every documented OpenRouter error class is normalized and covered by contract tests
+(`packages/ai-core/src/openrouter/contract.test.ts`).
+
 ### M3 — Script and storyboard pipeline
 Deliverables:
 - Brief validation.

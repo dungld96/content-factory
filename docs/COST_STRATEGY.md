@@ -26,6 +26,12 @@
 
 Use integer micros for currency calculations or Decimal. Keep currency explicit.
 
+**Implemented for AI usage in M2 (ADR-0012):** exact decimal USD, `NUMERIC(38,18)` in PostgreSQL
+and `UsdAmount` (10⁻¹⁸ USD, `bigint`) in `packages/ai-core`. Integer micros cannot hold per-token
+LLM prices (e.g. USD 0.000000072 per token) or the cost of a short call. Each call records the
+provider-reported cost and the registry estimate separately, with `cost_status`
+`reported` / `estimated` / `unknown`; unknown cost is never stored or shown as an amount.
+
 `estimated_cost = Σ(quantity × configured_unit_price)`
 
 Each pricing record must include:

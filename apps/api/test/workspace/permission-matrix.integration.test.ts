@@ -16,6 +16,7 @@ import {
   userAdmin,
   type AuthTestApp,
 } from '../support/auth-app.js';
+import { seedAiRegistry } from '../../src/cli/seed-ai.js';
 import { OpenApiService } from '../../src/openapi/openapi.service.js';
 import {
   actAs,
@@ -50,6 +51,18 @@ const ROWS: Record<string, Row> = {
     expect: [401, 201, 201, 201, 201],
   },
   'GET /projects': { method: 'GET', path: () => '/projects', expect: [401, 200, 200, 200, 200] },
+  // AI registry (M2 §8.2): global, read-only, any authenticated user; never project-scoped.
+  'GET /ai/providers': {
+    method: 'GET',
+    path: () => '/ai/providers',
+    expect: [401, 200, 200, 200, 200],
+  },
+  'GET /ai/models': { method: 'GET', path: () => '/ai/models', expect: [401, 200, 200, 200, 200] },
+  'GET /ai/models/:modelId': {
+    method: 'GET',
+    path: (_f, ids) => `/ai/models/${ids['aiModel'] ?? ''}`,
+    expect: [401, 200, 200, 200, 200],
+  },
   'GET /projects/:projectId': {
     method: 'GET',
     path: (f) => `/projects/${f.projectId}`,
@@ -285,6 +298,8 @@ beforeAll(async () => {
   const admin = userAdmin();
   prisma = admin.prisma;
   ids = await seedUsers(admin.users);
+  await seedAiRegistry(prisma, { openrouterConfigured: false });
+  ids['aiModel'] = (await prisma.aiModel.findFirstOrThrow({ select: { id: true } })).id;
   api = await startAuthApp();
   as = actAs(api.baseUrl, await signInAll(api.baseUrl, ids));
 });

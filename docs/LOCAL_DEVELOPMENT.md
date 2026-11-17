@@ -147,6 +147,35 @@ Prisma does not model. When you create a migration that touches a guarded table,
 triggers intact; the `integration:database` tests fail if any trigger or CHECK is missing or if
 the database drifts from `schema.prisma`.
 
+### AI registry and providers (M2)
+
+`pnpm db:seed` also seeds the AI registry: the `openrouter` provider (enabled only if
+`OPENROUTER_API_KEY` is set when it is first seeded), three OpenRouter models with the
+2026-11-17 catalog prices (all **disabled**: none is benchmarked or terms-reviewed), and a
+`mock` provider with a zero-priced `mock/echo` model for development.
+
+`OPENROUTER_API_KEY` is optional; without it the provider reports `configured: false` and is
+never called. Tests never need it and cannot reach `openrouter.ai` (network guard in
+`test-support/network-guard.ts`).
+
+| Command | What it does |
+|---|---|
+| `pnpm ai:registry provider list` | Providers with kind and status |
+| `pnpm ai:registry provider set-status <key> <enabled\|disabled\|degraded>` | Change a provider's status |
+| `pnpm ai:registry model list` | Models with status, tier and active prices |
+| `pnpm ai:registry model import-openrouter <modelKey>... [--tier <tier>] [--apply]` | Reads OpenRouter's public catalog and prints a plan; with `--apply`, creates new models **disabled** (a tier is required) and appends a price row only for a changed published price |
+| `pnpm ai:registry model set-status <modelKey> <status>` | Enable/disable a model |
+| `pnpm ai:registry price add <modelKey> <metric> <usdPerUnit> --source <source> --url <url>` | Append a price row (rows are never edited) |
+| `pnpm ai:registry invocations mark-abandoned` | Marks invocations stuck in `started` past every deadline as `outcome_unknown` (never re-sent) |
+| `ACF_PAID_SMOKE=1 pnpm ai:registry smoke <modelKey> --project <slug> --max-cost-usd <usd>` | **One real, paid call.** Refused unless enabled, a key is set, input and output prices are known, and the worst case (fixed tiny prompt, 16 output tokens) is within the cap. Prints reported vs estimated cost to check assumptions A1–A3 |
+
+Behind an HTTPS proxy, Node's built-in `fetch` (catalog import, smoke test) ignores
+`HTTPS_PROXY` unless `NODE_USE_ENV_PROXY=1` is set (and `NODE_EXTRA_CA_CERTS` for a custom CA);
+without it the import reports that the catalog could not be reached.
+
+Before enabling a model for real work: review its commercial terms, run the smoke test,
+benchmark it (`docs/AI_PROVIDER_STRATEGY.md` §9), then `model set-status … enabled`.
+
 ### End-to-end tests (Playwright)
 
 `pnpm test:e2e` runs `apps/web/e2e` in Chromium. Its global setup recreates a disposable

@@ -66,6 +66,11 @@ const SQLSTATE_MAP: Readonly<Record<string, Mapping>> = {
     code: ApiErrorCode.AssetArchived,
     message: 'The version references an archived asset.',
   },
+  [IntegritySqlState.LEDGER_ROW_IMMUTABLE]: {
+    status: CONFLICT,
+    code: ApiErrorCode.LedgerImmutable,
+    message: 'AI usage records cannot be changed.',
+  },
   [PostgresSqlState.FOREIGN_KEY_VIOLATION]: {
     status: HttpStatus.UNPROCESSABLE_ENTITY,
     code: ApiErrorCode.ReferenceNotFound,

@@ -359,6 +359,24 @@ Downloads should use short-lived signed URLs.
 
 ## 8. Cost and model registry
 
+### Implemented in M2 (read-only registry)
+
+Design: `docs/design/M2-design-review-package.md` §8.2. Global (not project-scoped) data: any
+authenticated user may read it (401 otherwise); nothing here is written through the API. Operators
+edit the registry with `pnpm ai:registry` (`docs/LOCAL_DEVELOPMENT.md`). Credentials are never
+returned; money is a decimal string in USD (`unitPriceUsd`), never a JSON number (ADR-0012).
+
+| Endpoint | Response |
+|---|---|
+| `GET /ai/providers` | `{ data: AiProvider[] }`: `key`, `name`, `kind` (gateway/direct/mock), `status`, `configured` (credentials present in this deployment), terms and data-policy links |
+| `GET /ai/models` | Paginated `AiModel[]`. Filters `capability`, `status`, `qualityTier`, `providerKey`. Each model lists its capabilities, supported parameters, modalities, limits, quality tier, status, free-variant flag and `activePrices` (one per metric and prompt-size tier; a metric with no price has unknown cost, never zero) |
+| `GET /ai/models/:modelId` | `AiModel` plus `priceHistory` (append-only price rows with source, URL, effective and captured times) |
+
+No endpoint calls a model in M2 (decision P7): the first caller is the M3 script job, through
+`LlmService` (`apps/api/src/ai/llm.service.ts`).
+
+### Planned
+
 - `GET /projects/:projectId/usage`
 - `GET /content/:contentId/costs`
 - `GET /generation-jobs/:jobId`
@@ -432,6 +450,7 @@ pre-check every rule, so these are a backstop for races and direct SQL:
 | `AC007` | `409 LAST_OWNER` |
 | `AC008` | `409 ASSET_IN_USE` |
 | `AC010` | `409 ASSET_ARCHIVED` |
+| `AC011` | `409 LEDGER_IMMUTABLE` (M2: price/usage rows append-only; an invocation's outcome is recorded once) |
 | `40001` / `40P01` | `409 CONCURRENT_MODIFICATION`, `retryable: true` (a `40001` is first retried once internally; a `40P01` is never retried, see below) |
 
 Transaction retry policy (`apps/api/src/infrastructure/transaction-runner.ts`). Every attempt runs

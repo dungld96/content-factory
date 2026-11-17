@@ -1,5 +1,20 @@
 # AI Provider Strategy
 
+## 0. Implementation status (M2)
+
+Implemented per `docs/design/M2-design-review-package.md` (ADR-0004, ADR-0012):
+- `packages/ai-core`: capability enum, `LlmProvider` (image/video/TTS declared only), normalized
+  `ProviderError` with a retry/fallback policy per code (§7 below), exact money, cost assessment,
+  candidate filtering (steps 1–3 and 7 of §4; budget, data policy and circuit breaking come with
+  M7), and `MockLlmProvider` for tests.
+- One adapter: OpenRouter, text only (`@acf/ai-core/openrouter`), verified against official
+  documentation on 2026-11-17 (`docs/design/m2/openrouter-verification.md`). Every request sends
+  `provider.data_collection: "deny"`, `require_parameters: true` and same-model host fallback
+  only; zero data retention is opt-in per call; the cross-model `models` list is never sent.
+- Registry in PostgreSQL, edited by the operator CLI (`pnpm ai:registry`), read-only over the
+  API. New models are disabled until enabled explicitly; none is a production default until
+  benchmarked (§9).
+
 ## 1. Objectives
 
 - Avoid vendor lock-in.

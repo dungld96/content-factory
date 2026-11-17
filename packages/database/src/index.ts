@@ -19,6 +19,12 @@ export type {
   EnvironmentVersionAsset,
   Asset,
   ContentItem,
+  AiProvider,
+  AiModel,
+  AiModelCapability,
+  AiModelPrice,
+  AiInvocation,
+  AiUsageRecord,
 } from './generated/prisma/client.js';
 export * from './generated/prisma/enums.js';
 export {

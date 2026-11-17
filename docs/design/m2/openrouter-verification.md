@@ -73,14 +73,30 @@ Commercial-use terms of individual **models** are set by each model author/provi
   `architecture.input_modalities` / `output_modalities`, `context_length`,
   `top_provider.max_completion_tokens`, `canonical_slug`, `expiration_date` are per model.
 
-Catalog snapshot (2026-11-17, 282 text models with `structured_outputs` on
-`/chat/completions`, paid only). Candidates proposed for the **development seed** only (§6.6), USD per
-million tokens:
+Development-seed candidates (decision S1), from the **default** catalog view
+`GET /api/v1/models` at 2026-11-17T16:05:34Z (the view the importer uses), USD per million tokens:
 
 | Model `id`                     | `canonical_slug`                        | Input | Output | Context   | Notes                                                      |
 | ------------------------------ | --------------------------------------- | ----: | -----: | --------- | ---------------------------------------------------------- |
-| `deepseek/deepseek-v4-flash`   | `deepseek/deepseek-v4-flash-20260423`   | 0.072 |  0.144 | 1 048 576 | text only; `seed`, `response_format`, `structured_outputs` |
-| `google/gemini-3.5-flash-lite` | `google/gemini-3.5-flash-lite-20260721` | 0.150 |  1.250 | 1 048 576 | multimodal input; cache read/write prices                  |
+| `deepseek/deepseek-v4-flash`   | `deepseek/deepseek-v4-flash-20260423`   | 0.090 |  0.180 | 1 048 576 | text only; `seed`, `response_format`, `structured_outputs` |
+| `google/gemini-3.5-flash-lite` | `google/gemini-3.5-flash-lite-20260721` | 0.300 |  2.500 | 1 048 576 | multimodal input; cache read/write and reasoning prices    |
 | `anthropic/claude-haiku-5.5`   | `anthropic/claude-haiku-5.5-20261007`   | 0.100 |  0.500 | 1 000 000 | prompt-size tier above 100 000 tokens; no `seed`           |
+
+### 5.1 Prices are per endpoint (finding during M2d)
+
+A model is served by several upstream endpoints with **different prices**
+(`GET /api/v1/models/{author}/{slug}/endpoints`). For `deepseek/deepseek-v4-flash` at 16:05Z, ten
+endpoints charged USD 0.050–0.130 per million input tokens. The model-level catalog price depends
+on the query: the first snapshot (15:01Z) used `sort=pricing-low-to-high` and returned the
+cheapest endpoint's price (0.072 / 0.144), while the default view returns the default endpoint's
+(0.090 / 0.180). Which endpoint serves a call is decided by OpenRouter's routing (load balancing,
+same-model fallback). Consequences:
+
+- Registry prices are **estimates**; the provider-reported `usage.cost` is authoritative and is
+  stored separately (ADR-0012). An estimate can be lower than the real charge.
+- The seed and the importer use the default view consistently.
+- The paid smoke test multiplies its worst case by 10 before comparing with the cap.
+- Budget enforcement (M7) must not rely on the model-level price as an upper bound; a per-request
+  `provider.max_price` or endpoint-level pricing is the M7 decision (risk R8).
 
 None of these has been benchmarked (AI_PROVIDER_STRATEGY §9). They are not production defaults.

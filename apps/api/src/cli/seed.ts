@@ -12,6 +12,7 @@ import { createPrismaClient, type PrismaClient } from '@acf/database';
 
 import { PasswordHasher } from '../auth/password-hasher.js';
 import { UserAdminService } from '../users/user-admin.service.js';
+import { seedAiRegistry } from './seed-ai.js';
 
 export const DEMO_DOMAIN = 'demo.acf.test';
 const PEOPLE = [
@@ -175,11 +176,17 @@ async function main(): Promise<number> {
     const result = await seedDemoWorkspace(prisma);
     if (!result.created) {
       console.info(`✔ demo workspace already exists (users @${DEMO_DOMAIN}); nothing to do.`);
-      return 0;
+    } else {
+      console.info('✔ demo workspace "Demo Studio" created. Sign-in credentials (shown once):');
+      for (const c of result.credentials) console.info(`    ${c.email}  ${c.password}`);
+      console.info('  Change a password with: pnpm user:set-password --email <email>');
     }
-    console.info('✔ demo workspace "Demo Studio" created. Sign-in credentials (shown once):');
-    for (const c of result.credentials) console.info(`    ${c.email}  ${c.password}`);
-    console.info('  Change a password with: pnpm user:set-password --email <email>');
+    const ai = await seedAiRegistry(prisma, {
+      openrouterConfigured: Boolean(process.env['OPENROUTER_API_KEY']),
+    });
+    console.info(`✔ AI registry: openrouter ${ai.openrouterStatus}; mock provider enabled.`);
+    for (const m of ai.models)
+      console.info(`    ${m.modelKey}: ${m.action} (disabled until reviewed)`);
     return 0;
   } finally {
     await prisma.$disconnect();

@@ -1,0 +1,424 @@
+// AI registry operator CLI (design package §8.1, decision E3). From the repository root:
+//   pnpm ai:registry provider list
+//   pnpm ai:registry provider set-status <key> <enabled|disabled|degraded>
+//   pnpm ai:registry model list
+//   pnpm ai:registry model set-status <modelKey> <status> [--provider openrouter]
+//   pnpm ai:registry model import-openrouter <modelKey>... [--tier economy|balanced|premium] [--apply]
+//   pnpm ai:registry price add <modelKey> <metric> <usdPerUnit> --source <source> --url <url>
+//                              [--effective-from <ISO>] [--min-prompt-tokens <n>] [--provider openrouter]
+//   pnpm ai:registry invocations mark-abandoned
+//   ACF_PAID_SMOKE=1 pnpm ai:registry smoke <modelKey> --project <slug> --max-cost-usd <usd>
+// Runs as the runtime role (DATABASE_URL). The import only reads OpenRouter's public catalog and
+// writes nothing without --apply. `smoke` makes ONE real, paid call and is refused unless
+// explicitly enabled and capped.
+import 'reflect-metadata';
+
+import { parseArgs } from 'node:util';
+
+import {
+  activePrices,
+  priceFor,
+  PriceMetric,
+  UsdAmount,
+  type GenerationContext,
+  type LlmUsage,
+} from '@acf/ai-core';
+import { loadApiEnv } from '@acf/config';
+import {
+  createPrismaClient,
+  type AiPriceSource,
+  type AiProviderStatus,
+  type AiQualityTier,
+  type PrismaClient,
+} from '@acf/database';
+
+import { LlmService, RoutingError } from '../ai/llm.service.js';
+import { createLlmProviders } from '../ai/providers/llm-providers.js';
+import { catalogUrl, planOpenRouterImport } from '../ai/providers/openrouter-catalog.js';
+import { RegistryAdminError, RegistryAdminService } from '../ai/registry/registry-admin.service.js';
+import { RegistryService, toPriceComponents } from '../ai/registry/registry.service.js';
+import type { PrismaService } from '../infrastructure/prisma.service.js';
+
+const STATUSES = new Set<string>(['enabled', 'disabled', 'degraded']);
+const TIERS = new Set<string>(['economy', 'balanced', 'premium']);
+const SOURCES = new Set<string>(['official_api', 'official_page', 'manual_estimate']);
+const METRICS = new Set<string>(Object.values(PriceMetric));
+const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
+
+/** Fixed smoke prompt: small and known, so the worst-case cost is bounded before sending. */
+export const SMOKE_MESSAGES = [
+  { role: 'system' as const, content: 'You are a connectivity check.' },
+  { role: 'user' as const, content: 'Reply with the single word: ok' },
+];
+export const SMOKE_MAX_OUTPUT_TOKENS = 16;
+/** Allowance for chat formatting tokens around the messages. */
+const SMOKE_PROMPT_OVERHEAD_TOKENS = 32;
+/**
+ * OpenRouter prices are per upstream endpoint; the registry holds the catalog's default-endpoint
+ * price, and the endpoint that serves the call may be dearer (verification record §5.1). The cap
+ * check therefore multiplies the worst case by this factor.
+ */
+export const SMOKE_PRICE_SAFETY_FACTOR = 10;
+
+export interface CliIo {
+  readonly out: (line: string) => void;
+  readonly err: (line: string) => void;
+}
+
+/** Upper bound of the smoke call's cost (with the safety factor); null when a price is unknown. */
+export function smokeWorstCase(prices: Parameters<typeof priceFor>[0]): UsdAmount | null {
+  // Tokens never exceed UTF-8 bytes for the tokenizers in use; plus formatting overhead.
+  const promptTokens =
+    SMOKE_MESSAGES.reduce((n, m) => n + Buffer.byteLength(m.content, 'utf8'), 0) +
+    SMOKE_PROMPT_OVERHEAD_TOKENS;
+  const input = priceFor(prices, PriceMetric.INPUT_TOKENS, promptTokens);
+  const output = priceFor(prices, PriceMetric.OUTPUT_TOKENS, promptTokens);
+  if (!input || !output) return null;
+  const reasoning = priceFor(prices, PriceMetric.REASONING_TOKENS, promptTokens);
+  const outputUnit =
+    reasoning && reasoning.unitPrice.compare(output.unitPrice) > 0
+      ? reasoning.unitPrice
+      : output.unitPrice;
+  const request = priceFor(prices, PriceMetric.REQUEST, promptTokens);
+  return UsdAmount.sum([
+    input.unitPrice.times(promptTokens),
+    outputUnit.times(SMOKE_MAX_OUTPUT_TOKENS),
+    request?.unitPrice ?? UsdAmount.ZERO,
+  ]).times(SMOKE_PRICE_SAFETY_FACTOR);
+}
+
+const usageLine = (u: LlmUsage) =>
+  `input ${String(u.inputTokens)} (cached ${String(u.cachedInputTokens)}, cache-write ${String(u.cacheWriteTokens)}), output ${String(u.outputTokens)} (reasoning ${String(u.reasoningTokens)})`;
+
+/** Parses options; throws on unknown or malformed options (reported as usage errors). */
+function parseCliArgs(args: readonly string[]) {
+  return parseArgs({
+    args: [...args],
+    allowPositionals: true,
+    strict: true,
+    options: {
+      provider: { type: 'string', default: 'openrouter' },
+      tier: { type: 'string' },
+      apply: { type: 'boolean', default: false },
+      source: { type: 'string' },
+      url: { type: 'string' },
+      'effective-from': { type: 'string' },
+      'min-prompt-tokens': { type: 'string' },
+      project: { type: 'string' },
+      'max-cost-usd': { type: 'string' },
+    },
+  });
+}
+
+export async function runAiRegistryCli(
+  argv: readonly string[],
+  prisma: PrismaClient,
+  rawEnv: Readonly<Record<string, string | undefined>>,
+  io: CliIo,
+): Promise<number> {
+  const [group, command, ...rest] = argv;
+  let parsed: ReturnType<typeof parseCliArgs>;
+  try {
+    parsed = parseCliArgs(rest);
+  } catch (error) {
+    io.err(error instanceof Error ? error.message : String(error));
+    return 2;
+  }
+  const { values, positionals } = parsed;
+  const admin = new RegistryAdminService(prisma);
+  const usage = (message: string) => {
+    io.err(message);
+    return 2;
+  };
+
+  try {
+    if (group === 'provider' && command === 'list') {
+      for (const p of await prisma.aiProvider.findMany({ orderBy: { key: 'asc' } })) {
+        io.out(`${p.key}\t${p.kind}\t${p.status}\t${p.name}`);
+      }
+      return 0;
+    }
+    if (group === 'provider' && command === 'set-status') {
+      const [key, status] = positionals;
+      if (!key || !status || !STATUSES.has(status))
+        return usage('provider set-status <key> <enabled|disabled|degraded>');
+      await admin.setProviderStatus(key, status as AiProviderStatus);
+      io.out(`✔ provider ${key} is ${status}`);
+      return 0;
+    }
+    if (group === 'model' && command === 'list') {
+      const rows = await prisma.aiModel.findMany({
+        include: { provider: true, prices: true },
+        orderBy: [{ provider: { key: 'asc' } }, { modelKey: 'asc' }],
+      });
+      for (const m of rows) {
+        const active = activePrices(toPriceComponents(m.prices), new Date())
+          .map(
+            (p) =>
+              `${p.metric}${p.minPromptTokens ? `≥${String(p.minPromptTokens)}` : ''}=${p.unitPrice.toString()}`,
+          )
+          .sort()
+          .join(' ');
+        io.out(
+          `${m.provider.key}\t${m.modelKey}\t${m.status}\t${m.qualityTier}\t${active || '(no prices: cost unknown)'}`,
+        );
+      }
+      return 0;
+    }
+    if (group === 'model' && command === 'set-status') {
+      const [modelKey, status] = positionals;
+      if (!modelKey || !status || !STATUSES.has(status))
+        return usage('model set-status <modelKey> <enabled|disabled|degraded>');
+      await admin.setModelStatus(values.provider, modelKey, status as AiProviderStatus);
+      io.out(`✔ model ${values.provider}/${modelKey} is ${status}`);
+      return 0;
+    }
+    if (group === 'model' && command === 'import-openrouter') {
+      if (positionals.length === 0)
+        return usage('model import-openrouter <modelKey>... [--tier <tier>] [--apply]');
+      if (values.tier !== undefined && !TIERS.has(values.tier))
+        return usage('--tier must be economy, balanced or premium');
+      const baseUrl = rawEnv['OPENROUTER_BASE_URL'] ?? DEFAULT_BASE_URL;
+      let plan: Awaited<ReturnType<typeof planOpenRouterImport>>;
+      try {
+        plan = await planOpenRouterImport(baseUrl, positionals);
+      } catch (error) {
+        io.err(`✖ ${error instanceof Error ? error.message : String(error)}`);
+        return 1;
+      }
+      for (const entry of plan) {
+        if (!entry.ok) {
+          io.out(`✖ ${entry.modelKey}: ${entry.reason}`);
+          continue;
+        }
+        const prices = entry.model.prices
+          .map(
+            (p) =>
+              `${p.metric}${p.minPromptTokens ? `≥${String(p.minPromptTokens)}` : ''}=${p.sourceValue}`,
+          )
+          .join(' ');
+        io.out(
+          `• ${entry.modelKey}: ${prices}; parameters [${entry.model.supportedParameters.join(', ')}]`,
+        );
+        for (const warning of entry.model.warnings) io.out(`  ! ${warning}`);
+      }
+      if (!values.apply) {
+        io.out('(dry run: nothing written; pass --apply to write)');
+        return plan.every((e) => e.ok) ? 0 : 1;
+      }
+      const outcomes = await admin.applyOpenRouterImport(plan, {
+        ...(values.tier ? { tier: values.tier as AiQualityTier } : {}),
+        sourceUrl: catalogUrl(baseUrl),
+      });
+      for (const o of outcomes) {
+        io.out(
+          `${o.action === 'refused' ? '✖' : '✔'} ${o.modelKey}: ${o.action}, ${String(o.newPrices)} new price row(s)`,
+        );
+        for (const line of o.detail) io.out(`  ${line}`);
+      }
+      return outcomes.every((o) => o.action !== 'refused') ? 0 : 1;
+    }
+    if (group === 'price' && command === 'add') {
+      const [modelKey, metric, usd] = positionals;
+      if (
+        !modelKey ||
+        !metric ||
+        !usd ||
+        !METRICS.has(metric) ||
+        !values.source ||
+        !SOURCES.has(values.source) ||
+        !values.url
+      ) {
+        return usage(
+          'price add <modelKey> <metric> <usdPerUnit> --source <official_api|official_page|manual_estimate> --url <url>',
+        );
+      }
+      const effectiveFrom = values['effective-from']
+        ? new Date(values['effective-from'])
+        : undefined;
+      if (effectiveFrom && Number.isNaN(effectiveFrom.getTime()))
+        return usage('--effective-from must be an ISO date-time');
+      const minPromptTokens = values['min-prompt-tokens']
+        ? Number(values['min-prompt-tokens'])
+        : undefined;
+      if (
+        minPromptTokens !== undefined &&
+        (!Number.isSafeInteger(minPromptTokens) || minPromptTokens < 0)
+      ) {
+        return usage('--min-prompt-tokens must be a non-negative integer');
+      }
+      const id = await admin.addPrice({
+        providerKey: values.provider,
+        modelKey,
+        metric: metric as PriceMetric,
+        usdPerUnit: usd,
+        source: values.source as AiPriceSource,
+        sourceUrl: values.url,
+        ...(effectiveFrom ? { effectiveFrom } : {}),
+        ...(minPromptTokens === undefined ? {} : { minPromptTokens }),
+      });
+      io.out(`✔ price ${id} appended (existing rows are never changed)`);
+      return 0;
+    }
+    if (group === 'invocations' && command === 'mark-abandoned') {
+      const env = loadApiEnv(rawEnv);
+      const prismaService = { client: prisma } as unknown as PrismaService;
+      const providers = createLlmProviders(env);
+      const llm = new LlmService(
+        prismaService,
+        new RegistryService(prismaService, providers),
+        providers,
+        env,
+      );
+      const count = await llm.markAbandoned();
+      io.out(
+        `✔ ${String(count)} abandoned invocation(s) marked outcome_unknown (never re-sent automatically)`,
+      );
+      return 0;
+    }
+    if (group === 'smoke') {
+      return await smoke(command, values, prisma, rawEnv, io);
+    }
+    return usage(
+      'usage: ai:registry provider|model|price|smoke … (see the header of src/cli/ai-registry-cli.ts)',
+    );
+  } catch (error) {
+    if (error instanceof RegistryAdminError || error instanceof RoutingError) {
+      io.err(`✖ ${error.message}`);
+      return 1;
+    }
+    throw error;
+  }
+}
+
+async function smoke(
+  modelKey: string | undefined,
+  values: { provider: string; project?: string | undefined; 'max-cost-usd'?: string | undefined },
+  prisma: PrismaClient,
+  rawEnv: Readonly<Record<string, string | undefined>>,
+  io: CliIo,
+): Promise<number> {
+  if (rawEnv['ACF_PAID_SMOKE'] !== '1') {
+    io.err('✖ refused: the smoke test makes a real, paid call. Set ACF_PAID_SMOKE=1 to enable it.');
+    return 2;
+  }
+  if (!modelKey || !values.project || !values['max-cost-usd']) {
+    io.err('smoke <modelKey> --project <slug> --max-cost-usd <usd>');
+    return 2;
+  }
+  let cap: UsdAmount;
+  try {
+    cap = UsdAmount.parse(values['max-cost-usd']);
+  } catch {
+    io.err('--max-cost-usd must be a non-negative decimal');
+    return 2;
+  }
+  const env = loadApiEnv(rawEnv);
+  const providers = createLlmProviders(env);
+  if (!providers.has(values.provider)) {
+    io.err(`✖ refused: provider ${values.provider} has no credentials (OPENROUTER_API_KEY).`);
+    return 2;
+  }
+  const model = await prisma.aiModel.findFirst({
+    where: { modelKey, provider: { key: values.provider } },
+    include: { prices: true },
+  });
+  if (!model) {
+    io.err(`✖ unknown model ${values.provider}/${modelKey} (import it first)`);
+    return 1;
+  }
+  const worst = smokeWorstCase(activePrices(toPriceComponents(model.prices), new Date()));
+  if (worst === null) {
+    io.err('✖ refused: input/output prices are unknown, so the cost cannot be capped.');
+    return 2;
+  }
+  if (worst.compare(cap) > 0) {
+    io.err(
+      `✖ refused: worst case ${worst.toString()} USD exceeds --max-cost-usd ${cap.toString()}.`,
+    );
+    return 2;
+  }
+  const project = await prisma.project.findUnique({
+    where: { slug: values.project },
+    select: { id: true },
+  });
+  if (!project) {
+    io.err(`✖ unknown project ${values.project}`);
+    return 1;
+  }
+
+  const prismaService = { client: prisma } as unknown as PrismaService;
+  const llm = new LlmService(
+    prismaService,
+    new RegistryService(prismaService, providers),
+    providers,
+    env,
+  );
+  const context: GenerationContext = {
+    projectId: project.id,
+    correlationId: `smoke-${String(Date.now())}`,
+    qualityTier: 'economy',
+  };
+  io.out(`→ one paid call to ${values.provider}/${modelKey} (worst case ${worst.toString()} USD)`);
+  try {
+    const result = await llm.complete(
+      context,
+      { modelKey, messages: SMOKE_MESSAGES, maxOutputTokens: SMOKE_MAX_OUTPUT_TOKENS },
+      { providerKey: values.provider, allowDisabled: true },
+    );
+    const invocation = await prisma.aiInvocation.findFirstOrThrow({
+      where: { correlationId: context.correlationId },
+      select: { id: true, costStatus: true, estimatedCost: true },
+    });
+    io.out(`✔ ${result.finishReason}: ${JSON.stringify(result.text.slice(0, 80))}`);
+    io.out(
+      `  generation ${result.providerRequestId}, served ${result.servedModel}, ${String(result.latencyMs)} ms`,
+    );
+    io.out(`  usage: ${usageLine(result.usage)}`);
+    io.out(`  reported cost: ${result.reportedCost?.toString() ?? 'not reported'} USD`);
+    io.out(
+      `  estimated cost: ${invocation.estimatedCost === null ? 'unknown' : UsdAmount.parse(invocation.estimatedCost.toFixed()).toString()} USD (cost status ${invocation.costStatus})`,
+    );
+    io.out(
+      `  invocation ${invocation.id}. Compare reported vs estimated to check assumptions A1–A3.`,
+    );
+    return 0;
+  } catch (error) {
+    io.err(`✖ ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
+}
+
+async function main(): Promise<number> {
+  const databaseUrl = process.env['DATABASE_URL'];
+  if (!databaseUrl) {
+    console.error('DATABASE_URL is not set (see .env.example).');
+    return 2;
+  }
+  const prisma = createPrismaClient({ databaseUrl, maxConnections: 1 });
+  try {
+    return await runAiRegistryCli(process.argv.slice(2), prisma, process.env, {
+      out: (line) => {
+        console.info(line);
+      },
+      err: (line) => {
+        console.error(line);
+      },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+// Run only when executed directly (tests import runAiRegistryCli).
+if (process.argv[1]?.endsWith('ai-registry-cli.js')) {
+  main().then(
+    (code) => {
+      process.exitCode = code;
+    },
+    (error: unknown) => {
+      console.error(error instanceof Error ? error.message : error);
+      process.exitCode = 1;
+    },
+  );
+}

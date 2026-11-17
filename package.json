@@ -42,6 +42,7 @@
     "user:create": "pnpm build:packages && pnpm --filter @acf/api build && pnpm --filter @acf/api user create",
     "user:set-password": "pnpm build:packages && pnpm --filter @acf/api build && pnpm --filter @acf/api user set-password",
     "user:disable": "pnpm build:packages && pnpm --filter @acf/api build && pnpm --filter @acf/api user disable",
+    "ai:registry": "pnpm build:packages && pnpm --filter @acf/api build && pnpm --filter @acf/api ai",
     "db:studio": "pnpm --filter @acf/database db:studio",
     "env:check": "pnpm build:packages && node scripts/check-env.mjs"
   },
