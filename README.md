@@ -66,7 +66,8 @@ pnpm test:integration
 | Milestone | Status |
 |---|---|
 | M0 — Foundation | Done: workspace, config validation, health checks, Prisma bootstrap, ADRs |
-| M1+ | Not started |
+| M1 — Domain, persistence, identity & access | Design revision 4 awaits owner approval (`docs/design/M1-design-review-package.md`). No M1 code yet |
+| M2–M8 | Not started |
 
 ## Decisions fixed for MVP
 

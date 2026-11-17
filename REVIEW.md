@@ -62,7 +62,7 @@ One small M0 bug was found: `LocalTime` never actually shows local time (§2.1).
 
 ### Findings
 
-#### 2.1 `LocalTime` never renders the viewer's local time (bug, low)
+#### 2.1 `LocalTime` never renders the viewer's local time (bug, low) — **fixed**
 
 `apps/web/src/components/local-time.tsx` picks its text with `typeof window` during render, and
 relies on `suppressHydrationWarning`. React does **not** patch mismatched text when the warning is
@@ -155,7 +155,7 @@ triggers. Update `IMPLEMENTATION_PLAN.md` M1 deliverables and acceptance criteri
 change that approves the design (CLAUDE.md §10: milestone acceptance criteria changes need doc
 updates).
 
-### 3.4 Status documents disagree
+### 3.4 Status documents disagree — **fixed**
 
 | Document                         | Says                                                             |
 | -------------------------------- | ---------------------------------------------------------------- |
@@ -225,9 +225,9 @@ this split.
 | --- | -------------------------------------------------------------------- | ------------------ | --------------- |
 | 1   | Replace the `updatedAt` ETag with an integer `row_version`           | M1 design §8.4     | before approval |
 | 2   | Update `IMPLEMENTATION_PLAN.md` M1 scope; decide whether to split M1 | docs               | before approval |
-| 3   | Align status in README, ADR index and ADR-0009 header to rev. 4      | docs               | now             |
+| 3   | Align status in README, ADR index and ADR-0009 header to rev. 4      | docs               | **done**        |
 | 4   | Decide on slug-enumeration and per-account login throttling          | M1 design §8, §11  | before approval |
-| 5   | Fix `LocalTime` hydration                                            | `apps/web`         | M1 step 9       |
+| 5   | Fix `LocalTime` hydration                                            | `apps/web`         | **done**        |
 | 6   | Separate the DB pool timeout from the health timeout                 | `apps/api`, config | M1 step 1       |
 | 7   | Map 412/428/413/415/402 in the exception filter                      | `apps/api`         | M1 step 2       |
 | 8   | Make `40P01` log at error level and fail tests, even with retry      | M1 step 2          | M1              |
