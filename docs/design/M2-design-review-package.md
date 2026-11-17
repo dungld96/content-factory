@@ -153,7 +153,7 @@ export interface LlmRequest {
 
 export interface LlmResult {
   readonly text: string;
-  readonly finishReason: 'stop' | 'length' | 'content_filter' | 'other';
+  readonly finishReason: 'stop' | 'length' | 'other'; // content_filter → CONTENT_POLICY error (§4.3)
   readonly providerRequestId: string; // OpenRouter `id`
   readonly servedModel: string; // model the provider reports
   readonly usage: NormalizedUsage;
@@ -556,9 +556,9 @@ Keys never reach the web app (`web-env` does not accept them; a test asserts thi
 
 ## 12. Implementation plan (after approval; each slice reviewed before the next)
 
-| Slice | Scope                                                                                                                                                                     |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M2a   | `packages/ai-core`: capabilities, interfaces, errors and policy table, `UsdAmount`, pricing/cost, routing filter, mock provider; unit tests; ESLint import rule; ADR-0012 |
-| M2b   | Migration `m2_ai_registry` (tables, CHECKs, composite FKs, `AC011` trigger, grants); presence/drift tests; direct-SQL tests; lock-interaction test; M1 lock matrix re-run |
-| M2c   | OpenRouter adapter, config validation, redaction; fixture server and contract tests; network guard                                                                        |
-| M2d   | `RegistryService`, `LlmService`, CLI (incl. import and paid smoke), read-only endpoints, OpenAPI, permission-matrix rows, seed, docs                                      |
+| Slice | Scope                                                                                                                                                                     | Status                       |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| M2a   | `packages/ai-core`: capabilities, interfaces, errors and policy table, `UsdAmount`, pricing/cost, routing filter, mock provider; unit tests; ESLint import rule           | Implemented, awaiting review |
+| M2b   | Migration `m2_ai_registry` (tables, CHECKs, composite FKs, `AC011` trigger, grants); presence/drift tests; direct-SQL tests; lock-interaction test; M1 lock matrix re-run | Not started                  |
+| M2c   | OpenRouter adapter, config validation, redaction; fixture server and contract tests; network guard                                                                        | Not started                  |
+| M2d   | `RegistryService`, `LlmService`, CLI (incl. import and paid smoke), read-only endpoints, OpenAPI, permission-matrix rows, seed, docs                                      | Not started                  |

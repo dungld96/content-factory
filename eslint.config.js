@@ -54,6 +54,48 @@ export default defineConfig(
     },
   },
   {
+    // Business code sees only provider-agnostic interfaces (ADR-0004; M2 package §3.1, P6):
+    // vendor adapters are wired in one API module, and test doubles stay in tests.
+    files: ['**/*.{ts,tsx}'],
+    ignores: [
+      '**/*.test.ts',
+      'apps/api/test/**',
+      'test-support/**',
+      'apps/api/src/ai/providers/**',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@acf/ai-core/*'],
+              message:
+                'Import provider-agnostic types from `@acf/ai-core`. Vendor adapters are wired only in apps/api/src/ai/providers; test doubles only in tests.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['apps/api/src/ai/providers/**/*.ts'],
+    ignores: ['**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@acf/ai-core/*', '!@acf/ai-core/openrouter'],
+              message: 'Only the OpenRouter adapter subpath may be imported here.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.test.ts', 'apps/api/test/**/*.ts'],
     rules: {
       // supertest bodies are `any`; tests assert on them via contract schemas.
