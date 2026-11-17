@@ -80,5 +80,6 @@ Linting is type-aware (`typescript-eslint` `strictTypeChecked`).
     release cadence.
   - `@eslint-react/eslint-plugin` (ESLint-agnostic peer) covers React correctness, not
     accessibility.
-  - **Pending owner decision**: adopt `eslint-plugin-jsx-a11y-x` (`recommended`, web only), or
-    wait for upstream `eslint-plugin-jsx-a11y` ESLint 10 support.
+  - **Owner decision (2026-11-17, D10)**: _not adopted_ as a dependency. Evaluated in isolation
+    only: `docs/evaluations/eslint-plugin-jsx-a11y-x.md`. Re-evaluate on a 0.3+/1.0 release or
+    upstream ESLint 10 support.

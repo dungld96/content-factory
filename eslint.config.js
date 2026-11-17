@@ -18,6 +18,8 @@ export default defineConfig(
       '**/coverage/**',
       '**/generated/**',
       'apps/web/next-env.d.ts',
+      // Design-verification scripts (reference only; not part of the build).
+      'docs/**',
     ],
   },
   js.configs.recommended,
