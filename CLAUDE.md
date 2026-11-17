@@ -132,7 +132,7 @@ Do not build all milestones in one task. Implement one milestone at a time and w
 
 - **M0 — Foundation:** done and reviewed.
 - **M1 — Domain, persistence, identity & access:** done and approved (design revision 4, slices M1a–M1e).
-- **M2 — AI core and model registry:** design package revision 1 approved (`docs/design/M2-design-review-package.md`, ADR-0012); delivered in slices M2a–M2d (package §12), each reviewed before the next. M2a (`packages/ai-core`) and M2b (migration `m2_ai_registry`) done; M2c–M2d in progress.
+- **M2 — AI core and model registry:** design package revision 1 approved (`docs/design/M2-design-review-package.md`, ADR-0012); delivered in slices M2a–M2d (package §12), each reviewed before the next. M2a (`packages/ai-core`), M2b (migration `m2_ai_registry`) and M2c (OpenRouter adapter) done; M2d in progress.
 - **M3–M8:** not started.
 
 Before M1-area work, read `docs/design/M1-design-review-package.md` and ADR-0009 to ADR-0011. Before M2 work, read `docs/design/M2-design-review-package.md`, its verification record and ADR-0012.

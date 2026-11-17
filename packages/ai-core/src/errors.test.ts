@@ -88,6 +88,14 @@ describe('ProviderError', () => {
 });
 
 describe('sanitizeProviderMessage', () => {
+  it('masks bearer credentials and API keys', () => {
+    const out = sanitizeProviderMessage(
+      'Authorization: Bearer sk-or-v1-abcdef0123456789 rejected; key sk-or-v1-abcdef0123456789',
+    );
+    expect(out).not.toContain('abcdef0123456789');
+    expect(out).toBe('Authorization: Bearer [redacted] rejected; key [redacted]');
+  });
+
   it('bounds the length', () => {
     const out = sanitizeProviderMessage('x'.repeat(2000));
     expect(out).toHaveLength(500);

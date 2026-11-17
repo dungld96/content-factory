@@ -4,6 +4,7 @@ import swc from 'unplugin-swc';
 import { defineConfig } from 'vitest/config';
 
 const root = import.meta.dirname;
+const networkGuard = path.join(root, 'test-support/network-guard.ts');
 
 // NestJS relies on decorator metadata, which esbuild/oxc do not emit. SWC does.
 const nestSwc = () =>
@@ -30,6 +31,7 @@ export default defineConfig({
           root,
           include: ['packages/*/src/**/*.test.ts'],
           environment: 'node',
+          setupFiles: [networkGuard],
         },
       },
       {
@@ -39,6 +41,7 @@ export default defineConfig({
           root: path.join(root, 'apps/api'),
           include: ['src/**/*.test.ts', 'test/**/*.e2e.test.ts'],
           environment: 'node',
+          setupFiles: [networkGuard],
         },
       },
       {
@@ -53,6 +56,7 @@ export default defineConfig({
           root: path.join(root, 'apps/web'),
           include: ['src/**/*.test.ts'],
           environment: 'node',
+          setupFiles: [networkGuard],
         },
       },
       {
@@ -61,6 +65,7 @@ export default defineConfig({
           root: path.join(root, 'packages/database'),
           include: ['test/**/*.integration.test.ts'],
           environment: 'node',
+          setupFiles: [networkGuard],
           // Builds the disposable `acf_test` database from the committed migrations.
           globalSetup: [path.join(root, 'packages/database/test/global-setup.ts')],
           // Files share one database and TRUNCATE it: run them one at a time.
@@ -76,7 +81,7 @@ export default defineConfig({
           root: path.join(root, 'apps/api'),
           include: ['test/**/*.integration.test.ts'],
           environment: 'node',
-          setupFiles: [path.join(root, 'test-support/load-root-env.ts')],
+          setupFiles: [path.join(root, 'test-support/load-root-env.ts'), networkGuard],
           // Builds the disposable `acf_test_api` database from the committed migrations.
           globalSetup: [path.join(root, 'apps/api/test/support/global-setup.ts')],
           // Files share that database and TRUNCATE it: run them one at a time.

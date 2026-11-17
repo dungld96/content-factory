@@ -147,4 +147,66 @@ describe('loadApiEnv', () => {
       );
     });
   });
+
+  describe('AI providers (M2)', () => {
+    const KEY = 'sk-or-v1-0123456789abcdef0123456789abcdef';
+
+    it('leaves OpenRouter unconfigured by default, with safe defaults', () => {
+      const env = loadApiEnv({ ...valid, OPENROUTER_API_KEY: '' });
+      expect(env).toMatchObject({
+        OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1',
+        OPENROUTER_TIMEOUT_MS: 120_000,
+        OPENROUTER_APP_ATTRIBUTION: false,
+      });
+      expect(env.OPENROUTER_API_KEY).toBeUndefined();
+    });
+
+    it('accepts a well-formed key and a local test base URL outside production', () => {
+      const env = loadApiEnv({
+        ...valid,
+        OPENROUTER_API_KEY: ` ${KEY} `,
+        OPENROUTER_BASE_URL: 'http://127.0.0.1:9999/api/v1',
+        OPENROUTER_TIMEOUT_MS: '5000',
+      });
+      expect(env.OPENROUTER_API_KEY).toBe(KEY);
+      expect(env.OPENROUTER_TIMEOUT_MS).toBe(5000);
+    });
+
+    it.each([
+      [
+        'a key of another provider',
+        { OPENROUTER_API_KEY: 'sk-ant-0123456789abcdef0123' },
+        'OPENROUTER_API_KEY',
+      ],
+      ['a short key', { OPENROUTER_API_KEY: 'sk-or-v1-short' }, 'OPENROUTER_API_KEY'],
+      ['a timeout below 1 s', { OPENROUTER_TIMEOUT_MS: '10' }, 'OPENROUTER_TIMEOUT_MS'],
+      [
+        'attribution without URL and title',
+        { OPENROUTER_APP_ATTRIBUTION: 'true' },
+        'OPENROUTER_APP_URL',
+      ],
+      [
+        'http base URL in production',
+        {
+          NODE_ENV: 'production',
+          SESSION_COOKIE_SECURE: 'true',
+          OPENROUTER_BASE_URL: 'http://openrouter.example/api/v1',
+        },
+        'OPENROUTER_BASE_URL',
+      ],
+    ])('rejects %s', (_name, overrides, variable) => {
+      expect(() => loadApiEnv({ ...valid, ...overrides })).toThrow(
+        expect.objectContaining({ message: expect.stringContaining(variable) as string }) as Error,
+      );
+    });
+
+    it('never echoes the key in errors', () => {
+      const bad = 'sk-or-v1-has spaces and secrets';
+      expect(() => loadApiEnv({ ...valid, OPENROUTER_API_KEY: bad })).toThrow(
+        expect.objectContaining({
+          message: expect.not.stringContaining('secrets') as string,
+        }) as Error,
+      );
+    });
+  });
 });

@@ -5,6 +5,9 @@
  * whether a retry, or a switch to another compatible model or provider, is allowed
  * (AI_PROVIDER_STRATEGY §7, CLAUDE.md §7). The job layer (M5/M7) acts on the flags.
  */
+import type { UsdAmount } from './money.js';
+import type { LlmUsage } from './usage.js';
+
 export const ProviderErrorCode = {
   AUTHENTICATION: 'AUTHENTICATION',
   PERMISSION_DENIED: 'PERMISSION_DENIED',
@@ -76,18 +79,37 @@ export interface ProviderErrorDetails {
   /** Upstream provider code, when reported. */
   readonly providerCode?: string;
   readonly providerRequestId?: string;
+  /**
+   * Usage the provider reported for a call that failed after acceptance: it may still be charged
+   * (design package §7.3), so it is recorded like a successful call's usage.
+   */
+  readonly usage?: LlmUsage;
+  readonly reportedCost?: UsdAmount | null;
   readonly cause?: unknown;
 }
 
 const MAX_MESSAGE_LENGTH = 500;
 
+/** Bearer credentials and API-key-shaped tokens (e.g. OpenRouter `sk-or-v1-…`). */
+const SECRET_PATTERNS: readonly RegExp[] = [
+  /\b(bearer)\s+[A-Za-z0-9._~+/=-]{8,}/gi,
+  /\bsk-[A-Za-z0-9_-]{8,}/g,
+];
+
 /**
- * Makes a provider message safe to persist and log: single line, no control characters, bounded.
- * Callers must never pass prompt or completion text (e.g. moderation `flagged_input`).
+ * Makes a provider message safe to persist and log: credentials masked, single line, no control
+ * characters, bounded. Callers must never pass prompt or completion text (e.g. moderation
+ * `flagged_input`).
  */
 export function sanitizeProviderMessage(message: string): string {
+  let clean = message;
+  for (const pattern of SECRET_PATTERNS) {
+    clean = clean.replace(pattern, (match, scheme?: string) =>
+      typeof scheme === 'string' ? `${scheme} [redacted]` : '[redacted]',
+    );
+  }
   // eslint-disable-next-line no-control-regex -- stripping control characters is the point
-  const clean = message.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
+  clean = clean.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
   return clean.length > MAX_MESSAGE_LENGTH ? `${clean.slice(0, MAX_MESSAGE_LENGTH - 1)}…` : clean;
 }
 
@@ -101,6 +123,8 @@ export class ProviderError extends Error {
   readonly providerErrorType: string | undefined;
   readonly providerCode: string | undefined;
   readonly providerRequestId: string | undefined;
+  readonly usage: LlmUsage | undefined;
+  readonly reportedCost: UsdAmount | null;
 
   constructor(
     readonly code: ProviderErrorCode,
@@ -120,6 +144,8 @@ export class ProviderError extends Error {
     this.providerErrorType = details.providerErrorType;
     this.providerCode = details.providerCode;
     this.providerRequestId = details.providerRequestId;
+    this.usage = details.usage;
+    this.reportedCost = details.reportedCost ?? null;
   }
 }
 

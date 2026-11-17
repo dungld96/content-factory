@@ -446,8 +446,11 @@ failed_after_acceptance`); usage, if present, is still recorded because it may b
    present.
 4. `usage.is_byok === true` → `MALFORMED_RESPONSE` in M2 (BYOK is out of scope; reported cost would
    not be the full cost).
-5. Never log request bodies, response text, or headers; the existing redaction (`@acf/config`
-   `redact`) gains `authorization` and `openrouter_api_key` patterns, with tests.
+5. Never log request bodies, response text, or headers. Every provider message passes through
+   `sanitizeProviderMessage` (`ai-core`), which masks bearer credentials and `sk-…` keys before a
+   message can be persisted or logged; moderation errors use a fixed message (no echoed input).
+   Tested in the contract suite. (Implemented here rather than in `@acf/config`, where nothing
+   would call it.)
 
 ### 7.4 `LlmService.complete` flow
 
@@ -560,5 +563,5 @@ Keys never reach the web app (`web-env` does not accept them; a test asserts thi
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
 | M2a   | `packages/ai-core`: capabilities, interfaces, errors and policy table, `UsdAmount`, pricing/cost, routing filter, mock provider; unit tests; ESLint import rule           | Done        |
 | M2b   | Migration `m2_ai_registry` (tables, CHECKs, composite FKs, `AC011` trigger, grants); presence/drift tests; direct-SQL tests; lock-interaction test; M1 lock matrix re-run | Done        |
-| M2c   | OpenRouter adapter, config validation, redaction; fixture server and contract tests; network guard                                                                        | Not started |
+| M2c   | OpenRouter adapter, config validation, redaction; fixture server and contract tests; network guard                                                                        | Done        |
 | M2d   | `RegistryService`, `LlmService`, CLI (incl. import and paid smoke), read-only endpoints, OpenAPI, permission-matrix rows, seed, docs                                      | Not started |
