@@ -1,0 +1,54 @@
+import { z } from 'zod';
+
+import { EnvValidationError, toEnvIssues } from './errors.js';
+import {
+  booleanStringSchema,
+  logLevelSchema,
+  nodeEnvSchema,
+  portSchema,
+  urlWithProtocol,
+} from './schema-helpers.js';
+
+/**
+ * Environment contract for `apps/api`.
+ *
+ * Keep this list minimal: add variables only when a feature needs them.
+ * Provider API keys are intentionally absent in M0 (no AI integrations yet).
+ */
+export const apiEnvSchema = z.object({
+  NODE_ENV: nodeEnvSchema,
+  API_HOST: z.string().trim().min(1).default('0.0.0.0'),
+  API_PORT: portSchema.default(4000),
+  /** Comma-separated list of browser origins allowed by CORS. */
+  API_CORS_ORIGINS: z
+    .string()
+    .default('http://localhost:3000')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter((origin) => origin.length > 0),
+    )
+    .pipe(z.array(z.url({ message: 'each origin must be a valid URL' }))),
+  LOG_LEVEL: logLevelSchema,
+  /** Emit JSON log lines (recommended outside local development). */
+  LOG_JSON: booleanStringSchema.default(false),
+  DATABASE_URL: urlWithProtocol(['postgres:', 'postgresql:'], 'DATABASE_URL'),
+  REDIS_URL: urlWithProtocol(['redis:', 'rediss:'], 'REDIS_URL'),
+  /** Per-dependency timeout for readiness checks. */
+  HEALTH_CHECK_TIMEOUT_MS: z.coerce.number().int().min(100).max(30_000).default(2_000),
+});
+
+export type ApiEnv = z.output<typeof apiEnvSchema>;
+
+/**
+ * Validates and normalizes API environment variables.
+ * @throws {EnvValidationError} with variable names and problems (never values).
+ */
+export function loadApiEnv(source: Readonly<Record<string, string | undefined>>): ApiEnv {
+  const result = apiEnvSchema.safeParse(source);
+  if (!result.success) {
+    throw new EnvValidationError('API', toEnvIssues(result.error));
+  }
+  return result.data;
+}

@@ -1,0 +1,19 @@
+// AI Content Factory — Prisma schema.
+//
+// M0 intentionally defines no models. Domain entities (Project, ContentItem,
+// GenerationJob, ...) arrive in M1 with their first migration. See docs/DATABASE.md.
+//
+// Connection URLs live in prisma.config.ts (Prisma 7), not in this file.
+
+generator client {
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  runtime                = "nodejs"
+  moduleFormat           = "esm"
+  generatedFileExtension = "ts"
+  importFileExtension    = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}

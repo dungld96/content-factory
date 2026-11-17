@@ -22,7 +22,51 @@ The MVP is complete when one brief can reliably become one downloadable, reviewa
 | `docs/CONTENT_PIPELINE.md` | End-to-end production workflow |
 | `docs/COST_STRATEGY.md` | Budgeting, usage metering, and cost controls |
 | `docs/IMPLEMENTATION_PLAN.md` | Milestones, task breakdown, and Definition of Done |
+| `docs/LOCAL_DEVELOPMENT.md` | Exact local setup, run, test and database commands |
+| `docs/adr/` | Architecture Decision Records |
 | `CLAUDE.md` | Instructions for Claude Code working in this repository |
+
+## Quickstart (M0)
+
+Requires Node.js ≥ 22.12, pnpm 10 and Docker. Full details are in `docs/LOCAL_DEVELOPMENT.md`.
+
+```bash
+cp .env.example .env
+```
+
+```bash
+pnpm install
+```
+
+```bash
+pnpm infra:up
+```
+
+```bash
+pnpm dev
+```
+
+- Web: http://localhost:3000 (status page: `/status`)
+- API: http://localhost:4000/api/v1/health and `/api/v1/health/ready`
+
+To run every quality gate (format, lint, typecheck, unit tests, build):
+
+```bash
+pnpm check
+```
+
+Integration tests run against the Docker services:
+
+```bash
+pnpm test:integration
+```
+
+### Implemented so far
+
+| Milestone | Status |
+|---|---|
+| M0 — Foundation | Done: workspace, config validation, health checks, Prisma bootstrap, ADRs |
+| M1+ | Not started |
 
 ## Decisions fixed for MVP
 
@@ -43,7 +87,11 @@ The MVP is complete when one brief can reliably become one downloadable, reviewa
 
 Provider capabilities, model IDs, pricing, free-tier quotas, API schemas, and usage terms change frequently. Do not hardcode claims from this document as current facts. Before implementing a provider adapter, verify its official API documentation, supported capabilities, pricing, data retention/training terms, and rate limits. Store model pricing as configurable registry data with an effective date.
 
-## Suggested repository layout
+## Repository layout
+
+The layout below is the target. Packages and apps are added in the milestone that needs them.
+After M0 the repository contains `apps/api`, `apps/web`, `packages/config`, `packages/contracts`,
+`packages/database`, `infra/compose` and `docs/adr`.
 
 ```text
 ai-content-factory/

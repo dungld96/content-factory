@@ -1,0 +1,95 @@
+import {
+  Catch,
+  HttpException,
+  HttpStatus,
+  Logger,
+  type ArgumentsHost,
+  type ExceptionFilter,
+} from '@nestjs/common';
+import type { Request, Response } from 'express';
+
+import { ApiErrorCode, type ApiErrorResponse } from '@acf/contracts';
+
+import { getCorrelationId } from './correlation-id.js';
+
+const STATUS_TO_CODE: Readonly<Partial<Record<number, ApiErrorCode>>> = {
+  [HttpStatus.BAD_REQUEST]: ApiErrorCode.BadRequest,
+  [HttpStatus.UNAUTHORIZED]: ApiErrorCode.Unauthorized,
+  [HttpStatus.FORBIDDEN]: ApiErrorCode.Forbidden,
+  [HttpStatus.NOT_FOUND]: ApiErrorCode.NotFound,
+  [HttpStatus.CONFLICT]: ApiErrorCode.Conflict,
+  [HttpStatus.UNPROCESSABLE_ENTITY]: ApiErrorCode.ValidationFailed,
+  [HttpStatus.TOO_MANY_REQUESTS]: ApiErrorCode.RateLimited,
+  [HttpStatus.SERVICE_UNAVAILABLE]: ApiErrorCode.ServiceUnavailable,
+};
+
+const RETRYABLE_STATUSES = new Set<number>([
+  HttpStatus.TOO_MANY_REQUESTS,
+  HttpStatus.BAD_GATEWAY,
+  HttpStatus.SERVICE_UNAVAILABLE,
+  HttpStatus.GATEWAY_TIMEOUT,
+]);
+
+/** 5xx statuses whose message is intentionally user-facing (e.g. maintenance notices). */
+const EXPOSE_MESSAGE_5XX = new Set<number>([HttpStatus.SERVICE_UNAVAILABLE]);
+
+/** Domain exceptions can carry an explicit code via this shape in their response body. */
+interface CodedBody {
+  code?: unknown;
+  message?: unknown;
+}
+
+/**
+ * Maps every thrown error to the envelope in docs/API_SPEC.md §10.
+ * Unknown errors become a generic 500: no stack traces or internal messages leave the process.
+ */
+@Catch()
+export class ApiExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(ApiExceptionFilter.name);
+
+  catch(exception: unknown, host: ArgumentsHost): void {
+    const http = host.switchToHttp();
+    const req = http.getRequest<Request>();
+    const res = http.getResponse<Response>();
+    const correlationId = getCorrelationId(req) ?? 'unknown';
+
+    let status: number = HttpStatus.INTERNAL_SERVER_ERROR;
+    let code: string = ApiErrorCode.InternalError;
+    let message = 'An unexpected error occurred.';
+
+    if (exception instanceof HttpException) {
+      status = exception.getStatus();
+      code =
+        STATUS_TO_CODE[status] ??
+        (status >= 500 ? ApiErrorCode.InternalError : ApiErrorCode.BadRequest);
+      const body = exception.getResponse();
+      if (typeof body === 'object') {
+        const coded = body as CodedBody;
+        if (typeof coded.code === 'string') code = coded.code;
+        if (typeof coded.message === 'string') message = coded.message;
+        else if (Array.isArray(coded.message)) message = coded.message.join('; ');
+      } else if (typeof body === 'string') {
+        message = body;
+      }
+      if (status >= 500 && !EXPOSE_MESSAGE_5XX.has(status)) {
+        message = 'An unexpected error occurred.';
+      }
+    }
+
+    if (status >= 500) {
+      this.logger.error({
+        msg: 'request_failed',
+        correlationId,
+        statusCode: status,
+        errorName: exception instanceof Error ? exception.name : typeof exception,
+        // Stack goes to server logs only; never to the client.
+        stack: exception instanceof Error ? exception.stack : undefined,
+      });
+    }
+
+    const payload: ApiErrorResponse = {
+      error: { code, message, retryable: RETRYABLE_STATUSES.has(status), correlationId },
+    };
+    res.status(status).json(payload);
+  }
+}

@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+.next/
+out/
+*.tsbuildinfo
+coverage/
+
+# generated
+packages/database/src/generated/
+
+# env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# logs & OS
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+
+# editor
+.idea/
+.vscode/*
+!.vscode/extensions.json

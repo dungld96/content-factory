@@ -6,6 +6,41 @@ Authentication: session/JWT strategy to be selected during M0; all non-health en
 
 Use DTO validation (Zod or class-validator) and publish OpenAPI documentation.
 
+## 0. Health (implemented in M0)
+
+Health endpoints are unauthenticated and are never rate limited by business rules.
+
+### `GET /health`
+Liveness. Returns `200` while the process is running. It never touches dependencies.
+
+```json
+{ "status": "ok", "service": "acf-api", "version": "0.0.0", "uptimeSeconds": 12, "timestamp": "2026-11-17T04:02:41.171Z" }
+```
+
+### `GET /health/ready`
+Readiness. Checks PostgreSQL (`SELECT 1`) and Redis (`PING`). Each check has a timeout
+(`HEALTH_CHECK_TIMEOUT_MS`, default 2000 ms). Returns `200` when every check is `ok`, otherwise
+`503`. Failure reasons are limited to `unreachable` or `timeout`; driver messages are never
+returned. The response has `Cache-Control: no-store`.
+
+```json
+{
+  "status": "error",
+  "timestamp": "2026-11-17T04:02:50.378Z",
+  "checks": {
+    "database": { "status": "ok", "latencyMs": 2 },
+    "redis": { "status": "error", "latencyMs": 41, "error": "unreachable" }
+  }
+}
+```
+
+Schemas: `packages/contracts/src/health.ts`.
+
+### Correlation IDs
+Every response carries `x-correlation-id`. A caller-supplied value is echoed only if it matches
+`[A-Za-z0-9._-]{8,128}`; otherwise the server generates a UUID. The same ID appears in server
+logs and in error bodies (§10).
+
 ## 1. Projects
 
 ### `POST /projects`
@@ -210,6 +245,10 @@ Initial MVP may poll `GET /production-runs/:runId`. Later add SSE or WebSocket e
 ```
 
 Never return raw provider secrets, stack traces, or internal credentials.
+
+Implemented in M0 by `apps/api/src/common/api-exception.filter.ts`. Unknown errors become
+`500 INTERNAL_ERROR` with a generic message. `retryable` is `true` for 429/502/503/504. Error codes
+are listed in `packages/contracts/src/errors.ts`.
 
 ## 11. API conventions
 

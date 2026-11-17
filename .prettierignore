@@ -1,0 +1,13 @@
+node_modules
+dist
+.next
+coverage
+pnpm-lock.yaml
+packages/database/src/generated
+packages/database/prisma/migrations
+apps/web/next-env.d.ts
+
+# Specification pack: keep authored formatting (do not reflow tables/lists).
+CLAUDE.md
+README.md
+docs/*.md
