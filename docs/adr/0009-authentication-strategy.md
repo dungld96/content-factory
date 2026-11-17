@@ -77,6 +77,17 @@ pauses, logout happens, the request completes, and the session stays absent with
 getting 401. The rev. 2 upsert `set()` fails 11 of these checks (negative control). Reproduce
 with `docs/design/m1/evidence/run-all.sh --negative-controls`.
 
+### Same-origin proxy (implementation note, M1e)
+
+Requirement 7 is implemented as a Next.js 16 **runtime** rewrite (`apps/web/src/proxy.ts`), not
+as `next.config.ts` rewrites. Config rewrites are frozen into the build output
+(`routes-manifest.json`), so `API_INTERNAL_URL` would become a build-time setting; the proxy reads
+it per request, so one build can run in several environments. Verified on Next.js 16.4.6: it
+forwards Cookie, Origin and `x-csrf-token`, passes `Set-Cookie` back unchanged, appends
+`X-Forwarded-For`, and passes a client-supplied `X-Forwarded-Proto` through (setting `http`
+otherwise). The TLS proxy must still overwrite `X-Forwarded-Proto`; if it does not, secure-mode
+login fails closed (`SESSION_COOKIE_NOT_SET`). The Playwright E2E suite runs through this proxy.
+
 ## Consequences
 
 - Every authenticated request costs one indexed session lookup plus one user lookup. Touch

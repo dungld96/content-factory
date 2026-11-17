@@ -66,6 +66,12 @@ jobs:
       - run: pnpm db:setup
       - run: pnpm test:integration
       - run: pnpm build
+      - name: Install the Playwright browser
+        if: matrix.node == '22'
+        run: pnpm --filter @acf/web exec playwright install --with-deps chromium
+      - name: End-to-end tests (login → projects → logout)
+        if: matrix.node == '22'
+        run: pnpm test:e2e
       - name: Dependency audit
         if: matrix.node == '22'
         run: pnpm audit --audit-level=moderate

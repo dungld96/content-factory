@@ -8,6 +8,8 @@ dist/
 out/
 *.tsbuildinfo
 coverage/
+test-results/
+playwright-report/
 
 # generated
 packages/database/src/generated/

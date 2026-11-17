@@ -42,6 +42,12 @@ five reviewed slices: M1a database foundation, M1b API foundation and auth, M1c
 projects/members/channels/content, M1d characters/environments/versions/assets, M1e seed,
 permission matrix, web and docs (package §12).
 
+M1 acceptance evidence: the `init_m1` migration builds every test database from empty
+(`integration:database`, `integration:api`, E2E); integration tests cover CRUD for every M1
+resource; authorization boundaries are a table-driven matrix over every route and five callers
+(`apps/api/test/workspace/permission-matrix.integration.test.ts`); Playwright covers
+login → projects → logout through the same-origin proxy.
+
 ### M2 — AI core and model registry
 Deliverables:
 - Capability interfaces.

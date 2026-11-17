@@ -40,7 +40,19 @@ idempotent: run it again after pulling new migrations. See `docs/DATABASE.md` §
 pnpm env:check
 ```
 
-Create your first account (there is no sign-up page; decision D6). The CLI asks for the password
+For a ready-made demo workspace (development only), seed it. This creates
+`owner@demo.acf.test`, `editor@demo.acf.test` and `viewer@demo.acf.test` with random passwords
+(printed once), and a "Demo Studio" project with a channel, a content brief, a reference asset,
+and a character and an environment that each have an approved master version. It does nothing if
+the demo users already exist, and refuses to run with `NODE_ENV=production`:
+
+```bash
+pnpm db:seed
+```
+
+Then sign in at http://localhost:3000/login.
+
+Or create your own account (there is no sign-up page; decision D6). The CLI asks for the password
 without echoing it (or reads it from a pipe) and never accepts it as an argument:
 
 ```bash
@@ -104,6 +116,7 @@ curl -s localhost:4000/api/v1/health/ready
 | `pnpm typecheck`                    | Builds shared packages, then `tsc --noEmit` in every workspace         |
 | `pnpm test`                         | Unit and HTTP tests with mocked dependencies (no Docker, no network)   |
 | `pnpm test:integration`             | Integration tests against real PostgreSQL and Redis (requires `pnpm infra:up` and `pnpm db:setup`) |
+| `pnpm test:e2e`                     | Playwright: login → projects → logout in Chromium against the built API and web (requires `pnpm build`) |
 | `pnpm test:coverage`                | Unit tests with V8 coverage                                            |
 | `pnpm build`                        | Builds all packages and apps (`next build`, `nest build`)              |
 | `pnpm check`                        | format:check + lint + typecheck + test + build (run before pushing)    |
@@ -133,6 +146,25 @@ The M1 migration ends with hand-written SQL (CHECK constraints, functions and tr
 Prisma does not model. When you create a migration that touches a guarded table, keep the
 triggers intact; the `integration:database` tests fail if any trigger or CHECK is missing or if
 the database drifts from `schema.prisma`.
+
+### End-to-end tests (Playwright)
+
+`pnpm test:e2e` runs `apps/web/e2e` in Chromium. Its global setup recreates a disposable
+`acf_test_e2e` database from the migrations and seeds it with the real seed CLI; Playwright then
+starts the production builds of the API (port 4100) and web (port 3100), so they do not clash
+with `pnpm dev`. Build first, and install the browser once:
+
+```bash
+pnpm build
+```
+
+```bash
+pnpm --filter @acf/web exec playwright install chromium
+```
+
+```bash
+pnpm test:e2e
+```
 
 ### Database integration tests
 

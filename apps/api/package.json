@@ -9,7 +9,8 @@
     "dev": "nest start --watch --exec \"node --env-file-if-exists=../../.env --enable-source-maps\"",
     "start": "node --env-file-if-exists=../../.env --enable-source-maps dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "user": "node --env-file-if-exists=../../.env --enable-source-maps dist/cli/user-cli.js"
+    "user": "node --env-file-if-exists=../../.env --enable-source-maps dist/cli/user-cli.js",
+    "seed": "node --env-file-if-exists=../../.env --enable-source-maps dist/cli/seed.js"
   },
   "dependencies": {
     "@acf/config": "workspace:*",

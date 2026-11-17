@@ -14,6 +14,9 @@ try {
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Stop Next.js from generating AGENTS.md (it leaked into the M0 commit; verified in M1 design).
+  agentRules: false,
+  // /api/v1/* is forwarded to the API at runtime by src/proxy.ts (same-origin topology, D3).
 };
 
 export default nextConfig;

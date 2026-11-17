@@ -218,7 +218,8 @@ Do not overwrite reference/master assets. Create new versions or derived assets.
 
 - Every schema change uses a Prisma migration.
 - Never edit an already-applied migration.
-- Seed only development/demo data.
+- Seed only development/demo data. `pnpm db:seed` (`apps/api/src/cli/seed.ts`) creates the demo
+  workspace as the migrator role, is idempotent, and refuses `NODE_ENV=production`.
 - Include indexes and constraints in migrations.
 - Test migrations against an empty database and a previous-version database.
 - CHECK constraints, functions and triggers live in migration SQL. A migration that alters a guarded table must keep its trigger (use `CREATE OR REPLACE FUNCTION` when a frozen-column list changes). `packages/database/test/schema-objects.integration.test.ts` fails if a trigger or CHECK goes missing or is disabled, or if the database drifts from `schema.prisma`.

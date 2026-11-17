@@ -107,3 +107,76 @@ td {
   padding: 8px 4px;
   border-bottom: 1px solid var(--border);
 }
+
+/* --- M1e: forms, lists, header --- */
+.form {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 24rem;
+}
+
+.form label {
+  display: grid;
+  gap: 0.25rem;
+  font-weight: 600;
+}
+
+.form input {
+  font: inherit;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+button {
+  font: inherit;
+  padding: 0.5rem 0.875rem;
+  border: 1px solid var(--fg);
+  border-radius: 0.375rem;
+  background: var(--fg);
+  color: var(--bg);
+  cursor: pointer;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--fg);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.form-error {
+  color: var(--err);
+  margin: 0;
+}
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.list h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.125rem;
+}

@@ -8,11 +8,11 @@ export default function HomePage() {
         Turn a content brief into an approved, downloadable vertical video — with traceable prompts,
         assets, jobs, providers and cost.
       </p>
-      <section className="card" aria-labelledby="empty-state">
-        <h2 id="empty-state">No projects yet</h2>
+      <section className="card" aria-labelledby="get-started">
+        <h2 id="get-started">Get started</h2>
         <p className="muted">
-          Projects and content items arrive in milestone M1. For now, check that the platform is
-          wired up on the <Link href="/status">system status</Link> page.
+          <Link href="/login">Sign in</Link> to see your <Link href="/projects">projects</Link>, or
+          check that the platform is wired up on the <Link href="/status">system status</Link> page.
         </p>
       </section>
     </>

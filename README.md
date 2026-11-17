@@ -47,10 +47,16 @@ pnpm db:setup
 ```
 
 ```bash
+pnpm db:seed
+```
+
+`pnpm db:seed` creates a development-only demo workspace and prints three demo sign-ins once.
+
+```bash
 pnpm dev
 ```
 
-- Web: http://localhost:3000 (status page: `/status`)
+- Web: http://localhost:3000 (sign in at `/login`; status page: `/status`)
 - API: http://localhost:4000/api/v1/health and `/api/v1/health/ready`
 
 To run every quality gate (format, lint, typecheck, unit tests, build):
@@ -70,7 +76,7 @@ pnpm test:integration
 | Milestone | Status |
 |---|---|
 | M0 — Foundation | Done: workspace, config validation, health checks, Prisma bootstrap, ADRs |
-| M1 — Domain, persistence, identity & access | Design revision 4 approved (`docs/design/M1-design-review-package.md`). Delivered in slices M1a–M1e (§12). M1a–M1d (database, API foundation + auth, projects/members/channels/content, characters/environments/versions/assets) done and reviewed; M1e (seed, web, E2E, docs) in progress |
+| M1 — Domain, persistence, identity & access | Design revision 4 approved (`docs/design/M1-design-review-package.md`). Delivered in slices M1a–M1e (§12). M1a–M1d (database, API foundation + auth, projects/members/channels/content, characters/environments/versions/assets) done and reviewed; M1e (seed, web, E2E, docs) implemented, awaiting review |
 | M2–M8 | Not started |
 
 ## Decisions fixed for MVP

@@ -16,6 +16,8 @@ export default defineConfig(
       '**/dist/**',
       '**/.next/**',
       '**/coverage/**',
+      '**/test-results/**',
+      '**/playwright-report/**',
       '**/generated/**',
       'apps/web/next-env.d.ts',
       // Design-verification scripts (reference only; not part of the build).
