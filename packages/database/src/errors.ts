@@ -1,5 +1,6 @@
 /**
- * Stable SQLSTATEs raised by the M1 integrity layer (migration `init_m1`, ADR-0011 §4).
+ * Stable SQLSTATEs raised by the integrity layer (migrations `init_m1`, ADR-0011 §4, and
+ * `m2_ai_registry`, ADR-0012).
  * The API maps these to error codes (design package §8.3). Messages are for operators only.
  */
 export const IntegritySqlState = {
@@ -13,6 +14,8 @@ export const IntegritySqlState = {
   ASSET_IN_USE: 'AC008',
   VERSION_NOT_DRAFT_ON_INSERT: 'AC009',
   APPROVAL_WITH_ARCHIVED_ASSET: 'AC010',
+  /** M2 (ADR-0012): prices and usage are append-only; invocations get one outcome. */
+  LEDGER_ROW_IMMUTABLE: 'AC011',
 } as const;
 export type IntegritySqlState = (typeof IntegritySqlState)[keyof typeof IntegritySqlState];
 

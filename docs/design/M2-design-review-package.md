@@ -556,9 +556,9 @@ Keys never reach the web app (`web-env` does not accept them; a test asserts thi
 
 ## 12. Implementation plan (after approval; each slice reviewed before the next)
 
-| Slice | Scope                                                                                                                                                                     | Status                       |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
-| M2a   | `packages/ai-core`: capabilities, interfaces, errors and policy table, `UsdAmount`, pricing/cost, routing filter, mock provider; unit tests; ESLint import rule           | Implemented, awaiting review |
-| M2b   | Migration `m2_ai_registry` (tables, CHECKs, composite FKs, `AC011` trigger, grants); presence/drift tests; direct-SQL tests; lock-interaction test; M1 lock matrix re-run | Not started                  |
-| M2c   | OpenRouter adapter, config validation, redaction; fixture server and contract tests; network guard                                                                        | Not started                  |
-| M2d   | `RegistryService`, `LlmService`, CLI (incl. import and paid smoke), read-only endpoints, OpenAPI, permission-matrix rows, seed, docs                                      | Not started                  |
+| Slice | Scope                                                                                                                                                                     | Status      |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| M2a   | `packages/ai-core`: capabilities, interfaces, errors and policy table, `UsdAmount`, pricing/cost, routing filter, mock provider; unit tests; ESLint import rule           | Done        |
+| M2b   | Migration `m2_ai_registry` (tables, CHECKs, composite FKs, `AC011` trigger, grants); presence/drift tests; direct-SQL tests; lock-interaction test; M1 lock matrix re-run | Done        |
+| M2c   | OpenRouter adapter, config validation, redaction; fixture server and contract tests; network guard                                                                        | Not started |
+| M2d   | `RegistryService`, `LlmService`, CLI (incl. import and paid smoke), read-only endpoints, OpenAPI, permission-matrix rows, seed, docs                                      | Not started |

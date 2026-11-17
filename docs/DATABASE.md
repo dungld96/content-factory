@@ -17,6 +17,25 @@ Key rules enforced by the database itself (not only by services):
 
 The full SQLSTATE catalogue is in ADR-0011 and `packages/database/src/errors.ts`.
 
+## 0.1 Implemented schema (M2: AI registry and usage ledger)
+
+Migration `m2_ai_registry` (design: `docs/design/M2-design-review-package.md` §6, ADR-0012) adds, without changing any M1 table:
+
+| Table | Purpose |
+|---|---|
+| `ai_providers` | Provider registry (`key`, `kind` gateway/direct/mock, `status`, terms and data-policy links). |
+| `ai_models` | Model registry per provider: `model_key`, `canonical_slug`, supported parameters, modalities, context/output limits, quality tier, `status` (new models start `disabled`), free-variant flag, rate-limit and data-policy notes, benchmark score. |
+| `ai_model_capabilities` | Normalized `(model_id, capability)` pairs. |
+| `ai_model_prices` | Append-only price rows: metric, `unit_price` (USD per unit, `NUMERIC(38,18)`), the published `source_value`, prompt-size tier (`min_prompt_tokens`), `effective_from`, source and URL. The active price is the latest row with `effective_from <= t`; no row means unknown cost. |
+| `ai_invocations` | One row per provider call, inserted as `started` before the call and updated once with the outcome: status, normalized `error_code`, finish reason, latency, `reported_cost`, `estimated_cost`, `cost_status` (`reported`/`estimated`/`unknown`). `generation_job_id` gets its foreign key in M5. Prompts and completions are not stored. |
+| `ai_usage_records` | Append-only per-metric usage of an invocation: quantity, unit price and cost (both null when unknown), the price row used, source. |
+
+Money in these tables is exact decimal USD (`NUMERIC(38,18)`, ADR-0012); integer micros cannot hold per-token LLM costs. Enforced by the database:
+- `AC011`: price and usage rows cannot be updated or deleted; an invocation is inserted as `started`, gets exactly one outcome, never changes identity columns and is never deleted.
+- CHECKs: USD only; non-negative prices, quantities and costs; a usage cost equals quantity × unit price and exists exactly when the unit price is known; `completed_at` and `error_code` match the status; `cost_status` matches the stored amounts (unknown cost is never an amount).
+- Composite foreign keys: an invocation's content item belongs to its project and its model to its provider; a usage record belongs to its invocation's project.
+- Locking: the ledger takes part in no M1 lock order; invocation inserts take only `FOR KEY SHARE` on referenced rows and never wait on the owner-change protocol (verified in `packages/database/test/ai-ledger.integration.test.ts`).
+
 ## 1. Entity groups
 
 ### Identity and workspace
@@ -43,10 +62,10 @@ The full SQLSTATE catalogue is in ADR-0011 and `packages/database/src/errors.ts`
 - `ProductionRun`
 - `GenerationJob`
 - `JobEvent`
-- `Provider`
-- `Model`
+- `Provider` (implemented as `ai_providers`, M2)
+- `Model` (implemented as `ai_models`, `ai_model_capabilities`, `ai_model_prices`, M2)
 - `ProviderCredential` (store encrypted secret reference, never plaintext)
-- `UsageRecord`
+- `UsageRecord` (implemented as `ai_invocations` + `ai_usage_records`, M2)
 - `Budget`
 
 ### Delivery
@@ -156,6 +175,9 @@ The full SQLSTATE catalogue is in ADR-0011 and `packages/database/src/errors.ts`
 - `errorCode`, `errorMessage` (sanitized)
 
 ### UsageRecord
+
+Implemented in M2 as `ai_invocations` (per call) and `ai_usage_records` (per metric); see §0.1. The sketch below is the original logical model.
+
 - `id`
 - `generationJobId`
 - `metricType` (input_tokens, output_tokens, image_count, video_seconds, audio_characters, provider_credits, etc.)
@@ -196,7 +218,7 @@ Suggested enums:
 - Index `(contentItemId, createdAt)` for production history.
 - Index `(productionRunId, status)` for job monitoring.
 - Index `(providerId, modelId, recordedAt)` for usage reporting.
-- Store monetary values as integer micros or Decimal; do not use floating point for money.
+- Store monetary values as integer micros or Decimal; do not use floating point for money. AI costs use exact decimal USD, `NUMERIC(38,18)` (ADR-0012).
 - Use soft deletion only where audit/history requirements justify it.
 - Prefer normalized relation tables for assets and version references.
 

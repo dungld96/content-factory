@@ -1,5 +1,6 @@
 // =============================================================================
-// AI Content Factory — Prisma schema (M1: domain, persistence, identity & access)
+// AI Content Factory — Prisma schema (M1: domain, persistence, identity & access;
+// M2: AI registry and usage ledger, docs/design/M2-design-review-package.md, ADR-0012)
 // =============================================================================
 // Design: docs/design/M1-design-review-package.md (revision 4), ADR-0009/0010/0011.
 // Conventions
@@ -158,6 +159,7 @@ model User {
   approvedEnvVersions  EnvironmentVersion[] @relation("EnvironmentVersionApprovedBy")
   createdAssets        Asset[]
   createdContentItems  ContentItem[]
+  createdAiPrices      AiModelPrice[]
 
   @@map("users")
 }
@@ -201,13 +203,14 @@ model Project {
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  createdBy    User            @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  members      ProjectMember[]
-  channels     Channel[]
-  characters   Character[]
-  environments Environment[]
-  assets       Asset[]
-  contentItems ContentItem[]
+  createdBy     User            @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  members       ProjectMember[]
+  channels      Channel[]
+  characters    Character[]
+  environments  Environment[]
+  assets        Asset[]
+  contentItems  ContentItem[]
+  aiInvocations AiInvocation[]
 
   @@index([createdById])
   @@map("projects")
@@ -483,14 +486,256 @@ model ContentItem {
   createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  channel   Channel? @relation(fields: [projectId, channelId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  createdBy User     @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  assets    Asset[]
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  channel       Channel?       @relation(fields: [projectId, channelId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy     User           @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assets        Asset[]
+  aiInvocations AiInvocation[]
 
   @@unique([projectId, id]) // composite-FK target
   @@index([projectId, createdAt(sort: Desc), id(sort: Desc)])
   @@index([channelId])
   @@index([createdById])
   @@map("content_items")
+}
+
+// ----------------------------------------------------------------------------- AI registry (M2)
+// Design: docs/design/M2-design-review-package.md §6, ADR-0012. Money is exact decimal USD
+// (NUMERIC(38,18)). Prices and usage records are append-only; invocations are written before the
+// provider call and updated once with the outcome (trigger `acf_ai_ledger_guard`, AC011).
+
+enum AiCapability {
+  llm
+  image_generation
+  image_edit
+  video_generation
+  tts
+  transcription
+  vision_evaluation
+
+  @@map("ai_capability")
+}
+
+enum AiProviderStatus {
+  enabled
+  disabled
+  degraded
+
+  @@map("ai_provider_status")
+}
+
+enum AiQualityTier {
+  economy
+  balanced
+  premium
+
+  @@map("ai_quality_tier")
+}
+
+enum AiPriceMetric {
+  input_tokens
+  output_tokens
+  cached_input_tokens
+  cache_write_tokens
+  reasoning_tokens
+  request
+
+  @@map("ai_price_metric")
+}
+
+enum AiPriceSource {
+  official_api
+  official_page
+  manual_estimate
+
+  @@map("ai_price_source")
+}
+
+enum AiInvocationStatus {
+  started
+  succeeded
+  failed
+  outcome_unknown
+
+  @@map("ai_invocation_status")
+}
+
+enum AiCostStatus {
+  reported
+  estimated
+  unknown
+
+  @@map("ai_cost_status")
+}
+
+enum AiUsageSource {
+  provider_reported
+  calculated
+  manual
+
+  @@map("ai_usage_source")
+}
+
+model AiProvider {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  /// Stable key used in code and config, e.g. "openrouter", "mock".
+  key           String           @unique @db.VarChar(64)
+  name          String           @db.VarChar(120)
+  /// gateway | direct | mock (CHECK).
+  kind          String           @db.VarChar(16)
+  status        AiProviderStatus @default(disabled)
+  termsUrl      String?          @map("terms_url") @db.VarChar(2048)
+  dataPolicyUrl String?          @map("data_policy_url") @db.VarChar(2048)
+  notes         String?          @db.Text
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  models      AiModel[]
+  invocations AiInvocation[]
+
+  @@map("ai_providers")
+}
+
+model AiModel {
+  id                  String           @id @default(uuid(7)) @db.Uuid
+  providerId          String           @map("provider_id") @db.Uuid
+  /// Routable model id at the provider, e.g. "deepseek/deepseek-v4-flash".
+  modelKey            String           @map("model_key") @db.VarChar(200)
+  /// Pinned checkpoint, e.g. "deepseek/deepseek-v4-flash-20260423".
+  canonicalSlug       String?          @map("canonical_slug") @db.VarChar(200)
+  displayName         String           @map("display_name") @db.VarChar(200)
+  /// Request parameters the model supports (ai-core `LlmParameter` vocabulary).
+  supportedParameters String[]         @default([]) @map("supported_parameters")
+  inputModalities     String[]         @default([]) @map("input_modalities")
+  outputModalities    String[]         @default([]) @map("output_modalities")
+  contextLength       Int?             @map("context_length")
+  maxOutputTokens     Int?             @map("max_output_tokens")
+  qualityTier         AiQualityTier    @map("quality_tier")
+  /// New models start disabled; enabling is an explicit operator step.
+  status              AiProviderStatus @default(disabled)
+  /// Rate-limited free variant: never production capacity (CLAUDE.md §2.14).
+  isFreeVariant       Boolean          @default(false) @map("is_free_variant")
+  rateLimitNotes      String?          @map("rate_limit_notes") @db.Text
+  dataPolicyNotes     String?          @map("data_policy_notes") @db.Text
+  benchmarkScore      Decimal?         @map("benchmark_score") @db.Decimal(5, 2)
+  lastTestedAt        DateTime?        @map("last_tested_at") @db.Timestamptz(3)
+  expiresAt           DateTime?        @map("expires_at") @db.Timestamptz(3)
+  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  provider     AiProvider          @relation(fields: [providerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  capabilities AiModelCapability[]
+  prices       AiModelPrice[]
+  invocations  AiInvocation[]
+
+  @@unique([providerId, modelKey])
+  @@unique([providerId, id]) // composite-FK target
+  @@map("ai_models")
+}
+
+model AiModelCapability {
+  modelId    String       @map("model_id") @db.Uuid
+  capability AiCapability
+
+  model AiModel @relation(fields: [modelId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([modelId, capability])
+  @@index([capability])
+  @@map("ai_model_capabilities")
+}
+
+/// Append-only. A price change is a new row with a later effective_from.
+model AiModelPrice {
+  id              String        @id @default(uuid(7)) @db.Uuid
+  modelId         String        @map("model_id") @db.Uuid
+  metric          AiPriceMetric
+  /// USD per single unit (one token or one request), exact.
+  unitPrice       Decimal       @map("unit_price") @db.Decimal(38, 18)
+  /// The value exactly as published, kept when unit_price had to be rounded.
+  sourceValue     String        @map("source_value") @db.VarChar(64)
+  currency        String        @default("USD") @db.Char(3)
+  /// Prompt-size tier: applies to calls with at least this many input tokens.
+  minPromptTokens Int           @default(0) @map("min_prompt_tokens")
+  effectiveFrom   DateTime      @map("effective_from") @db.Timestamptz(3)
+  source          AiPriceSource
+  sourceUrl       String        @map("source_url") @db.VarChar(2048)
+  capturedAt      DateTime      @map("captured_at") @db.Timestamptz(3)
+  createdById     String?       @map("created_by_id") @db.Uuid
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  model        AiModel         @relation(fields: [modelId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy    User?           @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  usageRecords AiUsageRecord[]
+
+  @@unique([modelId, metric, minPromptTokens, effectiveFrom])
+  @@index([createdById])
+  @@map("ai_model_prices")
+}
+
+/// One provider call. Written (status started) before the call, updated once with the outcome.
+model AiInvocation {
+  id                String             @id @default(uuid(7)) @db.Uuid
+  projectId         String             @map("project_id") @db.Uuid
+  contentItemId     String?            @map("content_item_id") @db.Uuid
+  /// GenerationJob link; foreign key added in M5 (decision E4).
+  generationJobId   String?            @map("generation_job_id") @db.Uuid
+  correlationId     String             @map("correlation_id") @db.VarChar(128)
+  idempotencyKey    String?            @unique @map("idempotency_key") @db.VarChar(200)
+  capability        AiCapability
+  providerId        String             @map("provider_id") @db.Uuid
+  modelId           String             @map("model_id") @db.Uuid
+  servedModel       String?            @map("served_model") @db.VarChar(200)
+  providerRequestId String?            @map("provider_request_id") @db.VarChar(200)
+  status            AiInvocationStatus @default(started)
+  /// ai-core ProviderErrorCode.
+  errorCode         String?            @map("error_code") @db.VarChar(64)
+  /// Sanitized; never prompt or completion text.
+  errorMessage      String?            @map("error_message") @db.VarChar(500)
+  /// Request parameters and routing explanation only: never messages or credentials.
+  requestSummary    Json               @map("request_summary") @db.JsonB
+  finishReason      String?            @map("finish_reason") @db.VarChar(32)
+  latencyMs         Int?               @map("latency_ms")
+  reportedCost      Decimal?           @map("reported_cost") @db.Decimal(38, 18)
+  estimatedCost     Decimal?           @map("estimated_cost") @db.Decimal(38, 18)
+  costStatus        AiCostStatus       @default(unknown) @map("cost_status")
+  currency          String             @default("USD") @db.Char(3)
+  startedAt         DateTime           @default(now()) @map("started_at") @db.Timestamptz(3)
+  completedAt       DateTime?          @map("completed_at") @db.Timestamptz(3)
+
+  project      Project         @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contentItem  ContentItem?    @relation(fields: [projectId, contentItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  provider     AiProvider      @relation(fields: [providerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  model        AiModel         @relation(fields: [providerId, modelId], references: [providerId, id], onDelete: Restrict, onUpdate: Restrict)
+  usageRecords AiUsageRecord[]
+
+  @@unique([projectId, id]) // composite-FK target
+  @@index([projectId, startedAt])
+  @@index([providerId, modelId, startedAt])
+  @@index([status, startedAt])
+  @@index([contentItemId])
+  @@map("ai_invocations")
+}
+
+/// Append-only per-metric usage of one invocation.
+model AiUsageRecord {
+  id           String        @id @default(uuid(7)) @db.Uuid
+  invocationId String        @map("invocation_id") @db.Uuid
+  /// Denormalized for reporting; must equal the invocation's project (composite FK).
+  projectId    String        @map("project_id") @db.Uuid
+  metric       AiPriceMetric
+  quantity     BigInt
+  /// Null when no price is known.
+  unitPrice    Decimal?      @map("unit_price") @db.Decimal(38, 18)
+  cost         Decimal?      @db.Decimal(38, 18)
+  priceId      String?       @map("price_id") @db.Uuid
+  source       AiUsageSource
+  recordedAt   DateTime      @default(now()) @map("recorded_at") @db.Timestamptz(3)
+
+  invocation AiInvocation  @relation(fields: [projectId, invocationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  price      AiModelPrice? @relation(fields: [priceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([invocationId])
+  @@index([projectId, recordedAt])
+  @@index([priceId])
+  @@map("ai_usage_records")
 }

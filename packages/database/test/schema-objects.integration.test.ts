@@ -27,6 +27,9 @@ afterAll(async () => {
 
 /** [table, trigger, deferrable] — every trigger the migration must create, enabled. */
 const EXPECTED_TRIGGERS: readonly (readonly [string, string, boolean])[] = [
+  ['ai_invocations', 'ai_invocations_guard', false],
+  ['ai_model_prices', 'ai_model_prices_append_only', false],
+  ['ai_usage_records', 'ai_usage_records_append_only', false],
   ['assets', 'assets_guard', false],
   ['assets', 'assets_no_delete', false],
   ['channels', 'channels_no_delete', false],
@@ -47,6 +50,29 @@ const EXPECTED_TRIGGERS: readonly (readonly [string, string, boolean])[] = [
 ];
 
 const EXPECTED_CHECKS = [
+  'ai_invocations.ai_invocations_completion_consistent',
+  'ai_invocations.ai_invocations_cost_status_consistent',
+  'ai_invocations.ai_invocations_costs_nonnegative',
+  'ai_invocations.ai_invocations_currency_usd',
+  'ai_invocations.ai_invocations_error_consistent',
+  'ai_invocations.ai_invocations_latency_nonnegative',
+  'ai_invocations.ai_invocations_request_summary_object',
+  'ai_model_prices.ai_model_prices_currency_usd',
+  'ai_model_prices.ai_model_prices_source_url_nonempty',
+  'ai_model_prices.ai_model_prices_source_value_nonempty',
+  'ai_model_prices.ai_model_prices_tier_nonnegative',
+  'ai_model_prices.ai_model_prices_unit_price_nonnegative',
+  'ai_models.ai_models_benchmark_range',
+  'ai_models.ai_models_context_positive',
+  'ai_models.ai_models_max_output_positive',
+  'ai_models.ai_models_model_key_nonempty',
+  'ai_providers.ai_providers_key_format',
+  'ai_providers.ai_providers_kind_known',
+  'ai_providers.ai_providers_name_nonempty',
+  'ai_usage_records.ai_usage_records_cost_consistent',
+  'ai_usage_records.ai_usage_records_price_needs_unit_price',
+  'ai_usage_records.ai_usage_records_quantity_nonnegative',
+  'ai_usage_records.ai_usage_records_unit_price_nonnegative',
   'assets.assets_checksum_format',
   'assets.assets_derived_has_source',
   'assets.assets_dimensions_positive',
@@ -174,7 +200,7 @@ describe('role separation (U3)', () => {
       `SELECT tablename, has_table_privilege(current_user, 'public.' || tablename, 'SELECT, INSERT, UPDATE, DELETE') AS ok
        FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`,
     );
-    expect(rows.length).toBe(13);
+    expect(rows.length).toBe(19);
     expect(rows.filter((r) => !r.ok)).toEqual([]);
   });
 });
