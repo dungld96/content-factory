@@ -1,1 +1,75 @@
-# content-factory
+# AI Content Factory — Technical Specification Pack
+
+**Version:** 1.0.0  
+**Status:** Initial implementation baseline  
+**Purpose:** A Claude Code-ready technical specification for building a low-cost, multi-provider AI content production platform.
+
+## Product outcome
+
+A user submits a content brief. The system researches and plans the content, generates a script and storyboard, creates approved image/video/audio assets, assembles a final vertical MP4, tracks actual costs, and presents the result for human approval.
+
+The MVP is complete when one brief can reliably become one downloadable, reviewable video package with traceable prompts, assets, provider/model usage, costs, and recoverable job state.
+
+## Documents
+
+| File | Purpose |
+|---|---|
+| `docs/PRD.md` | Product requirements and acceptance criteria |
+| `docs/ARCHITECTURE.md` | System architecture and module boundaries |
+| `docs/DATABASE.md` | Data model and relational schema guidance |
+| `docs/API_SPEC.md` | REST API contracts |
+| `docs/AI_PROVIDER_STRATEGY.md` | Provider abstraction, routing, and model registry |
+| `docs/CONTENT_PIPELINE.md` | End-to-end production workflow |
+| `docs/COST_STRATEGY.md` | Budgeting, usage metering, and cost controls |
+| `docs/IMPLEMENTATION_PLAN.md` | Milestones, task breakdown, and Definition of Done |
+| `CLAUDE.md` | Instructions for Claude Code working in this repository |
+
+## Decisions fixed for MVP
+
+- Monorepo with modular architecture; do not start with microservices.
+- Frontend: Next.js + TypeScript.
+- Backend: NestJS + TypeScript.
+- Database: PostgreSQL + Prisma.
+- Queue: Redis + BullMQ.
+- Workflow automation: n8n is optional integration/orchestration support, not the source of truth for production state.
+- Media processing: FFmpeg worker.
+- Storage: S3-compatible object storage (Cloudflare R2 is a candidate).
+- AI providers are accessed through capability-specific adapters.
+- LLM gateway and image/video/TTS providers are separate concerns.
+- All generated media and jobs must be traceable and resumable.
+- Human approval is required before final export is marked approved or content is published.
+
+## Important implementation note
+
+Provider capabilities, model IDs, pricing, free-tier quotas, API schemas, and usage terms change frequently. Do not hardcode claims from this document as current facts. Before implementing a provider adapter, verify its official API documentation, supported capabilities, pricing, data retention/training terms, and rate limits. Store model pricing as configurable registry data with an effective date.
+
+## Suggested repository layout
+
+```text
+ai-content-factory/
+├── apps/
+│   ├── web/                  # Next.js dashboard
+│   ├── api/                  # NestJS REST API
+│   └── worker/               # BullMQ workers
+├── packages/
+│   ├── contracts/            # Shared DTOs, schemas, enums
+│   ├── database/             # Prisma schema and migrations
+│   ├── ai-core/              # Provider interfaces, routing, usage
+│   ├── content-domain/       # Content/script/storyboard domain
+│   ├── media/                # FFmpeg and media validation
+│   └── config/               # Shared config and environment validation
+├── workflows/
+│   └── n8n/                  # Optional workflow exports
+├── infra/
+│   ├── docker/
+│   └── compose/
+├── docs/
+├── .env.example
+├── pnpm-workspace.yaml
+├── package.json
+└── CLAUDE.md
+```
+
+## First implementation command
+
+Ask Claude Code to read `CLAUDE.md` and all documents in `docs/`, then implement **Milestone M0 only**: repository skeleton, architecture decisions, environment validation, local Docker Compose, health checks, and a short ADR log. Do not build the full pipeline in one pass.

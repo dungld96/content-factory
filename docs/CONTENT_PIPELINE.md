@@ -1,0 +1,180 @@
+# Content Production Pipeline
+
+## 1. Pipeline state machine
+
+Suggested stages:
+
+`draft → researching → planning → scripting → script_review → storyboarding → storyboard_review → generating_assets → asset_review → rendering → quality_review → approved → exported`
+
+Terminal/exception states:
+- `failed`
+- `canceled`
+- `needs_input`
+
+A stage can be retried independently. A change to an upstream approved artifact invalidates downstream artifacts only when they depend on the changed version.
+
+## 2. Stage contracts
+
+### Stage 1 — Brief validation
+Input:
+- Topic.
+- Audience.
+- Goal.
+- Platform.
+- Language.
+- Tone.
+- Duration.
+- Aspect ratio.
+- Optional character/environment.
+- Optional source URLs/assets.
+
+Output:
+- Normalized brief.
+- Missing information warnings.
+- Content safety/commercial claim flags.
+
+### Stage 2 — Research
+Output JSON:
+- Key findings.
+- Source URLs.
+- Facts with source references.
+- Content opportunities.
+- Uncertainties.
+- Suggested angles.
+
+Research output must distinguish sourced facts from suggestions. Do not fabricate product specs, prices, reviews, or trends.
+
+### Stage 3 — Content plan
+Output:
+- Content angle.
+- Audience insight.
+- Hook options.
+- Key message.
+- CTA.
+- Format.
+- Estimated scene count.
+
+### Stage 4 — Script
+Output:
+- Title.
+- Hook.
+- Voice-over.
+- On-screen text.
+- Scene outline.
+- CTA.
+- Claims requiring verification.
+- Sources where factual claims are used.
+
+Script is versioned and requires approval before expensive media generation.
+
+### Stage 5 — Storyboard
+Each scene:
+- `sceneNumber`
+- `durationSeconds`
+- `shotType`
+- `cameraAngle`
+- `cameraMovement`
+- `characterAction`
+- `environmentVersionId`
+- `characterVersionId`
+- `visualDescription`
+- `imagePrompt`
+- `videoPrompt`
+- `negativePrompt`
+- `voiceOverSegment`
+- `onScreenText`
+- `requiredReferenceAssetIds`
+- `acceptanceChecks`
+
+Scene durations must sum to target duration within configured tolerance.
+
+### Stage 6 — Image generation
+- Build prompt using approved character/environment versions.
+- Generate candidate(s).
+- Validate dimensions and file.
+- Run optional vision evaluation.
+- User approves one candidate.
+- Store source lineage.
+
+### Stage 7 — Video generation
+- Use approved image/keyframe and video prompt.
+- Submit async job.
+- Poll with bounded schedule or receive webhook.
+- Download and validate.
+- Store provider job ID and usage.
+- User approves clip.
+
+### Stage 8 — Audio
+- Generate voice-over per script or segment.
+- Generate/import licensed music and sound effects.
+- Create subtitles (SRT/VTT).
+- Validate language and timing.
+- User can replace voice or audio track.
+
+### Stage 9 — Rendering
+- Normalize video dimensions, frame rate, codec, and audio.
+- Concatenate approved scenes.
+- Add subtitles and transitions.
+- Mix audio.
+- Export MP4.
+- Generate thumbnail and publishing metadata.
+
+### Stage 10 — Quality control
+Automated checks:
+- File readable.
+- Expected dimensions and aspect ratio.
+- Duration within tolerance.
+- Audio track exists when required.
+- Subtitle file valid.
+- No missing scene.
+- No unexpected black/frozen segment where detectable.
+
+Human checks:
+- Character identity.
+- Brand/environment consistency.
+- Factual correctness.
+- Visual defects.
+- Audio quality.
+- Platform suitability.
+
+## 3. Idempotency and resume
+
+Each stage execution key should include:
+- Content version.
+- Stage name.
+- Scene ID where applicable.
+- Relevant input asset/version IDs.
+- Prompt version.
+- Provider/model configuration version.
+
+If inputs have not changed and a successful output exists, reuse it unless user explicitly requests regeneration.
+
+## 4. Prompt templates
+
+Store prompt templates as versioned records or files. Template variables must be validated. Record the fully resolved prompt snapshot on every generation job.
+
+## 5. Pilot format
+
+Recommended pilot:
+- One vertical video.
+- Approximately 30 seconds.
+- Approximately 5–6 scenes.
+- 9:16 output.
+- One approved character and environment profile.
+- Start with one image candidate per scene, increasing candidates only where quality requires it.
+- Human review before video generation and before final export.
+
+## 6. Publishing package
+
+For each approved content item, produce:
+- Final MP4.
+- Thumbnail.
+- Caption.
+- Hashtags.
+- Script.
+- Subtitle file.
+- Source/asset manifest.
+- Cost report.
+- Provider/model report.
+
+Direct publishing is a later phase and must use official platform APIs and their current eligibility/permission rules.
