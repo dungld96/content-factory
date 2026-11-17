@@ -34,8 +34,16 @@ export const apiEnvSchema = z.object({
   /** Emit JSON log lines (recommended outside local development). */
   LOG_JSON: booleanStringSchema.default(false),
   DATABASE_URL: urlWithProtocol(['postgres:', 'postgresql:'], 'DATABASE_URL'),
+  /** Maximum pooled PostgreSQL connections for this process. */
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
+  /**
+   * How long a query waits for a free pooled connection before failing. Independent of
+   * HEALTH_CHECK_TIMEOUT_MS: requests that queue behind row locks must not fail at the
+   * readiness-probe deadline.
+   */
+  DATABASE_POOL_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(10_000),
   REDIS_URL: urlWithProtocol(['redis:', 'rediss:'], 'REDIS_URL'),
-  /** Per-dependency timeout for readiness checks. */
+  /** Per-dependency timeout for readiness checks only (not for application queries). */
   HEALTH_CHECK_TIMEOUT_MS: z.coerce.number().int().min(100).max(30_000).default(2_000),
 });
 

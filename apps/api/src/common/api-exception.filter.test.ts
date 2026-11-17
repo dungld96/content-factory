@@ -58,6 +58,34 @@ describe('ApiExceptionFilter', () => {
     });
   });
 
+  it.each([
+    [402, 'PAYMENT_REQUIRED'],
+    [405, 'METHOD_NOT_ALLOWED'],
+    [406, 'NOT_ACCEPTABLE'],
+    [408, 'REQUEST_TIMEOUT'],
+    [410, 'GONE'],
+    [412, 'PRECONDITION_FAILED'],
+    [413, 'PAYLOAD_TOO_LARGE'],
+    [415, 'UNSUPPORTED_MEDIA_TYPE'],
+    [428, 'PRECONDITION_REQUIRED'],
+  ])('maps HTTP %i to %s', (statusCode, code) => {
+    const { host, status, json } = hostFor();
+    filter.catch(new HttpException('Rejected', statusCode), host);
+    expect(status).toHaveBeenCalledWith(statusCode);
+    expect(json).toHaveBeenCalledWith({
+      error: expect.objectContaining({ code, message: 'Rejected', retryable: false }) as unknown,
+    });
+  });
+
+  it('uses a generic client code for unmapped 4xx statuses, not BAD_REQUEST', () => {
+    const { host, status, json } = hostFor();
+    filter.catch(new HttpException('Teapot', 418), host);
+    expect(status).toHaveBeenCalledWith(418);
+    expect(json).toHaveBeenCalledWith({
+      error: expect.objectContaining({ code: 'CLIENT_ERROR' }) as unknown,
+    });
+  });
+
   it('marks 503 as retryable', () => {
     const { host, json } = hostFor();
     filter.catch(new ServiceUnavailableException('Try later'), host);

@@ -248,7 +248,9 @@ Never return raw provider secrets, stack traces, or internal credentials.
 
 Implemented in M0 by `apps/api/src/common/api-exception.filter.ts`. Unknown errors become
 `500 INTERNAL_ERROR` with a generic message. `retryable` is `true` for 429/502/503/504. Error codes
-are listed in `packages/contracts/src/errors.ts`.
+are listed in `packages/contracts/src/errors.ts`. Common HTTP statuses have a dedicated code (for
+example `412 PRECONDITION_FAILED`, `413 PAYLOAD_TOO_LARGE`, `428 PRECONDITION_REQUIRED`); any other
+4xx uses `CLIENT_ERROR`, and a domain exception may set its own `code` (e.g. `BUDGET_EXCEEDED`).
 
 ## 11. API conventions
 

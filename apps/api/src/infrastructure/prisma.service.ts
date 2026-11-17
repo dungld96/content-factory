@@ -16,7 +16,10 @@ export class PrismaService implements OnModuleDestroy {
   constructor(@Inject(API_ENV) env: ApiEnv) {
     this.client = createPrismaClient({
       databaseUrl: env.DATABASE_URL,
-      connectionTimeoutMs: env.HEALTH_CHECK_TIMEOUT_MS,
+      maxConnections: env.DATABASE_POOL_MAX,
+      // Pool wait for all queries. The readiness probe has its own, shorter deadline
+      // (HEALTH_CHECK_TIMEOUT_MS, enforced in HealthService).
+      connectionTimeoutMs: env.DATABASE_POOL_TIMEOUT_MS,
     });
   }
 

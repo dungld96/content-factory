@@ -15,10 +15,19 @@ import { getCorrelationId } from './correlation-id.js';
 const STATUS_TO_CODE: Readonly<Partial<Record<number, ApiErrorCode>>> = {
   [HttpStatus.BAD_REQUEST]: ApiErrorCode.BadRequest,
   [HttpStatus.UNAUTHORIZED]: ApiErrorCode.Unauthorized,
+  [HttpStatus.PAYMENT_REQUIRED]: ApiErrorCode.PaymentRequired,
   [HttpStatus.FORBIDDEN]: ApiErrorCode.Forbidden,
   [HttpStatus.NOT_FOUND]: ApiErrorCode.NotFound,
+  [HttpStatus.METHOD_NOT_ALLOWED]: ApiErrorCode.MethodNotAllowed,
+  [HttpStatus.NOT_ACCEPTABLE]: ApiErrorCode.NotAcceptable,
+  [HttpStatus.REQUEST_TIMEOUT]: ApiErrorCode.RequestTimeout,
   [HttpStatus.CONFLICT]: ApiErrorCode.Conflict,
+  [HttpStatus.GONE]: ApiErrorCode.Gone,
+  [HttpStatus.PRECONDITION_FAILED]: ApiErrorCode.PreconditionFailed,
+  [HttpStatus.PAYLOAD_TOO_LARGE]: ApiErrorCode.PayloadTooLarge,
+  [HttpStatus.UNSUPPORTED_MEDIA_TYPE]: ApiErrorCode.UnsupportedMediaType,
   [HttpStatus.UNPROCESSABLE_ENTITY]: ApiErrorCode.ValidationFailed,
+  [HttpStatus.PRECONDITION_REQUIRED]: ApiErrorCode.PreconditionRequired,
   [HttpStatus.TOO_MANY_REQUESTS]: ApiErrorCode.RateLimited,
   [HttpStatus.SERVICE_UNAVAILABLE]: ApiErrorCode.ServiceUnavailable,
 };
@@ -61,7 +70,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
       status = exception.getStatus();
       code =
         STATUS_TO_CODE[status] ??
-        (status >= 500 ? ApiErrorCode.InternalError : ApiErrorCode.BadRequest);
+        (status >= 500 ? ApiErrorCode.InternalError : ApiErrorCode.ClientError);
       const body = exception.getResponse();
       if (typeof body === 'object') {
         const coded = body as CodedBody;

@@ -116,6 +116,18 @@ describe('Health endpoints (HTTP, mocked dependencies)', () => {
     expect(body.error.correlationId).toBe(res.headers[CORRELATION_ID_HEADER]);
   });
 
+  it('returns PAYLOAD_TOO_LARGE for an oversized JSON body', async () => {
+    app = await buildApp({ database: ok, redis: ok });
+
+    const res = await http(app)
+      .post('/api/v1/health')
+      .set('content-type', 'application/json')
+      .send(JSON.stringify({ blob: 'x'.repeat(200_000) }))
+      .expect(413);
+
+    expect(apiErrorResponseSchema.parse(res.body).error.code).toBe('PAYLOAD_TOO_LARGE');
+  });
+
   it('serves nothing outside the versioned prefix', async () => {
     app = await buildApp({ database: ok, redis: ok });
     await http(app).get('/health').expect(404);

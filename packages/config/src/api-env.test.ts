@@ -18,6 +18,8 @@ describe('loadApiEnv', () => {
       LOG_LEVEL: 'log',
       LOG_JSON: false,
       HEALTH_CHECK_TIMEOUT_MS: 2000,
+      DATABASE_POOL_MAX: 10,
+      DATABASE_POOL_TIMEOUT_MS: 10_000,
     });
   });
 
@@ -58,6 +60,16 @@ describe('loadApiEnv', () => {
     expect(() => loadApiEnv({ ...valid, API_PORT: '70000' })).toThrow(/API_PORT/);
     expect(() => loadApiEnv({ ...valid, NODE_ENV: 'staging' })).toThrow(/NODE_ENV/);
     expect(() => loadApiEnv({ ...valid, LOG_JSON: 'yes' })).toThrow(/LOG_JSON/);
+  });
+
+  it('validates database pool settings', () => {
+    const env = loadApiEnv({ ...valid, DATABASE_POOL_MAX: '4', DATABASE_POOL_TIMEOUT_MS: '2500' });
+    expect(env.DATABASE_POOL_MAX).toBe(4);
+    expect(env.DATABASE_POOL_TIMEOUT_MS).toBe(2500);
+    expect(() => loadApiEnv({ ...valid, DATABASE_POOL_MAX: '0' })).toThrow(/DATABASE_POOL_MAX/);
+    expect(() => loadApiEnv({ ...valid, DATABASE_POOL_TIMEOUT_MS: '10' })).toThrow(
+      /DATABASE_POOL_TIMEOUT_MS/,
+    );
   });
 
   it('never includes secret values in the error message', () => {

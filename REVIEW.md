@@ -72,7 +72,7 @@ CLAUDE.md §5 ("render user timezone in UI").
 Fix: render the ISO string first, then format it after mount (`useEffect` + state, or
 `useSyncExternalStore`). Add a component test with jsdom, or a Playwright check in M1.
 
-#### 2.2 Prisma pool timeout is tied to the health-check timeout (medium; matters from M1)
+#### 2.2 Prisma pool timeout is tied to the health-check timeout (medium; matters from M1) — **fixed**
 
 `apps/api/src/infrastructure/prisma.service.ts` passes `HEALTH_CHECK_TIMEOUT_MS` (default 2 s) as
 `connectionTimeoutMillis` for the **whole** pool. Once real queries exist, any request that waits
@@ -86,7 +86,7 @@ the readiness probe keep its own timeout.
 and should have their own connections. The comment "later: BullMQ producers" suggests this client
 will be reused. Plan for separate producer and worker connection factories instead.
 
-#### 2.4 Unmapped 4xx statuses become `BAD_REQUEST` (low)
+#### 2.4 Unmapped 4xx statuses become `BAD_REQUEST` (low) — **fixed**
 
 `STATUS_TO_CODE` has no entry for 402, 405, 406, 412, 413, 415 or 428. These fall back to
 `BAD_REQUEST`. M1 plans to use `412 PRECONDITION_FAILED` and `428 PRECONDITION_REQUIRED`
@@ -228,8 +228,8 @@ this split.
 | 3   | Align status in README, ADR index and ADR-0009 header to rev. 4      | docs               | **done**        |
 | 4   | Decide on slug-enumeration and per-account login throttling          | M1 design §8, §11  | before approval |
 | 5   | Fix `LocalTime` hydration                                            | `apps/web`         | **done**        |
-| 6   | Separate the DB pool timeout from the health timeout                 | `apps/api`, config | M1 step 1       |
-| 7   | Map 412/428/413/415/402 in the exception filter                      | `apps/api`         | M1 step 2       |
+| 6   | Separate the DB pool timeout from the health timeout                 | `apps/api`, config | **done**        |
+| 7   | Map 412/428/413/415/402 in the exception filter                      | `apps/api`         | **done**        |
 | 8   | Make `40P01` log at error level and fail tests, even with retry      | M1 step 2          | M1              |
 | 9   | Disable CORS by default once the Next.js rewrite exists              | `apps/api`         | M1 step 9       |
 | 10  | Separate BullMQ Redis connections                                    | M2/M5              | later           |
