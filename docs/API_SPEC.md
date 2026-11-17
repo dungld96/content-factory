@@ -252,6 +252,39 @@ are listed in `packages/contracts/src/errors.ts`. Common HTTP statuses have a de
 example `412 PRECONDITION_FAILED`, `413 PAYLOAD_TOO_LARGE`, `428 PRECONDITION_REQUIRED`); any other
 4xx uses `CLIENT_ERROR`, and a domain exception may set its own `code` (e.g. `BUDGET_EXCEEDED`).
 
+Since M1, a domain error may also override `retryable`, and `400 VALIDATION_FAILED` adds
+`details`, one entry per problem, prefixed by the request part:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "The request is invalid.",
+    "retryable": false,
+    "correlationId": "uuid",
+    "details": [{ "path": "body.email", "message": "Invalid email address" }]
+  }
+}
+```
+
+Database errors map to stable codes (`apps/api/src/common/database-error.mapper.ts`). Services
+pre-check every rule, so these are a backstop for races and direct SQL:
+
+| Database condition | Response |
+|---|---|
+| Unique violation | `409 EMAIL_TAKEN` / `SLUG_TAKEN` / `STORAGE_KEY_TAKEN`, otherwise `409 CONFLICT` |
+| Foreign key violation (incl. cross-project composite FK) | `422 REFERENCE_NOT_FOUND` |
+| CHECK violation | `422 CONSTRAINT_VIOLATION` |
+| `AC001` / `AC009` | `409 VERSION_IMMUTABLE` |
+| `AC002` | `409 VERSION_LINKS_FROZEN` |
+| `AC003` / `AC004` | `409 MASTER_CONFLICT` |
+| `AC005` | `409 ASSET_IDENTITY_IMMUTABLE` |
+| `AC006` | `409 ARCHIVE_ONLY` |
+| `AC007` | `409 LAST_OWNER` |
+| `AC008` | `409 ASSET_IN_USE` |
+| `AC010` | `409 ASSET_ARCHIVED` |
+| `40001` / `40P01` | `409 CONCURRENT_MODIFICATION`, `retryable: true` (transactions retry once internally first; a `40P01` is also logged as a defect) |
+
 ## 11. API conventions
 
 - Use UUID identifiers.
@@ -261,3 +294,22 @@ example `412 PRECONDITION_FAILED`, `413 PAYLOAD_TOO_LARGE`, `428 PRECONDITION_RE
 - Return `202 Accepted` for queued generation operations.
 - Document rate limits and permissions.
 - Version breaking API changes under a new path.
+
+Implemented conventions (M1):
+
+- **Contracts**: every route declares `@Endpoint({ summary, params, query, body, responses, errors })`
+  with Zod schemas (`apps/api/src/common/http/endpoint.ts`). The same schemas validate requests
+  (all declared parts at once, after authentication) and generate the OpenAPI document. Request
+  objects are strict: unknown keys are rejected.
+- **OpenAPI 3.1**: `GET /openapi.json`, generated with `zod-openapi`. Served without
+  authentication when `OPENAPI_PUBLIC=true` (the default outside production). A test fails if any
+  registered route lacks `@Endpoint` metadata.
+- **Pagination**: `?limit` (default 20, max 100) and `?cursor`. Responses are
+  `{ "data": [...], "page": { "nextCursor": "…" | null, "limit": 20 } }`. Cursors are opaque
+  (base64url of the last row's `createdAt` and `id`, ordered `createdAt DESC, id DESC`); an
+  invalid cursor returns `400 INVALID_CURSOR`.
+- **Optimistic concurrency**: mutable resources return `ETag: W/"<updatedAt epoch-ms>"` and
+  `updatedAt`. `PATCH`, `PUT …/assets` and `POST …/approve` accept `If-Match`; a stale or
+  malformed value returns `412 PRECONDITION_FAILED`. With `REQUIRE_IF_MATCH=true`, a missing
+  header returns `428 PRECONDITION_REQUIRED`.
+- **Security headers**: `helmet` defaults on every response; no `X-Powered-By`.

@@ -8,6 +8,7 @@ import {
 import type { Request, Response } from 'express';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { ApiError } from './api-error.js';
 import { ApiExceptionFilter } from './api-exception.filter.js';
 import { correlationIdMiddleware } from './correlation-id.js';
 
@@ -101,5 +102,58 @@ describe('ApiExceptionFilter', () => {
     const payload = JSON.stringify(json.mock.calls[0]);
     expect(payload).toContain('INTERNAL_ERROR');
     expect(payload).not.toContain('hunter2');
+  });
+
+  it('passes validation details and an explicit retryable flag through', () => {
+    const { host, status, json } = hostFor();
+    filter.catch(
+      new ApiError({
+        status: 400,
+        code: 'VALIDATION_FAILED',
+        message: 'The request is invalid.',
+        details: [{ path: 'body.email', message: 'Invalid email' }],
+      }),
+      host,
+    );
+    expect(status).toHaveBeenCalledWith(400);
+    expect(json).toHaveBeenCalledWith({
+      error: expect.objectContaining({
+        code: 'VALIDATION_FAILED',
+        details: [{ path: 'body.email', message: 'Invalid email' }],
+      }) as unknown,
+    });
+
+    const retry = hostFor();
+    filter.catch(
+      new ApiError({ status: 409, code: 'X', message: 'm', retryable: true }),
+      retry.host,
+    );
+    expect(retry.json).toHaveBeenCalledWith({
+      error: expect.objectContaining({ retryable: true }) as unknown,
+    });
+  });
+
+  it('maps database errors to their API codes without leaking driver messages', () => {
+    const { host, status, json } = hostFor();
+    filter.catch(
+      { name: 'DriverAdapterError', cause: { originalCode: 'AC007', originalMessage: 'internal' } },
+      host,
+    );
+    expect(status).toHaveBeenCalledWith(409);
+    const payload = JSON.stringify(json.mock.calls[0]);
+    expect(payload).toContain('LAST_OWNER');
+    expect(payload).not.toContain('internal');
+  });
+
+  it('maps a deadlock to a retryable 409', () => {
+    const { host, status, json } = hostFor();
+    filter.catch({ name: 'DriverAdapterError', cause: { originalCode: '40P01' } }, host);
+    expect(status).toHaveBeenCalledWith(409);
+    expect(json).toHaveBeenCalledWith({
+      error: expect.objectContaining({
+        code: 'CONCURRENT_MODIFICATION',
+        retryable: true,
+      }) as unknown,
+    });
   });
 });

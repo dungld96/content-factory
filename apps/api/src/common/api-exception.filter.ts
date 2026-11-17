@@ -8,9 +8,11 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
-import { ApiErrorCode, type ApiErrorResponse } from '@acf/contracts';
+import { ApiErrorCode, type ApiErrorResponse, type ValidationIssue } from '@acf/contracts';
+import { PostgresSqlState } from '@acf/database';
 
 import { getCorrelationId } from './correlation-id.js';
+import { mapDatabaseError } from './database-error.mapper.js';
 
 const STATUS_TO_CODE: Readonly<Partial<Record<number, ApiErrorCode>>> = {
   [HttpStatus.BAD_REQUEST]: ApiErrorCode.BadRequest,
@@ -46,6 +48,21 @@ const EXPOSE_MESSAGE_5XX = new Set<number>([HttpStatus.SERVICE_UNAVAILABLE]);
 interface CodedBody {
   code?: unknown;
   message?: unknown;
+  retryable?: unknown;
+  details?: unknown;
+}
+
+function isIssueList(value: unknown): value is ValidationIssue[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item: unknown) =>
+        typeof item === 'object' &&
+        item !== null &&
+        typeof (item as Record<string, unknown>)['path'] === 'string' &&
+        typeof (item as Record<string, unknown>)['message'] === 'string',
+    )
+  );
 }
 
 /**
@@ -56,7 +73,8 @@ interface CodedBody {
 export class ApiExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(ApiExceptionFilter.name);
 
-  catch(exception: unknown, host: ArgumentsHost): void {
+  catch(thrown: unknown, host: ArgumentsHost): void {
+    let exception = thrown;
     const http = host.switchToHttp();
     const req = http.getRequest<Request>();
     const res = http.getResponse<Response>();
@@ -65,6 +83,19 @@ export class ApiExceptionFilter implements ExceptionFilter {
     let status: number = HttpStatus.INTERNAL_SERVER_ERROR;
     let code: string = ApiErrorCode.InternalError;
     let message = 'An unexpected error occurred.';
+    let retryable: boolean | undefined;
+    let details: ValidationIssue[] | undefined;
+
+    if (!(exception instanceof HttpException)) {
+      const mapped = mapDatabaseError(exception);
+      if (mapped) {
+        if (mapped.sqlState === PostgresSqlState.DEADLOCK_DETECTED) {
+          // A deadlock on a protocol-following path is a defect (ADR-0011 §6): alert on it.
+          this.logger.error({ msg: 'deadlock_detected', correlationId, sqlState: mapped.sqlState });
+        }
+        exception = mapped.error;
+      }
+    }
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -75,6 +106,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
       if (typeof body === 'object') {
         const coded = body as CodedBody;
         if (typeof coded.code === 'string') code = coded.code;
+        if (typeof coded.retryable === 'boolean') retryable = coded.retryable;
+        if (isIssueList(coded.details)) details = coded.details;
         if (typeof coded.message === 'string') message = coded.message;
         else if (Array.isArray(coded.message)) message = coded.message.join('; ');
       } else if (typeof body === 'string') {
@@ -97,7 +130,13 @@ export class ApiExceptionFilter implements ExceptionFilter {
     }
 
     const payload: ApiErrorResponse = {
-      error: { code, message, retryable: RETRYABLE_STATUSES.has(status), correlationId },
+      error: {
+        code,
+        message,
+        retryable: retryable ?? RETRYABLE_STATUSES.has(status),
+        correlationId,
+        ...(details ? { details } : {}),
+      },
     };
     res.status(status).json(payload);
   }

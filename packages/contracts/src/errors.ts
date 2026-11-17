@@ -25,18 +25,53 @@ export const ApiErrorCode = {
   ClientError: 'CLIENT_ERROR',
   ServiceUnavailable: 'SERVICE_UNAVAILABLE',
   InternalError: 'INTERNAL_ERROR',
+
+  // --- M1: request handling ---
+  /** Malformed pagination cursor. */
+  InvalidCursor: 'INVALID_CURSOR',
+
+  // --- M1: persistence (design package §8.3) ---
+  SlugTaken: 'SLUG_TAKEN',
+  EmailTaken: 'EMAIL_TAKEN',
+  StorageKeyTaken: 'STORAGE_KEY_TAKEN',
+  /** A referenced row does not exist, or belongs to another project (composite FK). */
+  ReferenceNotFound: 'REFERENCE_NOT_FOUND',
+  /** A database CHECK constraint rejected the write (the service should have validated it). */
+  ConstraintViolation: 'CONSTRAINT_VIOLATION',
+  VersionImmutable: 'VERSION_IMMUTABLE',
+  VersionLinksFrozen: 'VERSION_LINKS_FROZEN',
+  MasterConflict: 'MASTER_CONFLICT',
+  AssetIdentityImmutable: 'ASSET_IDENTITY_IMMUTABLE',
+  ArchiveOnly: 'ARCHIVE_ONLY',
+  LastOwner: 'LAST_OWNER',
+  AssetInUse: 'ASSET_IN_USE',
+  AssetArchived: 'ASSET_ARCHIVED',
+  /** A concurrent transaction changed the same rows; safe to retry. */
+  ConcurrentModification: 'CONCURRENT_MODIFICATION',
 } as const;
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];
 
-/** Error envelope defined in docs/API_SPEC.md §10. */
-export const apiErrorResponseSchema = z.object({
-  error: z.object({
-    code: z.string(),
-    message: z.string(),
-    retryable: z.boolean(),
-    correlationId: z.string(),
-  }),
+/** One field-level problem in a `VALIDATION_FAILED` response. */
+export const validationIssueSchema = z.object({
+  /** Dotted path into the request part, prefixed by the part: `body.email`, `query.limit`. */
+  path: z.string(),
+  message: z.string(),
 });
+export type ValidationIssue = z.infer<typeof validationIssueSchema>;
+
+/** Error envelope defined in docs/API_SPEC.md §10. */
+export const apiErrorResponseSchema = z
+  .object({
+    error: z.object({
+      code: z.string(),
+      message: z.string(),
+      retryable: z.boolean(),
+      correlationId: z.string(),
+      /** Present on `VALIDATION_FAILED` only. */
+      details: z.array(validationIssueSchema).optional(),
+    }),
+  })
+  .meta({ id: 'ApiErrorResponse' });
 export type ApiErrorResponse = z.infer<typeof apiErrorResponseSchema>;
 
 export const CORRELATION_ID_HEADER = 'x-correlation-id';

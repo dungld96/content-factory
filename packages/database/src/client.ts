@@ -1,6 +1,6 @@
 import { PrismaPg } from '@prisma/adapter-pg';
 
-import { PrismaClient } from './generated/prisma/client.js';
+import { Prisma, PrismaClient } from './generated/prisma/client.js';
 
 export interface CreatePrismaClientOptions {
   /** PostgreSQL connection string. Must come from validated configuration. */
@@ -26,4 +26,7 @@ export function createPrismaClient(options: CreatePrismaClientOptions): PrismaCl
   return new PrismaClient({ adapter });
 }
 
-export { PrismaClient };
+export { Prisma, PrismaClient };
+
+/** The client handed to an interactive `$transaction` callback. */
+export type TransactionClient = Prisma.TransactionClient;

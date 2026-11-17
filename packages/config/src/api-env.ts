@@ -45,16 +45,26 @@ export const apiEnvSchema = z.object({
   REDIS_URL: urlWithProtocol(['redis:', 'rediss:'], 'REDIS_URL'),
   /** Per-dependency timeout for readiness checks only (not for application queries). */
   HEALTH_CHECK_TIMEOUT_MS: z.coerce.number().int().min(100).max(30_000).default(2_000),
+  /** Reject mutations without `If-Match` with 428 (decision D9). Off until clients send it. */
+  REQUIRE_IF_MATCH: booleanStringSchema.default(false),
+  /** Serve `GET /openapi.json` without authentication. Defaults to true outside production. */
+  OPENAPI_PUBLIC: booleanStringSchema.optional(),
 });
 
-export type ApiEnv = z.output<typeof apiEnvSchema>;
+/** The validated environment, with environment-dependent defaults resolved. */
+const resolvedApiEnvSchema = apiEnvSchema.transform((env) => ({
+  ...env,
+  OPENAPI_PUBLIC: env.OPENAPI_PUBLIC ?? env.NODE_ENV !== 'production',
+}));
+
+export type ApiEnv = z.output<typeof resolvedApiEnvSchema>;
 
 /**
  * Validates and normalizes API environment variables.
  * @throws {EnvValidationError} with variable names and problems (never values).
  */
 export function loadApiEnv(source: Readonly<Record<string, string | undefined>>): ApiEnv {
-  const result = apiEnvSchema.safeParse(source);
+  const result = resolvedApiEnvSchema.safeParse(source);
   if (!result.success) {
     throw new EnvValidationError('API', toEnvIssues(result.error));
   }
