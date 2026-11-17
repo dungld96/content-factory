@@ -9,10 +9,11 @@
 
 ## 1. Verdict
 
-**M1 meets its acceptance criteria and the approved design, with one defect to fix before M2
-(finding 1) and four low-severity issues worth fixing soon (findings 2–5).** No finding can
-produce invalid committed data: every invariant is enforced by the database itself, and the
-concurrency tests check the invariants after each race.
+**M1 meets its acceptance criteria and the approved design.** Finding 1, the one defect to fix
+before M2, is **fixed** (see its resolution note). Four low-severity issues remain worth fixing
+soon (findings 2–5). No database invariant can be broken: the database enforces each one itself,
+and the concurrency tests check them after each race. Finding 1 did, however, produce wrong but
+invariant-valid data (merged link sets) before the fix.
 
 | Acceptance criterion (IMPLEMENTATION_PLAN M1) | Evidence                                                                                                                              | Met |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --- |
@@ -25,7 +26,19 @@ concurrency tests check the invariants after each race.
 Severity: **Medium** = a design guarantee is violated in a reachable path; **Low** = correct
 outcome but a real usability, robustness or hardening gap; **Info** = note only.
 
-### 1. Medium — Concurrent `PUT …/versions/:id/assets` deadlocks (Confirmed)
+### 1. Medium — Concurrent `PUT …/versions/:id/assets` deadlocks (Confirmed) — **Fixed**
+
+> **Resolution (2026-11-17).** Fixed as recommended: `replaceAssets` now locks the version
+> (`FOR NO KEY UPDATE`) before touching links, and checks status and `If-Match` on the locked
+> row. Writing the race test revealed a **second, worse symptom**: concurrent replacements
+> **merged** the two link sets instead of replacing (each DELETE's snapshot missed the other's
+> uncommitted inserts). This happened with and without existing links, and returned 200 to
+> both clients. The same fix resolves it. New tests (`brand.integration.test.ts`, "concurrent
+> link replacements …") run 10 races each with and without existing links and assert both
+> 200s, exactly one of the two link sets afterwards, and no new deadlocks in
+> `pg_stat_database`. Against the old code they fail: 8 deadlocks in 10 races, and merged link
+> sets. Against the fix they pass in 5/5 runs. The exception to the lock order is recorded in
+> ADR-0011 §5.
 
 - **Where**: `apps/api/src/brand/versioned-entity.service.ts`, `replaceAssets`.
 - **What**: the transaction deletes the draft's links, inserts the new ones, then updates the
@@ -131,7 +144,7 @@ Revisit if sign-up or invitations are added.
 | --------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
 | Schema, composite FKs, CHECKs, triggers | §2–§6, ADR-0011            | `init_m1` = reviewed DDL (byte-identical) + rev-4 `triggers.sql`                                                                             | Conforms                            |
 | Roles (U3)                              | `acf_migrator` / `acf_app` | `pnpm db:setup`; `acf_app` verified unable to disable/drop triggers, truncate, set `session_replication_role`, or touch `_prisma_migrations` | Conforms                            |
-| Lock protocol, no `40P01`               | ADR-0011 §5–6              | Approve, archive, owner changes, version creation conform and are race-tested; **link replacement does not (finding 1)**                     | Partly                              |
+| Lock protocol, no `40P01`               | ADR-0011 §5–6              | Approve, archive, owner changes, version creation and link replacement (fixed, finding 1; documented exception) are race-tested              | Conforms                            |
 | Approval + master pointer               | ADR-0010, §7               | Exact algorithm; `ALREADY_APPROVED` (with current state), `STALE_DRAFT`, `ASSET_ARCHIVED`, `If-Match`                                        | Conforms                            |
 | Sessions (D2, D5)                       | ADR-0009, §5               | Evidenced store ported; single INSERT path; UPDATE-only set/touch; R1–R8 pass; upsert negative control fails R1–R5                           | Conforms                            |
 | Cookies, Origin, CSRF                   | §5.4, §5.7                 | `__Host-` in secure mode, fail-closed login, Origin → session → CSRF order                                                                   | Conforms (finding 3)                |
@@ -161,7 +174,7 @@ lock-boundary harness is deterministic (no sleeps); the session suite uses gates
 instead of timing; every race test checks invariants, not just status codes; and the
 permission matrix fails when a new route is added without a row.
 
-Gaps: no API-level race test for link replacement (finding 1); no multi-tab CSRF test
+Gaps: no multi-tab CSRF test
 (finding 3); no test for the session-store-failure `503` path; E2E covers Chromium only; CI has
 not yet run the M1 commits on PostgreSQL 17.12.
 
@@ -169,7 +182,8 @@ not yet run the M1 commits on PostgreSQL 17.12.
 
 Before starting M2:
 
-1. Fix finding 1 and add the API race test; record the lock-order exception in ADR-0011.
+1. ~~Fix finding 1 and add the API race test; record the lock-order exception in ADR-0011.~~
+   Done.
 2. Push and confirm CI is green on PostgreSQL 17.12 (it has not run on the M1 commits yet).
 
 Soon (can be one small follow-up PR):

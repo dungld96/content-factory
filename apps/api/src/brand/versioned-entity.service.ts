@@ -408,9 +408,17 @@ export class VersionedEntityService {
   }
 
   /**
-   * Replaces a draft's asset links. Lock order link rows → version (ADR-0011 §5): the DELETE
-   * and INSERT lock the links (their trigger reads the version FOR SHARE), then the version is
-   * updated, which changes its ETag so a reviewer's `If-Match` on approve covers the links.
+   * Replaces a draft's asset links, and changes the version's ETag so a reviewer's `If-Match`
+   * on approve covers the links.
+   *
+   * Locks the version row FIRST (ADR-0011 §5, documented exception to "link row → version"):
+   * - Without it, two concurrent replacements both took the link trigger's `FOR SHARE` on the
+   *   version and then both upgraded for the final UPDATE: a lock-upgrade deadlock (40P01).
+   * - Worse, each DELETE ran on a snapshot that could not see the other's uncommitted inserts,
+   *   so the two link sets were merged instead of replaced.
+   * With the version locked, replacements serialize; the waiter's DELETE is a new statement
+   * with a fresh snapshot, so it removes the links committed by the first. The only remaining
+   * cycle is with raw multi-row link edits outside the protocol (accepted by ADR-0011 §6).
    */
   async replaceAssets(
     actor: Actor,
@@ -429,14 +437,22 @@ export class VersionedEntityService {
     );
 
     await this.runner.run(`${this.kind.key}.replace_assets`, async (tx) => {
+      // 1. Lock the version (conflicts with approval's FOR UPDATE and other replacements).
+      const [locked] = await tx.$queryRaw<{ status: string; updated_at: Date }[]>`
+        SELECT status::text AS status, updated_at FROM ${this.kind.versionTable}
+         WHERE id = ${versionId}::uuid FOR NO KEY UPDATE`;
+      if (!locked) throw notFound('version');
+      if (locked.status === 'approved') throw this.versionImmutable();
+      if (expected && locked.updated_at.getTime() !== expected.getTime()) {
+        throw preconditionFailed();
+      }
+      // 2. Replace the links (fresh snapshot: sees every committed link of this version).
       await tx.$executeRaw`
         DELETE FROM ${this.kind.linkTable} WHERE ${this.kind.linkFk} = ${versionId}::uuid`;
       await this.insertLinks(tx, row.project_id, versionId, links);
-      const count = await tx.$executeRaw`
-        UPDATE ${this.kind.versionTable} SET updated_at = now()
-         WHERE id = ${versionId}::uuid AND status = 'draft'
-           ${expected ? sql`AND updated_at = ${expected}::timestamptz` : empty}`;
-      if (count === 0) await this.explainVersionUpdate(versionId, tx);
+      // 3. Bump the ETag (row already locked by this transaction).
+      await tx.$executeRaw`
+        UPDATE ${this.kind.versionTable} SET updated_at = now() WHERE id = ${versionId}::uuid`;
     });
     return this.versionDto(versionId);
   }

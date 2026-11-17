@@ -231,7 +231,57 @@ describe('version lifecycle', () => {
   });
 });
 
+/**
+ * Deadlocks in the test database so far. PostgreSQL publishes the counter asynchronously, so
+ * wait until it stops changing (ADR-0011 §6: a 40P01 on a service path is a defect, even when
+ * the transaction runner's retry hides it from the client).
+ */
+async function deadlockCount(): Promise<number> {
+  let last = -1;
+  for (let i = 0; i < 20; i++) {
+    await ctx.db.query('SELECT pg_stat_clear_snapshot()');
+    const { rows } = await ctx.db.query<{ n: string }>(
+      'SELECT deadlocks AS n FROM pg_stat_database WHERE datname = current_database()',
+    );
+    const n = Number(rows[0]?.n ?? 0);
+    if (n === last) return n;
+    last = n;
+    await new Promise((resolve) => setTimeout(resolve, 600));
+  }
+  return last;
+}
+
 describe('concurrency (service paths, READ COMMITTED)', () => {
+  it.each([
+    ['without existing links', false],
+    ['with existing links', true],
+  ])('concurrent link replacements %s never deadlock (REVIEW finding 1)', async (_name, linked) => {
+    const before = await deadlockCount();
+    for (let round = 0; round < 10; round++) {
+      const f = await ctx.fixture();
+      const extra = bodyOf<{ id: string }>(
+        await ctx.as('editor', 'POST', `/projects/${f.projectId}/assets`, {
+          body: newAsset(f.projectId),
+        }),
+      ).id;
+      const path = `/character-versions/${f.characterVersionId}/assets`;
+      if (linked) {
+        await ctx.as('editor', 'PUT', path, { body: { assets: [{ assetId: f.assetId }] } });
+      }
+      const [a, b] = await Promise.all([
+        ctx.as('editor', 'PUT', path, { body: { assets: [{ assetId: f.spareAssetId }] } }),
+        ctx.as('owner', 'PUT', path, { body: { assets: [{ assetId: extra }] } }),
+      ]);
+      expect([a.status, b.status]).toEqual([200, 200]);
+      // Last writer wins (no If-Match): exactly one of the two link sets remains.
+      const final = bodyOf<VersionDto>(
+        await ctx.as('viewer', 'GET', `/character-versions/${f.characterVersionId}`),
+      );
+      expect([[f.spareAssetId], [extra]]).toContainEqual(final.assets.map((l) => l.assetId));
+    }
+    expect(await deadlockCount()).toBe(before);
+  });
+
   it('concurrent approvals of v1 and v2: the master ends at the highest approved version', async () => {
     for (let round = 0; round < 5; round++) {
       const f = await ctx.fixture();

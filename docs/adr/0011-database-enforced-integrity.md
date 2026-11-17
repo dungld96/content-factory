@@ -43,6 +43,18 @@ behaviour under direct SQL.
    locking other member rows. A deterministic lock-boundary harness reproduced the resulting
    cycles (`40P01` in 20/40 runs).
 
+   **Exception (M1 review, finding 1): replacing a draft's links** (`PUT …/versions/:id/assets`)
+   locks the **version first** (`FOR NO KEY UPDATE`), then deletes and inserts its links, then
+   updates the version. Following "link row → version" there was wrong for a multi-statement
+   replacement. When the draft had no links, two replacements both took the link trigger's
+   `FOR SHARE` on the version and both upgraded for the final UPDATE (a lock-upgrade deadlock,
+   `40P01` in 8/10 races). And each DELETE's snapshot missed the other's uncommitted inserts,
+   so the two link sets were **merged** instead of replaced. Locking the version first serializes
+   replacements, and the waiter's DELETE, a new statement, sees the committed links. The only
+   cycle left is with a concurrent _raw multi-row_ link edit, which is outside the protocol
+   (point 6). An API race test (`brand.integration.test.ts`) asserts no deadlock (via
+   `pg_stat_database.deadlocks`) and replace semantics, with and without existing links.
+
 6. **Isolation and materialized conflicts**: application transactions use READ COMMITTED.
    - Under READ COMMITTED a loser waits, re-reads committed data, and fails with an `AC0xx`
      code.
