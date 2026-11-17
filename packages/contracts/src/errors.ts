@@ -48,6 +48,16 @@ export const ApiErrorCode = {
   AssetArchived: 'ASSET_ARCHIVED',
   /** A concurrent transaction changed the same rows; safe to retry. */
   ConcurrentModification: 'CONCURRENT_MODIFICATION',
+
+  // --- M1: authentication (ADR-0009) ---
+  /** Unknown email, wrong password or disabled account (deliberately indistinguishable). */
+  InvalidCredentials: 'INVALID_CREDENTIALS',
+  /** State-changing request without an allowed Origin / same-origin Sec-Fetch-Site. */
+  OriginRejected: 'ORIGIN_REJECTED',
+  /** Missing or invalid `x-csrf-token`. */
+  CsrfInvalid: 'CSRF_INVALID',
+  /** A Secure session cookie could not be set (proxy misconfiguration); login failed closed. */
+  SessionCookieNotSet: 'SESSION_COOKIE_NOT_SET',
 } as const;
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];
 

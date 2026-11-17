@@ -2,7 +2,8 @@
 
 - Status: **Accepted** (strategy: owner review 2026-11-17). Session-store design (D2):
   **approved** with M1 design review package revision 4 (owner, 2026-11-17; revision 4 changes
-  no D2 content; the session-store design below is as of revision 3).
+  no D2 content; the session-store design below is as of revision 3). Implemented in M1b
+  (`apps/api/src/auth/`); the session suite is `apps/api/test/auth/*.integration.test.ts`.
 - Revision 3 (2026-11-17): fixes session resurrection after logout (review CRITICAL 1) and
   evidences the actual Prisma-backed store.
 - Date: 2026-11-17

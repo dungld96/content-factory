@@ -40,6 +40,26 @@ idempotent: run it again after pulling new migrations. See `docs/DATABASE.md` §
 pnpm env:check
 ```
 
+Create your first account (there is no sign-up page; decision D6). The CLI asks for the password
+without echoing it (or reads it from a pipe) and never accepts it as an argument:
+
+```bash
+pnpm user:create --email you@example.com --name "Your Name"
+```
+
+| Command                                    | What it does                                                 |
+| ------------------------------------------ | ------------------------------------------------------------ |
+| `pnpm user:create --email … --name …`      | Creates an active user (password ≥ 12 characters)            |
+| `pnpm user:set-password --email …`         | Sets a new password and revokes all of the user's sessions   |
+| `pnpm user:disable --email …`              | Disables the account and revokes all of its sessions         |
+
+Authentication settings live in `.env` (`SESSION_SECRETS`, `CSRF_SECRET`,
+`SESSION_COOKIE_SECURE`, `TRUST_PROXY`, `WEB_ORIGINS`; see `.env.example`). Generate each secret
+with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`.
+Production requires `SESSION_COOKIE_SECURE=true` and a `TRUST_PROXY` that names the Next.js hop;
+the TLS proxy in front of Next.js must overwrite `X-Forwarded-Proto`, and the API must not be
+publicly reachable.
+
 ## Run the apps
 
 To run the API and web together (this builds the shared packages first):
@@ -127,6 +147,10 @@ tests connect as `acf_app`:
 - `schema-objects`: trigger/CHECK presence, Prisma drift, and the `acf_app` privilege limits.
 - `prisma-errors`: how Prisma surfaces the integrity errors (`databaseErrorInfo`).
 
+The `integration:api` project builds its own disposable `acf_test_api` database the same way
+and runs the real API on an ephemeral port: the session suite (expiry, fixation, CSRF, logout
+races R1–R8), login/Origin/secure-cookie/throttling behaviour, and the user CLI service.
+
 To run only these:
 
 ```bash
@@ -160,6 +184,8 @@ pnpm start:web
 - **Port already in use**: change `POSTGRES_PORT`, `REDIS_PORT` or `API_PORT` in `.env`. If you
   change a port, update `DATABASE_URL` / `REDIS_URL` to match.
 - **`Cannot find module '@acf/...'`**: the shared packages are not built yet. Run `pnpm build:packages`.
+- **`Invalid API environment configuration` after pulling M1b**: add `SESSION_SECRETS` and
+  `CSRF_SECRET` to `.env` (see `.env.example`).
 - **`permission denied` or `password authentication failed for user "acf_app"`**: run
   `pnpm db:setup`. Existing `.env` files from M0 must add `DATABASE_ADMIN_URL`,
   `DATABASE_MIGRATION_URL` and `DATABASE_SHADOW_URL`, and point `DATABASE_URL` at `acf_app`

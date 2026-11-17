@@ -15,6 +15,26 @@ import {
  * Keep this list minimal: add variables only when a feature needs them.
  * Provider API keys are intentionally absent in M0 (no AI integrations yet).
  */
+const commaList = z.string().transform((value) =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0),
+);
+
+/** Express `trust proxy` value: a hop count, `true` (trust all), or an address/preset list. */
+export type TrustProxy = number | boolean | string[];
+
+function parseTrustProxy(value: string): TrustProxy {
+  if (value === 'true' || value === '*') return true;
+  if (value === 'false') return false;
+  if (/^\d+$/.test(value)) return Number(value);
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
 export const apiEnvSchema = z.object({
   NODE_ENV: nodeEnvSchema,
   API_HOST: z.string().trim().min(1).default('0.0.0.0'),
@@ -49,13 +69,79 @@ export const apiEnvSchema = z.object({
   REQUIRE_IF_MATCH: booleanStringSchema.default(false),
   /** Serve `GET /openapi.json` without authentication. Defaults to true outside production. */
   OPENAPI_PUBLIC: booleanStringSchema.optional(),
+
+  // --- Authentication (ADR-0009, design package §5.4) ---
+  /**
+   * Session-cookie signing secrets, comma-separated: the first signs, all verify (rotation).
+   * Each at least 32 characters.
+   */
+  SESSION_SECRETS: commaList.pipe(
+    z.array(z.string().min(32, 'each secret must be at least 32 characters')).min(1),
+  ),
+  /** Secret for CSRF token HMACs; at least 32 characters and distinct from the session secrets. */
+  CSRF_SECRET: z.string().min(32, 'must be at least 32 characters'),
+  /** `Secure` cookies with the `__Host-` prefix. Defaults to true in production (required there). */
+  SESSION_COOKIE_SECURE: booleanStringSchema.optional(),
+  /** Idle session lifetime, rolling (decision D5: 24 h). */
+  SESSION_IDLE_TTL_MS: z.coerce.number().int().min(60_000).default(86_400_000),
+  /** Absolute session lifetime, never extended (decision D5: 7 days). */
+  SESSION_ABSOLUTE_TTL_MS: z.coerce.number().int().min(60_000).default(604_800_000),
+  /**
+   * Express `trust proxy`: which hops may set `X-Forwarded-*`. Name the Next.js hop
+   * (e.g. `loopback`, an IP/CIDR list, or a hop count). `true`/`*` is rejected in production.
+   */
+  TRUST_PROXY: z.string().trim().min(1).default('loopback'),
+  /** Browser origins allowed to send state-changing requests (Origin check, design §5.7). */
+  WEB_ORIGINS: commaList
+    .pipe(z.array(z.url({ message: 'each origin must be a valid URL' })).min(1))
+    .default(['http://localhost:3000']),
+  /** Login attempts allowed per client IP per minute. */
+  LOGIN_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(10_000).default(10),
 });
 
 /** The validated environment, with environment-dependent defaults resolved. */
-const resolvedApiEnvSchema = apiEnvSchema.transform((env) => ({
-  ...env,
-  OPENAPI_PUBLIC: env.OPENAPI_PUBLIC ?? env.NODE_ENV !== 'production',
-}));
+const resolvedApiEnvSchema = apiEnvSchema
+  .transform((env) => {
+    const production = env.NODE_ENV === 'production';
+    return {
+      ...env,
+      OPENAPI_PUBLIC: env.OPENAPI_PUBLIC ?? !production,
+      SESSION_COOKIE_SECURE: env.SESSION_COOKIE_SECURE ?? production,
+      TRUST_PROXY: parseTrustProxy(env.TRUST_PROXY),
+    };
+  })
+  .superRefine((env, ctx) => {
+    if (env.SESSION_SECRETS.includes(env.CSRF_SECRET)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['CSRF_SECRET'],
+        message: 'must differ from every SESSION_SECRETS entry',
+      });
+    }
+    if (env.SESSION_ABSOLUTE_TTL_MS < env.SESSION_IDLE_TTL_MS) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SESSION_ABSOLUTE_TTL_MS'],
+        message: 'must be at least SESSION_IDLE_TTL_MS',
+      });
+    }
+    if (env.NODE_ENV === 'production') {
+      if (!env.SESSION_COOKIE_SECURE) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['SESSION_COOKIE_SECURE'],
+          message: 'must be true in production',
+        });
+      }
+      if (env.TRUST_PROXY === true) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['TRUST_PROXY'],
+          message: 'must name the proxy hop in production (not true/*)',
+        });
+      }
+    }
+  });
 
 export type ApiEnv = z.output<typeof resolvedApiEnvSchema>;
 

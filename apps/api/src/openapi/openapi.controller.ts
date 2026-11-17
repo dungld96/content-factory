@@ -1,32 +1,26 @@
-import { Controller, Get, Inject, NotFoundException } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { z } from 'zod';
 
-import type { ApiEnv } from '@acf/config';
-
+import { Public } from '../auth/public.decorator.js';
 import { Endpoint } from '../common/http/endpoint.js';
-import { API_ENV } from '../config/api-config.module.js';
 import { OpenApiService } from './openapi.service.js';
 
 @Controller()
 export class OpenApiController {
-  constructor(
-    private readonly openApi: OpenApiService,
-    @Inject(API_ENV) private readonly env: ApiEnv,
-  ) {}
+  constructor(private readonly openApi: OpenApiService) {}
 
   @Get('openapi.json')
+  // Public outside production by default; otherwise only for signed-in users.
+  @Public((env) => env.OPENAPI_PUBLIC)
   @Endpoint({
     summary: 'OpenAPI 3.1 document of this API',
     tags: ['meta'],
     responses: {
       200: { description: 'The OpenAPI document', schema: z.record(z.string(), z.unknown()) },
     },
-    errors: [404],
+    errors: [401],
   })
   document(): unknown {
-    // OPENAPI_PUBLIC=false hides the document (production default) until the auth guard (M1b-2)
-    // can serve it to signed-in users.
-    if (!this.env.OPENAPI_PUBLIC) throw new NotFoundException();
     return this.openApi.document();
   }
 }

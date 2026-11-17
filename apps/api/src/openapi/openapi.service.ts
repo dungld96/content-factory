@@ -1,6 +1,6 @@
 import { STATUS_CODES } from 'node:http';
 
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner } from '@nestjs/core';
 import { z } from 'zod';
 import {
@@ -10,16 +10,19 @@ import {
   type ZodOpenApiResponsesObject,
 } from 'zod-openapi';
 
+import type { ApiEnv } from '@acf/config';
 import { apiErrorResponseSchema } from '@acf/contracts';
 
+import { sessionCookieConfig } from '../auth/session/session-cookies.js';
 import { API_PREFIX } from '../common/http/prefix.js';
+import { API_ENV } from '../config/api-config.module.js';
 import { discoverRoutes, type RouteInfo } from './route-discovery.js';
 
 type OpenApiDocument = ReturnType<typeof createDocument>;
 
 const toOpenApiPath = (path: string) => path.replace(/:([A-Za-z0-9_]+)/g, '{$1}');
 
-function operationFor(route: RouteInfo): ZodOpenApiOperationObject {
+function operationFor(route: RouteInfo, env: ApiEnv): ZodOpenApiOperationObject {
   const spec = route.spec;
   if (!spec) throw new Error(`${route.handler} has no @Endpoint metadata`);
   const responses: ZodOpenApiResponsesObject = {};
@@ -39,8 +42,12 @@ function operationFor(route: RouteInfo): ZodOpenApiOperationObject {
   for (const header of spec.headers ?? []) headerShape[header] = z.string().optional();
   const hasHeaders = Object.keys(headerShape).length > 0;
   const hasParams = spec.params ?? spec.query ?? hasHeaders;
+  const isPublic =
+    route.publicRule === true || (typeof route.publicRule === 'function' && route.publicRule(env));
   return {
     summary: spec.summary,
+    // Public operations need no session; all others inherit the document-level requirement.
+    ...(isPublic ? { security: [] } : {}),
     operationId: route.handler.replace('.', '_'),
     ...(spec.tags ? { tags: [...spec.tags] } : {}),
     ...(hasParams
@@ -67,6 +74,7 @@ export class OpenApiService {
   constructor(
     private readonly discovery: DiscoveryService,
     private readonly scanner: MetadataScanner,
+    @Inject(API_ENV) private readonly env: ApiEnv,
   ) {}
 
   routes(): RouteInfo[] {
@@ -79,12 +87,24 @@ export class OpenApiService {
     // Undocumented routes are skipped here; the route-coverage test fails on them.
     for (const route of this.routes().filter((r) => r.spec !== undefined)) {
       const key = toOpenApiPath(route.path) as `/${string}`;
-      paths[key] = { ...paths[key], [route.method]: operationFor(route) };
+      paths[key] = { ...paths[key], [route.method]: operationFor(route, this.env) };
     }
     this.cached = createDocument({
       openapi: '3.1.0',
       info: { title: 'AI Content Factory API', version: '0.1.0' },
       servers: [{ url: `/${API_PREFIX}` }],
+      // Session cookie (ADR-0009); state-changing requests also need `x-csrf-token` and an
+      // allowed Origin.
+      security: [{ sessionCookie: [] }],
+      components: {
+        securitySchemes: {
+          sessionCookie: {
+            type: 'apiKey',
+            in: 'cookie',
+            name: sessionCookieConfig(this.env).sessionCookie,
+          },
+        },
+      },
       paths,
     });
     return this.cached;

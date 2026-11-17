@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { EnvValidationError, loadApiEnv } from './index.js';
 
+const SESSION_SECRET = 's'.repeat(32);
 const valid = {
   DATABASE_URL: 'postgresql://acf:secret-password@localhost:5432/acf',
   REDIS_URL: 'redis://localhost:6379',
+  SESSION_SECRETS: SESSION_SECRET,
+  CSRF_SECRET: 'c'.repeat(32),
 };
 
 describe('loadApiEnv', () => {
@@ -43,8 +46,10 @@ describe('loadApiEnv', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(EnvValidationError);
       expect((error as EnvValidationError).issues.map((i) => i.key).sort()).toEqual([
+        'CSRF_SECRET',
         'DATABASE_URL',
         'REDIS_URL',
+        'SESSION_SECRETS',
       ]);
     }
   });
@@ -81,5 +86,65 @@ describe('loadApiEnv', () => {
       expect((error as Error).message).not.toContain(secret);
       expect(JSON.stringify((error as EnvValidationError).issues)).not.toContain(secret);
     }
+  });
+
+  describe('authentication settings', () => {
+    it('applies the session defaults outside production', () => {
+      const env = loadApiEnv(valid);
+      expect(env).toMatchObject({
+        SESSION_SECRETS: [SESSION_SECRET],
+        SESSION_COOKIE_SECURE: false,
+        SESSION_IDLE_TTL_MS: 86_400_000,
+        SESSION_ABSOLUTE_TTL_MS: 604_800_000,
+        TRUST_PROXY: ['loopback'],
+        WEB_ORIGINS: ['http://localhost:3000'],
+        LOGIN_RATE_LIMIT_PER_MINUTE: 10,
+        OPENAPI_PUBLIC: true,
+      });
+    });
+
+    it('secures cookies and hides OpenAPI by default in production', () => {
+      const env = loadApiEnv({ ...valid, NODE_ENV: 'production' });
+      expect(env.SESSION_COOKIE_SECURE).toBe(true);
+      expect(env.OPENAPI_PUBLIC).toBe(false);
+    });
+
+    it('parses secret rotation lists and TRUST_PROXY forms', () => {
+      const env = loadApiEnv({
+        ...valid,
+        SESSION_SECRETS: `${'a'.repeat(32)}, ${'b'.repeat(40)}`,
+        TRUST_PROXY: '10.0.0.0/8, loopback',
+      });
+      expect(env.SESSION_SECRETS).toEqual(['a'.repeat(32), 'b'.repeat(40)]);
+      expect(env.TRUST_PROXY).toEqual(['10.0.0.0/8', 'loopback']);
+      expect(loadApiEnv({ ...valid, TRUST_PROXY: '1' }).TRUST_PROXY).toBe(1);
+    });
+
+    it.each([
+      [{ SESSION_SECRETS: 'short' }, /SESSION_SECRETS/],
+      [{ CSRF_SECRET: 'short' }, /CSRF_SECRET/],
+      [{ CSRF_SECRET: SESSION_SECRET }, /CSRF_SECRET: must differ/],
+      [
+        { SESSION_IDLE_TTL_MS: '600000', SESSION_ABSOLUTE_TTL_MS: '60000' },
+        /SESSION_ABSOLUTE_TTL_MS/,
+      ],
+      [{ WEB_ORIGINS: 'not a url' }, /WEB_ORIGINS/],
+      [
+        { NODE_ENV: 'production', SESSION_COOKIE_SECURE: 'false' },
+        /SESSION_COOKIE_SECURE: must be true/,
+      ],
+      [{ NODE_ENV: 'production', TRUST_PROXY: 'true' }, /TRUST_PROXY/],
+      [{ NODE_ENV: 'production', TRUST_PROXY: '*' }, /TRUST_PROXY/],
+    ])('rejects %o', (overrides, message) => {
+      expect(() => loadApiEnv({ ...valid, ...overrides })).toThrow(message);
+    });
+
+    it('never echoes secret values in errors', () => {
+      expect(() => loadApiEnv({ ...valid, SESSION_SECRETS: 'hunter2-too-short' })).toThrow(
+        expect.objectContaining({
+          message: expect.not.stringContaining('hunter2') as string,
+        }) as Error,
+      );
+    });
   });
 });

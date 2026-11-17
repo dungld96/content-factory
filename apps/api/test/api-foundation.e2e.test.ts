@@ -16,6 +16,7 @@ import { apiErrorResponseSchema, paginationQuerySchema } from '@acf/contracts';
 
 import { configureApp, createLogger } from '../src/app.factory.js';
 import { AppModule } from '../src/app.module.js';
+import { Public } from '../src/auth/public.decorator.js';
 import { IfMatch } from '../src/common/http/etag.js';
 import { Endpoint, ValidBody, ValidParams, ValidQuery } from '../src/common/http/endpoint.js';
 import { OpenApiService } from '../src/openapi/openapi.service.js';
@@ -27,6 +28,7 @@ const idParams = z.strictObject({ widgetId: z.uuid() });
 
 /** Test-only routes exercising the request-validation and precondition plumbing. */
 @Controller('test-widgets')
+@Public()
 class WidgetController {
   @Post(':widgetId')
   @HttpCode(200)
@@ -72,6 +74,7 @@ const http = (app: INestApplication) =>
   request(app.getHttpServer() as Parameters<typeof request>[0]);
 
 const ID = '0190a0b0-0000-7000-8000-000000000001';
+const ORIGIN = 'http://localhost:3000';
 
 describe('API foundation', () => {
   let app: INestApplication | undefined;
@@ -85,6 +88,7 @@ describe('API foundation', () => {
       app = await build({}, [WidgetModule]);
       const res = await http(app)
         .post(`/api/v1/test-widgets/${ID}?limit=5`)
+        .set('Origin', ORIGIN)
         .set('If-Match', 'W/"1700000000000"')
         .send({ name: 'a', size: 3 })
         .expect(200);
@@ -100,6 +104,7 @@ describe('API foundation', () => {
       app = await build({}, [WidgetModule]);
       const res = await http(app)
         .post('/api/v1/test-widgets/not-a-uuid?limit=0')
+        .set('Origin', ORIGIN)
         .send({ name: '', size: 1.5, extra: true })
         .expect(400);
       const body = apiErrorResponseSchema.parse(res.body);
@@ -114,6 +119,7 @@ describe('API foundation', () => {
       app = await build({}, [WidgetModule]);
       await http(app)
         .post(`/api/v1/test-widgets/${ID}`)
+        .set('Origin', ORIGIN)
         .set('If-Match', '*')
         .send({ name: 'a', size: 1 })
         .expect(412);
@@ -122,6 +128,7 @@ describe('API foundation', () => {
       app = await build({ REQUIRE_IF_MATCH: 'true' }, [WidgetModule]);
       const res = await http(app)
         .post(`/api/v1/test-widgets/${ID}`)
+        .set('Origin', ORIGIN)
         .send({ name: 'a', size: 1 })
         .expect(428);
       expect(res.body.error.code).toBe('PRECONDITION_REQUIRED');
@@ -172,9 +179,10 @@ describe('API foundation', () => {
       expect(Object.keys(op?.responses ?? {})).toEqual(['200', '400', '412', '428']);
     });
 
-    it('hides the document when OPENAPI_PUBLIC=false', async () => {
+    it('requires a session for the document when OPENAPI_PUBLIC=false', async () => {
       app = await build({ OPENAPI_PUBLIC: 'false' });
-      await http(app).get('/api/v1/openapi.json').expect(404);
+      const res = await http(app).get('/api/v1/openapi.json').expect(401);
+      expect(res.body.error.code).toBe('UNAUTHORIZED');
     });
   });
 

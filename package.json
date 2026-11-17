@@ -37,6 +37,9 @@
     "db:migrate:deploy": "pnpm --filter @acf/database db:migrate:deploy",
     "db:bootstrap": "pnpm build:packages && pnpm --filter @acf/database db:bootstrap",
     "db:setup": "pnpm build:packages && pnpm --filter @acf/database db:setup",
+    "user:create": "pnpm build:packages && pnpm --filter @acf/api build && pnpm --filter @acf/api user create",
+    "user:set-password": "pnpm build:packages && pnpm --filter @acf/api build && pnpm --filter @acf/api user set-password",
+    "user:disable": "pnpm build:packages && pnpm --filter @acf/api build && pnpm --filter @acf/api user disable",
     "db:studio": "pnpm --filter @acf/database db:studio",
     "env:check": "pnpm build:packages && node scripts/check-env.mjs"
   },

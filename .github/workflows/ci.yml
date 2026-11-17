@@ -44,6 +44,9 @@ jobs:
       DATABASE_MIGRATION_URL: postgresql://acf_migrator:acf_migrator_ci_only@localhost:5432/acf?schema=public
       DATABASE_URL: postgresql://acf_app:acf_app_ci_only@localhost:5432/acf?schema=public
       REDIS_URL: redis://localhost:6379
+      # CI-only values (no real secrets): required by the API environment schema.
+      SESSION_SECRETS: ci-session-secret-not-for-production-0001
+      CSRF_SECRET: ci-csrf-secret-not-for-production-00000001
     steps:
       # Third-party actions are pinned to full commit SHAs (tag in the trailing comment).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

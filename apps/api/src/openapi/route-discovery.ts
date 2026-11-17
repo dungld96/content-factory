@@ -2,6 +2,7 @@ import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants.js';
 import { DiscoveryService, MetadataScanner } from '@nestjs/core';
 
+import { PUBLIC_METADATA, type PublicRule } from '../auth/public.decorator.js';
 import { ENDPOINT_METADATA, type EndpointSpec } from '../common/http/endpoint.js';
 
 export interface RouteInfo {
@@ -11,6 +12,8 @@ export interface RouteInfo {
   readonly path: string;
   readonly handler: string;
   readonly spec: EndpointSpec | undefined;
+  /** `@Public()` rule on the handler or its controller (undefined: session required). */
+  readonly publicRule: PublicRule | undefined;
 }
 
 const toArray = (value: unknown): string[] =>
@@ -41,6 +44,8 @@ export function discoverRoutes(discovery: DiscoveryService, scanner: MetadataSca
       if (methodPaths === undefined || typeof requestMethod !== 'number') continue;
       const method = (RequestMethod[requestMethod] ?? 'GET').toLowerCase();
       const spec = Reflect.getMetadata(ENDPOINT_METADATA, handler) as EndpointSpec | undefined;
+      const publicRule = (Reflect.getMetadata(PUBLIC_METADATA, handler) ??
+        Reflect.getMetadata(PUBLIC_METADATA, metatype)) as PublicRule | undefined;
       for (const base of basePaths) {
         for (const sub of toArray(methodPaths)) {
           routes.push({
@@ -48,6 +53,7 @@ export function discoverRoutes(discovery: DiscoveryService, scanner: MetadataSca
             path: joinPath(base, sub),
             handler: `${metatype.name}.${name}`,
             spec,
+            publicRule,
           });
         }
       }

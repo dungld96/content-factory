@@ -77,6 +77,10 @@ export default defineConfig({
           include: ['test/**/*.integration.test.ts'],
           environment: 'node',
           setupFiles: [path.join(root, 'test-support/load-root-env.ts')],
+          // Builds the disposable `acf_test_api` database from the committed migrations.
+          globalSetup: [path.join(root, 'apps/api/test/support/global-setup.ts')],
+          // Files share that database and TRUNCATE it: run them one at a time.
+          fileParallelism: false,
           testTimeout: 20_000,
           hookTimeout: 30_000,
         },

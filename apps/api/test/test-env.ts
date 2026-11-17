@@ -8,6 +8,8 @@ export function testEnv(overrides: Record<string, string> = {}): ApiEnv {
     REDIS_URL: 'redis://127.0.0.1:1',
     LOG_LEVEL: 'error',
     HEALTH_CHECK_TIMEOUT_MS: '200',
+    SESSION_SECRETS: 'test-session-secret-0123456789abcdef',
+    CSRF_SECRET: 'test-csrf-secret-0123456789abcdef!!',
     ...overrides,
   });
 }

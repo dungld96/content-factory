@@ -47,6 +47,8 @@ describe('Readiness with unreachable dependencies', () => {
       DATABASE_URL: 'postgresql://nobody:nopass@127.0.0.1:1/none',
       REDIS_URL: 'redis://127.0.0.1:1',
       HEALTH_CHECK_TIMEOUT_MS: '500',
+      SESSION_SECRETS: 'test-session-secret-0123456789abcdef',
+      CSRF_SECRET: 'test-csrf-secret-0123456789abcdef!!',
     });
     app = await createApp(env);
     await app.init();

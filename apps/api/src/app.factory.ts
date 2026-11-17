@@ -1,12 +1,15 @@
 import { ConsoleLogger, type INestApplication, type LogLevel } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 
 import type { ApiEnv } from '@acf/config';
 import { CORRELATION_ID_HEADER } from '@acf/contracts';
 
 import { AppModule } from './app.module.js';
+import { PrismaSessionStore } from './auth/session/prisma-session-store.js';
+import { createSessionMiddleware } from './auth/session/session.middleware.js';
 import { ApiExceptionFilter } from './common/api-exception.filter.js';
 import { correlationIdMiddleware } from './common/correlation-id.js';
 import { RequestValidationInterceptor } from './common/http/endpoint.js';
@@ -32,10 +35,14 @@ export function configureApp(app: INestApplication, env: ApiEnv, logger: Console
   const express = app as NestExpressApplication;
   express.disable('x-powered-by');
   express.set(REQUIRE_IF_MATCH_SETTING, env.REQUIRE_IF_MATCH);
+  // Which hops may set X-Forwarded-*: the Next.js server only (ADR-0009, design §5.6).
+  express.set('trust proxy', env.TRUST_PROXY);
   app.setGlobalPrefix(API_PREFIX);
-  app.use(helmet());
   app.use(correlationIdMiddleware);
   app.use(createRequestLoggingMiddleware(logger));
+  app.use(helmet());
+  app.use(cookieParser()); // csrf-csrf reads its cookie from req.cookies
+  app.use(createSessionMiddleware(env, app.get(PrismaSessionStore)));
   app.useGlobalFilters(new ApiExceptionFilter());
   app.useGlobalInterceptors(new RequestValidationInterceptor());
   app.enableCors({

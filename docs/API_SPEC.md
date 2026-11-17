@@ -2,7 +2,7 @@
 
 Base path: `/api/v1`  
 Format: JSON  
-Authentication: session/JWT strategy to be selected during M0; all non-health endpoints must be protected in non-local environments.
+Authentication: server-side sessions in an HttpOnly cookie (ADR-0009, §0.1). Every endpoint except health, login and (outside production) the OpenAPI document requires a session.
 
 Use DTO validation (Zod or class-validator) and publish OpenAPI documentation.
 
@@ -40,6 +40,61 @@ Schemas: `packages/contracts/src/health.ts`.
 Every response carries `x-correlation-id`. A caller-supplied value is echoed only if it matches
 `[A-Za-z0-9._-]{8,128}`; otherwise the server generates a UUID. The same ID appears in server
 logs and in error bodies (§10).
+
+## 0.1 Authentication (implemented in M1b)
+
+Design: ADR-0009 and `docs/design/M1-design-review-package.md` §5. The browser talks only to
+the Next.js origin, which rewrites `/api/v1/*` to the API.
+
+- **Session cookie**: `acf_sid` locally, `__Host-acf_sid` when `SESSION_COOKIE_SECURE=true`
+  (required in production): `HttpOnly; SameSite=Lax; Path=/`, no `Domain`, rolling 24 h idle
+  expiry, 7 d absolute expiry. The server stores only `SHA-256(session ID)`.
+- **Origin check**: every `POST`/`PUT`/`PATCH`/`DELETE` must send an `Origin` listed in
+  `WEB_ORIGINS`, or, without `Origin`, `Sec-Fetch-Site: same-origin`. Otherwise
+  `403 ORIGIN_REJECTED`. This includes login.
+- **CSRF**: every state-changing request from a signed-in user sends `x-csrf-token`. The token
+  comes from the login response or `GET /auth/csrf`, is bound to the session, and stops working
+  after logout or re-login. Missing or invalid: `403 CSRF_INVALID`.
+- **Check order**: Origin (`403`) → session (`401 UNAUTHORIZED`) → CSRF (`403`) → request
+  validation (`400`).
+- Roles are read from the database on every request; a disabled account loses its sessions
+  immediately.
+
+### `POST /auth/login`
+Public, throttled per client IP (`LOGIN_RATE_LIMIT_PER_MINUTE`, default 10; then
+`429 RATE_LIMITED`).
+
+```json
+{ "email": "owner@example.com", "password": "…" }
+```
+
+`200` sets the session cookie and returns:
+
+```json
+{ "user": { "id": "uuid", "email": "owner@example.com", "displayName": "Owner" }, "csrfToken": "…" }
+```
+
+Unknown email, wrong password and disabled account all return the same
+`401 INVALID_CREDENTIALS`, with no cookie. If the API is configured for Secure cookies but the
+request did not arrive over HTTPS through the trusted proxy, login fails closed with
+`500 SESSION_COOKIE_NOT_SET`.
+
+### `POST /auth/logout`
+Revokes the session immediately and clears the cookies. `204`.
+
+### `GET /auth/me`
+```json
+{
+  "user": { "id": "uuid", "email": "owner@example.com", "displayName": "Owner" },
+  "memberships": [{ "projectId": "uuid", "projectSlug": "ngan-khanh", "projectName": "Ngân Khánh", "role": "owner" }]
+}
+```
+
+### `GET /auth/csrf`
+`{ "csrfToken": "…" }` for the current session.
+
+Accounts are created only with the CLI (`pnpm user:create`); there is no sign-up endpoint
+(decision D6). Schemas: `packages/contracts/src/auth.ts`.
 
 ## 1. Projects
 

@@ -9,12 +9,14 @@ import {
   type ReadinessResponse,
 } from '@acf/contracts';
 
+import { Public } from '../auth/public.decorator.js';
 import { Endpoint } from '../common/http/endpoint.js';
 
 import { HealthService } from './health.service.js';
 
 /** Health endpoints are intentionally unauthenticated (docs/API_SPEC.md). */
 @Controller('health')
+@Public()
 export class HealthController {
   constructor(private readonly health: HealthService) {}
 

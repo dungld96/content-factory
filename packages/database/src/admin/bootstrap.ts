@@ -1,4 +1,10 @@
+import { execFile } from 'node:child_process';
+import path from 'node:path';
+import { promisify } from 'node:util';
+
 import pg from 'pg';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Database role separation (ADR-0011 §8, decision U3).
@@ -183,4 +189,23 @@ export async function dropDatabase(adminUrl: string, database: string): Promise<
   await withClient(adminUrl, async (client) => {
     await client.query(`DROP DATABASE IF EXISTS ${pg.escapeIdentifier(database)} WITH (FORCE)`);
   });
+}
+
+/** Root of the `@acf/database` package (this file lives in `src/admin` or `dist/admin`). */
+const PACKAGE_DIR = path.resolve(import.meta.dirname, '..', '..');
+
+/**
+ * Drops and recreates the database named by `urls.migratorUrl` exactly as production builds
+ * it: roles and grants, then `prisma migrate deploy` as the migrator, then grants again.
+ * For disposable test databases only.
+ */
+export async function recreateDatabaseFromMigrations(urls: DatabaseRoleUrls): Promise<void> {
+  const { database } = credentialsFromUrl('DATABASE_MIGRATION_URL', urls.migratorUrl);
+  await dropDatabase(urls.adminUrl, database);
+  await bootstrapDatabase(urls);
+  await execFileAsync('pnpm', ['exec', 'prisma', 'migrate', 'deploy'], {
+    cwd: PACKAGE_DIR,
+    env: { ...process.env, DATABASE_MIGRATION_URL: urls.migratorUrl },
+  });
+  await bootstrapDatabase(urls); // re-apply grants now that _prisma_migrations exists
 }

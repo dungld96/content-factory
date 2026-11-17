@@ -4,6 +4,9 @@ packages:
 
 # pnpm 10 blocks dependency lifecycle scripts by default. Allow only the ones we need.
 onlyBuiltDependencies:
+  # argon2: node-gyp-build uses the bundled prebuild when one exists (linux/win/arm macOS) and
+  # compiles otherwise (e.g. Intel macOS).
+  - argon2
   - '@prisma/engines'
   - '@swc/core'
   - esbuild
