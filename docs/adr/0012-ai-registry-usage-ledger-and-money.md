@@ -1,6 +1,6 @@
 # ADR-0012: AI registry, usage ledger and money precision
 
-- Status: Proposed (M2 design package, revision 1)
+- Status: Accepted (M2 design package, revision 1, approved 2026-11-17)
 - Date: 2026-11-17
 - Milestone: M2
 

@@ -1,12 +1,12 @@
 # M2 Design Review Package — AI Core and Model Registry
 
-- Status: **Revision 1, proposed. No M2 code until the owner approves.**
+- Status: **Revision 1, approved by the owner (2026-11-17).** Implemented in slices M2a–M2d (§12).
 - Date: 2026-11-17
 - Baseline: M1 approved (branch `claude/gracious-planck-kuf4pq`, `58cb986`)
 - Companion files:
   - [`m2/openrouter-verification.md`](m2/openrouter-verification.md): every OpenRouter fact this
     design relies on, with source page and retrieval date
-  - ADR-0012 (new, proposed): money precision, registry and usage ledger
+  - ADR-0012 (accepted): money precision, registry and usage ledger
 
 ## 0. Decision log
 
@@ -19,7 +19,7 @@ Owner decisions taken before this package (2026-11-17):
 | E3  | Registry edited by **CLI**; the API exposes it **read-only**. No new authorization model in M2 | Approved |
 | E4  | Usage persists with project/content context and a **nullable** job link (jobs arrive in M5)    | Approved |
 
-Decisions proposed in this package (§11 lists them for approval):
+Decisions in this package (§11), **all approved by the owner as proposed (2026-11-17)**, including S1:
 
 | ID  | Proposal                                                                                                   | Section |
 | --- | ---------------------------------------------------------------------------------------------------------- | ------- |
@@ -523,7 +523,7 @@ Keys never reach the web app (`web-env` does not accept them; a test asserts thi
 
 ## 11. Decisions for the owner, and risks
 
-### Decisions requested
+### Decisions (approved as recommended, 2026-11-17)
 
 | ID  | Question                                     | Recommendation                                                                                                                                                    | Alternative                                                                          |
 | --- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
