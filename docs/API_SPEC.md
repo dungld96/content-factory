@@ -208,7 +208,8 @@ Archive the content item (editor).
 
 ### `PATCH /content/:contentId`
 Update `title`, `channelId` (or `null`), `targetDurationSeconds`, `aspectRatio`, `language`,
-`brief` (editor). `format` and `status` are not writable. Update editable metadata/brief. Changes that invalidate generated outputs must create a new content revision or mark downstream outputs stale.
+`brief` (editor). `format` and `status` are not writable. From M3, changes that invalidate
+generated outputs must create a new content revision or mark downstream outputs stale.
 
 ## 4. Production pipeline
 
