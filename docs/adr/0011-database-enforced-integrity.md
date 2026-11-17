@@ -1,6 +1,8 @@
 # ADR-0011: Database-enforced integrity (composite FKs, CHECKs, triggers)
 
-- Status: **Proposed** (M1 design review package, revision 4). Role separation (U3) approved.
+- Status: **Accepted** (owner approved M1 design review package revision 4, 2026-11-17). Role
+  separation (U3) approved. Implemented in M1a (migration `init_m1`, `pnpm db:setup`).
+  Production role provisioning is documented only (`docs/DATABASE.md` §8; owner decision).
 - Date: 2026-11-17
 - Milestone: M1
 

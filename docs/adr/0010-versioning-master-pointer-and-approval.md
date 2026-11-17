@@ -1,6 +1,7 @@
 # ADR-0010: Versioning, master pointer and approval concurrency
 
-- Status: **Proposed** (M1 design review package, revision 4). D1 semantics unchanged; U2/U4/U5 approved.
+- Status: **Accepted** (owner approved M1 design review package revision 4, 2026-11-17). D1
+  semantics unchanged; U2/U4/U5 approved. Database layer implemented in M1a (migration `init_m1`).
 - Date: 2026-11-17
 - Milestone: M1
 

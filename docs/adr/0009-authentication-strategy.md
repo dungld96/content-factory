@@ -1,8 +1,8 @@
 # ADR-0009: Authentication strategy
 
 - Status: **Accepted** (strategy: owner review 2026-11-17). Session-store design (D2):
-  **conditionally approved**; revision 4 of the M1 design review package is pending approval
-  (revision 4 changes no D2 content; the session-store design below is as of revision 3).
+  **approved** with M1 design review package revision 4 (owner, 2026-11-17; revision 4 changes
+  no D2 content; the session-store design below is as of revision 3).
 - Revision 3 (2026-11-17): fixes session resurrection after logout (review CRITICAL 1) and
   evidences the actual Prisma-backed store.
 - Date: 2026-11-17

@@ -1,6 +1,6 @@
 # M1 Design Review Package — Domain, Persistence, Identity & Access
 
-- Status: **Revision 4, awaiting explicit approval. No M1 application code has been written.**
+- Status: **Revision 4, approved by the owner (2026-11-17).** Implemented in slices M1a–M1e (§12).
 - Date: 2026-11-17
 - Supersedes: revision 3 (`372d976`), revision 2 (`c5b9105`) and revision 1 (`M1-domain-auth-proposal.md`)
 - Companion files:
@@ -14,21 +14,21 @@
 
 ## 0. Decision log
 
-| ID    | Decision                                                    | Status                                                                                                    |
-| ----- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| D1    | Master = latest approved version; approvals are append-only | Approved                                                                                                  |
-| D2    | Custom Prisma-backed express-session Store                  | **Conditionally approved**; conditions mapped in §5.10; now evidenced with the real Prisma 7 store (§5.9) |
-| D3    | Browser → Next.js (same origin) → API                       | Approved                                                                                                  |
-| D4    | Minimal login / project list / logout UI                    | Approved                                                                                                  |
-| D5    | 24 h idle / 7 d absolute session lifetime                   | Approved                                                                                                  |
-| D6    | Users via CLI and seed only                                 | Approved                                                                                                  |
-| D7    | 404 for non-members                                         | Approved                                                                                                  |
-| D8    | Metadata-only asset registration                            | Approved                                                                                                  |
-| D9    | `If-Match` optional now, designed to become mandatory       | Approved; design in §8.4                                                                                  |
-| D10   | `eslint-plugin-jsx-a11y-x`                                  | Not adopted; isolated evaluation in `docs/evaluations/`                                                   |
-| D11   | Drafts editable until approved                              | Approved                                                                                                  |
-| D12   | Global project slugs                                        | Approved                                                                                                  |
-| U1–U7 | Open questions from revision 2                              | **Approved as documented** (§11)                                                                          |
+| ID    | Decision                                                    | Status                                                                                               |
+| ----- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| D1    | Master = latest approved version; approvals are append-only | Approved                                                                                             |
+| D2    | Custom Prisma-backed express-session Store                  | **Approved** (rev. 4); conditions mapped in §5.10; now evidenced with the real Prisma 7 store (§5.9) |
+| D3    | Browser → Next.js (same origin) → API                       | Approved                                                                                             |
+| D4    | Minimal login / project list / logout UI                    | Approved                                                                                             |
+| D5    | 24 h idle / 7 d absolute session lifetime                   | Approved                                                                                             |
+| D6    | Users via CLI and seed only                                 | Approved                                                                                             |
+| D7    | 404 for non-members                                         | Approved                                                                                             |
+| D8    | Metadata-only asset registration                            | Approved                                                                                             |
+| D9    | `If-Match` optional now, designed to become mandatory       | Approved; design in §8.4                                                                             |
+| D10   | `eslint-plugin-jsx-a11y-x`                                  | Not adopted; isolated evaluation in `docs/evaluations/`                                              |
+| D11   | Drafts editable until approved                              | Approved                                                                                             |
+| D12   | Global project slugs                                        | Approved                                                                                             |
+| U1–U7 | Open questions from revision 2                              | **Approved as documented** (§11)                                                                     |
 
 **How D1 is reconciled with requirement 5** ("updating the current master pointer and approving
 must happen atomically"): the semantics stay D1, so the master is the highest-numbered approved
@@ -904,13 +904,13 @@ No open decisions remain in this revision.
 
 Delivery is split into five review slices; each is reviewed before the next starts:
 
-| Slice | Steps | Scope                                                                                                              | Status                       |
-| ----- | ----- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
-| M1a   | 1     | Database roles, schema, `init_m1` migration with triggers, presence/drift tests, direct-SQL and concurrency suites | Implemented, awaiting review |
-| M1b   | 2–3   | API foundation (contracts, validation, error mapper, pagination, ETag, OpenAPI, helmet) and auth                   | Not started                  |
-| M1c   | 4–5   | `ProjectAccess`, projects, members (last owner), channels, content items                                           | Not started                  |
-| M1d   | 6–7   | Characters, environments, versions and approval, asset links; assets, lineage, usages, archive                     | Not started                  |
-| M1e   | 8–10  | Seed, permission-matrix test, web (login, projects, logout, E2E), docs                                             | Not started                  |
+| Slice | Steps | Scope                                                                                                              | Status                             |
+| ----- | ----- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
+| M1a   | 1     | Database roles, schema, `init_m1` migration with triggers, presence/drift tests, direct-SQL and concurrency suites | Done, reviewed (owner, 2026-11-17) |
+| M1b   | 2–3   | API foundation (contracts, validation, error mapper, pagination, ETag, OpenAPI, helmet) and auth                   | Not started                        |
+| M1c   | 4–5   | `ProjectAccess`, projects, members (last owner), channels, content items                                           | Not started                        |
+| M1d   | 6–7   | Characters, environments, versions and approval, asset links; assets, lineage, usages, archive                     | Not started                        |
+| M1e   | 8–10  | Seed, permission-matrix test, web (login, projects, logout, E2E), docs                                             | Not started                        |
 
 1. Database roles (U3: `acf_migrator` / `acf_app`), the schema, the `init_m1` migration with the triggers,
    trigger-presence and drift tests, and the direct-SQL and concurrency suites ported to Vitest.

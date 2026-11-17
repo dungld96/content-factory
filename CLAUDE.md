@@ -131,7 +131,7 @@ Do not build all milestones in one task. Implement one milestone at a time and w
 ## 12. Project status
 
 - **M0 — Foundation:** done and reviewed.
-- **M1 — Domain, persistence, identity & access:** design revision 4; delivered in slices M1a–M1e (design package §12). M1a (database foundation) implemented, awaiting review. M1b–M1e not started.
+- **M1 — Domain, persistence, identity & access:** design revision 4 approved; delivered in slices M1a–M1e (design package §12). M1a (database foundation) done and reviewed. M1b (API foundation + auth) in progress. M1c–M1e not started.
 - **M2–M8:** not started.
 
 Before M1 work, read `docs/design/M1-design-review-package.md` and ADR-0009 to ADR-0011. Do not start M2 without review.
