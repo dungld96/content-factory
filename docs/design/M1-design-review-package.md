@@ -798,22 +798,21 @@ the single source; a test also asserts that every route registered in Nest appea
 The envelope is unchanged (API_SPEC §10). Validation failures add
 `error.details: [{ path, message }]`.
 
-| Source                             | API response                                                                |
-| ---------------------------------- | --------------------------------------------------------------------------- |
-| Zod validation                     | 400 `VALIDATION_FAILED`                                                     |
-| Prisma `P2002`, by constraint name | 409, e.g. `SLUG_TAKEN`, `EMAIL_TAKEN`, `STORAGE_KEY_TAKEN`                  |
-| Prisma `P2003` (composite FK)      | 422 `CROSS_PROJECT_REFERENCE` or `REFERENCE_NOT_FOUND`                      |
-| `AC001`                            | 409 `VERSION_IMMUTABLE`                                                     |
-| `AC002`                            | 409 `VERSION_LINKS_FROZEN`                                                  |
-| `AC003` / `AC004`                  | 409 `MASTER_CONFLICT`                                                       |
-| `AC005`                            | 409 `ASSET_IDENTITY_IMMUTABLE`                                              |
-| `AC006`                            | 409 `ARCHIVE_ONLY`                                                          |
-| `AC007`                            | 409 `LAST_OWNER`                                                            |
-| `AC008`                            | 409 `ASSET_IN_USE`                                                          |
-| `AC010` (rev. 3)                   | 409 `ASSET_ARCHIVED`                                                        |
-| `40001` / `40P01`                  | 409 `CONCURRENT_MODIFICATION`, `retryable: true` (after one internal retry) |
-
-Only `40001` gets the internal retry; a `40P01` is a defect (§6.3.1) and is never retried.
+| Source                             | API response                                                                                                            |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Zod validation                     | 400 `VALIDATION_FAILED`                                                                                                 |
+| Prisma `P2002`, by constraint name | 409, e.g. `SLUG_TAKEN`, `EMAIL_TAKEN`, `STORAGE_KEY_TAKEN`                                                              |
+| Prisma `P2003` (composite FK)      | 422 `CROSS_PROJECT_REFERENCE` or `REFERENCE_NOT_FOUND`                                                                  |
+| `AC001`                            | 409 `VERSION_IMMUTABLE`                                                                                                 |
+| `AC002`                            | 409 `VERSION_LINKS_FROZEN`                                                                                              |
+| `AC003` / `AC004`                  | 409 `MASTER_CONFLICT`                                                                                                   |
+| `AC005`                            | 409 `ASSET_IDENTITY_IMMUTABLE`                                                                                          |
+| `AC006`                            | 409 `ARCHIVE_ONLY`                                                                                                      |
+| `AC007`                            | 409 `LAST_OWNER`                                                                                                        |
+| `AC008`                            | 409 `ASSET_IN_USE`                                                                                                      |
+| `AC010` (rev. 3)                   | 409 `ASSET_ARCHIVED`                                                                                                    |
+| `40001`                            | 409 `CONCURRENT_MODIFICATION`, `retryable: true`, after one internal retry                                              |
+| `40P01`                            | 409 `CONCURRENT_MODIFICATION`, `retryable: true`; never retried: logged as a defect and propagated immediately (§6.3.1) |
 
 Model-operation errors arrive as `PrismaClientKnownRequestError` with
 `meta.driverAdapterError.cause.originalCode` set to the SQLSTATE. **Deferred-trigger errors raised
