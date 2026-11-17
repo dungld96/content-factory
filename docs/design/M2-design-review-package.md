@@ -1,6 +1,6 @@
 # M2 Design Review Package — AI Core and Model Registry
 
-- Status: **Revision 1, approved by the owner (2026-11-17).** Implemented in slices M2a–M2d (§12); M2 implemented, awaiting review.
+- Status: **Revision 1, approved by the owner (2026-11-17).** Implemented in slices M2a–M2d (§12); M2 accepted by the owner (2026-11-17).
 - Date: 2026-11-17
 - Baseline: M1 approved (branch `claude/gracious-planck-kuf4pq`, `58cb986`)
 - Companion files:
