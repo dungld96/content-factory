@@ -13,6 +13,7 @@ import { createSessionMiddleware } from './auth/session/session.middleware.js';
 import { ApiExceptionFilter } from './common/api-exception.filter.js';
 import { correlationIdMiddleware } from './common/correlation-id.js';
 import { RequestValidationInterceptor } from './common/http/endpoint.js';
+import { EtagInterceptor } from './common/http/etag.interceptor.js';
 import { REQUIRE_IF_MATCH_SETTING } from './common/http/etag.js';
 import { API_PREFIX } from './common/http/prefix.js';
 import { createRequestLoggingMiddleware } from './common/request-logging.js';
@@ -44,7 +45,7 @@ export function configureApp(app: INestApplication, env: ApiEnv, logger: Console
   app.use(cookieParser()); // csrf-csrf reads its cookie from req.cookies
   app.use(createSessionMiddleware(env, app.get(PrismaSessionStore)));
   app.useGlobalFilters(new ApiExceptionFilter());
-  app.useGlobalInterceptors(new RequestValidationInterceptor());
+  app.useGlobalInterceptors(new RequestValidationInterceptor(), new EtagInterceptor());
   app.enableCors({
     origin: env.API_CORS_ORIGINS,
     exposedHeaders: [CORRELATION_ID_HEADER],

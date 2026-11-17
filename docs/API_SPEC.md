@@ -98,8 +98,26 @@ Accounts are created only with the CLI (`pnpm user:create`); there is no sign-up
 
 ## 1. Projects
 
+Implemented in M1c. Schemas: `packages/contracts/src/projects.ts`.
+
+**Access rules (all workspace endpoints):** roles are `owner` > `editor` > `viewer` per project
+and are checked in services on every request. A caller who is not a member of the project gets
+`404 NOT_FOUND` (indistinguishable from a missing project; decision D7). A member whose role is
+too low gets `403 FORBIDDEN`. Any change under an archived project returns `409 ARCHIVED`; reads
+still work. Single-resource responses carry an `ETag`; `PATCH` honours `If-Match` (§11).
+
+| Endpoint | Minimum role |
+|---|---|
+| `POST /projects` | any signed-in user (becomes owner) |
+| `GET /projects` | lists the caller's memberships only |
+| `GET /projects/:projectId`, `GET …/members`, `GET …/channels`, `GET …/content`, `GET /channels/:id`, `GET /content/:id` | viewer |
+| channel and content create / update / archive | editor |
+| `PATCH /projects/:projectId`, `POST /projects/:projectId/archive`, member add / change / remove | owner |
+
 ### `POST /projects`
-Create a project.
+Create a project. `slug` is globally unique (`409 SLUG_TAKEN`). `defaultLanguage` is a BCP 47
+tag (canonicalized, e.g. `en-us` → `en-US`); `timezone` is an IANA zone. Returns `201` with the
+project, including the caller's `role`.
 
 Request:
 ```json
@@ -112,13 +130,33 @@ Request:
 ```
 
 ### `GET /projects`
-List accessible projects.
+The caller's projects, newest first, paginated. Archived projects are hidden unless
+`?includeArchived=true`.
 
 ### `GET /projects/:projectId`
 Get project details.
 
 ### `PATCH /projects/:projectId`
-Update project metadata.
+Update `name`, `slug`, `description`, `defaultLanguage`, `timezone` (owner).
+
+### `POST /projects/:projectId/archive`
+Archive the project (owner). It becomes read-only; there is no unarchive in M1 (decision U7).
+
+### Members
+- `GET /projects/:projectId/members` → `{ "data": [{ "userId", "email", "displayName", "role", … }] }`.
+- `POST /projects/:projectId/members` with `{ "email", "role" }` adds an existing active user
+  (`404 USER_NOT_FOUND`, `409 ALREADY_MEMBER`).
+- `PATCH /projects/:projectId/members/:userId` with `{ "role" }`; `DELETE` removes the member.
+- A project always keeps at least one owner: demoting or removing the last owner returns
+  `409 LAST_OWNER`. Concurrent owner changes are serialized on the project row (ADR-0011).
+
+### Channels
+- `POST /projects/:projectId/channels` with `{ "name", "slug", "platform", "handle"?, "description"? }`;
+  `platform` is `tiktok`, `instagram_reels`, `youtube_shorts` or `other`; `slug` is unique per
+  project (`409 SLUG_TAKEN`).
+- `GET /projects/:projectId/channels` (paginated, `includeArchived`), `GET /channels/:channelId`,
+  `PATCH /channels/:channelId`, `POST /channels/:channelId/archive`.
+- Sending `""` for an optional text field clears it.
 
 ## 2. Characters and environments
 
@@ -153,14 +191,24 @@ Request:
 }
 ```
 
+Implemented in M1c (schemas: `packages/contracts/src/content.ts`). The brief accepts `topic`
+(required), `audience`, `objective`, `tone`, `callToAction`, `notes` and up to 20 `sourceUrls`
+(http/https); unknown keys are rejected. `channelId` (optional) must be an active channel of the
+same project (`422 REFERENCE_NOT_FOUND`, `409 ARCHIVED`). `status` is set by the server: always
+`draft` in M1; pipeline transitions arrive in M3.
+
 ### `GET /projects/:projectId/content`
-List content items with pagination and filters.
+List content items, newest first, paginated. Filters: `channelId`, `status`, `includeArchived`.
 
 ### `GET /content/:contentId`
 Get item details and current production status.
 
+### `POST /content/:contentId/archive`
+Archive the content item (editor).
+
 ### `PATCH /content/:contentId`
-Update editable metadata/brief. Changes that invalidate generated outputs must create a new content revision or mark downstream outputs stale.
+Update `title`, `channelId` (or `null`), `targetDurationSeconds`, `aspectRatio`, `language`,
+`brief` (editor). `format` and `status` are not writable. Update editable metadata/brief. Changes that invalidate generated outputs must create a new content revision or mark downstream outputs stale.
 
 ## 4. Production pipeline
 

@@ -36,6 +36,7 @@ export interface CallResult {
   readonly status: number;
   readonly json: unknown;
   readonly setCookie: string[];
+  readonly headers: Headers;
 }
 
 export interface CallOptions {
@@ -77,7 +78,12 @@ export function client(baseUrl: string) {
     } catch {
       json = text;
     }
-    return { status: res.status, json, setCookie: res.headers.getSetCookie() };
+    return {
+      status: res.status,
+      json,
+      setCookie: res.headers.getSetCookie(),
+      headers: res.headers,
+    };
   };
 }
 

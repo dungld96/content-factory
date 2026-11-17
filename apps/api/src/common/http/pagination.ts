@@ -57,3 +57,16 @@ export function toPage<Row extends CursorPosition, Item>(
     page: { nextCursor: rows.length > limit && last ? encodeCursor(last) : null, limit },
   };
 }
+
+/**
+ * Prisma `where` fragment selecting rows strictly after `cursor` in
+ * `(createdAt DESC, id DESC)` order. Empty when there is no cursor.
+ */
+export function keysetAfter(cursor: string | undefined) {
+  if (cursor === undefined) return {};
+  const { createdAt, id } = decodeCursor(cursor);
+  return { OR: [{ createdAt: { lt: createdAt } }, { createdAt, id: { lt: id } }] };
+}
+
+/** Ordering matching {@link keysetAfter} and the `(…, created_at DESC, id DESC)` indexes. */
+export const NEWEST_FIRST = [{ createdAt: 'desc' as const }, { id: 'desc' as const }];

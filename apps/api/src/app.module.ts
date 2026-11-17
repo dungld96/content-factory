@@ -3,10 +3,13 @@ import { Module, type DynamicModule } from '@nestjs/common';
 import type { ApiEnv } from '@acf/config';
 
 import { AuthModule } from './auth/auth.module.js';
+import { ChannelsModule } from './channels/channels.module.js';
 import { ApiConfigModule } from './config/api-config.module.js';
 import { HealthModule } from './health/health.module.js';
 import { InfrastructureModule } from './infrastructure/infrastructure.module.js';
+import { ContentModule } from './content/content.module.js';
 import { OpenApiModule } from './openapi/openapi.module.js';
+import { ProjectsModule } from './projects/projects.module.js';
 
 @Module({})
 export class AppModule {
@@ -19,6 +22,9 @@ export class AppModule {
         AuthModule,
         HealthModule,
         OpenApiModule,
+        ProjectsModule,
+        ChannelsModule,
+        ContentModule,
       ],
     };
   }

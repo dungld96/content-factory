@@ -1,0 +1,100 @@
+import { z } from 'zod';
+
+import { includeArchivedSchema, isoDateTimeSchema, languageTagSchema } from './common.js';
+
+/** Canonical list per docs/CONTENT_PIPELINE.md §1 (decision U1). M1 creates `draft` only. */
+export const contentStatusSchema = z
+  .enum([
+    'draft',
+    'researching',
+    'planning',
+    'scripting',
+    'script_review',
+    'storyboarding',
+    'storyboard_review',
+    'generating_assets',
+    'asset_review',
+    'rendering',
+    'quality_review',
+    'approved',
+    'exported',
+    'failed',
+    'canceled',
+    'needs_input',
+  ])
+  .meta({ id: 'ContentStatus' });
+export type ContentStatus = z.infer<typeof contentStatusSchema>;
+
+export const contentFormatSchema = z.enum(['short_video']).meta({ id: 'ContentFormat' });
+export const aspectRatioSchema = z.enum(['9:16', '16:9', '1:1']).meta({ id: 'AspectRatio' });
+export type AspectRatio = z.infer<typeof aspectRatioSchema>;
+
+const text = (max: number) => z.string().trim().min(1).max(max);
+
+/** Content brief (docs/CONTENT_PIPELINE.md stage 1). Character/environment refs arrive in M3. */
+export const contentBriefSchema = z
+  .strictObject({
+    topic: text(500),
+    audience: text(500).optional(),
+    objective: text(500).optional(),
+    tone: text(200).optional(),
+    callToAction: text(500).optional(),
+    notes: text(5000).optional(),
+    sourceUrls: z
+      .array(z.url({ protocol: /^https?$/ }).max(2048))
+      .max(20)
+      .optional(),
+  })
+  .meta({ id: 'ContentBrief' });
+export type ContentBrief = z.infer<typeof contentBriefSchema>;
+
+export const contentIdParamsSchema = z.strictObject({ contentId: z.uuid() });
+
+export const createContentRequestSchema = z
+  .strictObject({
+    title: text(200),
+    /** A channel of the same project, or omitted. */
+    channelId: z.uuid().nullable().optional(),
+    format: contentFormatSchema,
+    targetDurationSeconds: z.number().int().min(1).max(600),
+    aspectRatio: aspectRatioSchema,
+    language: languageTagSchema,
+    brief: contentBriefSchema,
+  })
+  .meta({ id: 'CreateContentRequest' });
+export type CreateContentRequest = z.output<typeof createContentRequestSchema>;
+
+/** `status` and `format` are not client-writable. */
+export const updateContentRequestSchema = createContentRequestSchema
+  .omit({ format: true })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, { message: 'at least one field is required' })
+  .meta({ id: 'UpdateContentRequest' });
+export type UpdateContentRequest = z.output<typeof updateContentRequestSchema>;
+
+export const contentItemSchema = z
+  .object({
+    id: z.uuid(),
+    projectId: z.uuid(),
+    channelId: z.uuid().nullable(),
+    title: z.string(),
+    status: contentStatusSchema,
+    format: contentFormatSchema,
+    targetDurationSeconds: z.number().int(),
+    aspectRatio: aspectRatioSchema,
+    language: z.string(),
+    brief: contentBriefSchema,
+    archivedAt: isoDateTimeSchema.nullable(),
+    createdAt: isoDateTimeSchema,
+    updatedAt: isoDateTimeSchema,
+  })
+  .meta({ id: 'ContentItem' });
+export type ContentItemDto = z.infer<typeof contentItemSchema>;
+
+export const listContentQuerySchema = z.strictObject({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  cursor: z.string().min(1).max(512).optional(),
+  includeArchived: includeArchivedSchema,
+  channelId: z.uuid().optional(),
+  status: contentStatusSchema.optional(),
+});

@@ -58,6 +58,14 @@ export const ApiErrorCode = {
   CsrfInvalid: 'CSRF_INVALID',
   /** A Secure session cookie could not be set (proxy misconfiguration); login failed closed. */
   SessionCookieNotSet: 'SESSION_COOKIE_NOT_SET',
+
+  // --- M1: workspace ---
+  /** The resource (or its project/parent) is archived and therefore read-only. */
+  Archived: 'ARCHIVED',
+  /** No active user has the given email. */
+  UserNotFound: 'USER_NOT_FOUND',
+  /** The user is already a member of the project. */
+  AlreadyMember: 'ALREADY_MEMBER',
 } as const;
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];
 
