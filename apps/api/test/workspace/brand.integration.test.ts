@@ -255,7 +255,7 @@ describe('concurrency (service paths, READ COMMITTED)', () => {
   it.each([
     ['without existing links', false],
     ['with existing links', true],
-  ])('concurrent link replacements %s never deadlock (REVIEW finding 1)', async (_name, linked) => {
+  ])('concurrent link replacements %s never deadlock or merge (ADR-0011 §5 exception)', async (_name, linked) => {
     const before = await deadlockCount();
     for (let round = 0; round < 10; round++) {
       const f = await ctx.fixture();
