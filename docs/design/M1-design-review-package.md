@@ -1,8 +1,8 @@
 # M1 Design Review Package — Domain, Persistence, Identity & Access
 
-- Status: **Revision 3, awaiting explicit approval. No M1 application code has been written.**
+- Status: **Revision 4, awaiting explicit approval. No M1 application code has been written.**
 - Date: 2026-11-17
-- Supersedes: revision 2 (commit `c5b9105`) and revision 1 (`M1-domain-auth-proposal.md`)
+- Supersedes: revision 3 (`372d976`), revision 2 (`c5b9105`) and revision 1 (`M1-domain-auth-proposal.md`)
 - Companion files:
   - [`m1/schema.prisma`](m1/schema.prisma): complete Prisma schema proposal, validated with
     Prisma 7.10.1
@@ -36,6 +36,47 @@ version. `characters.master_version_id` / `environments.master_version_id` is a 
 pointer** that always equals that version. It is written only in the approval transaction. The
 database rejects any commit where an approval did not move the pointer, and rejects any pointer
 move that is not forward to an approved version (§6, §7).
+
+## 0.0 Revision 4: deadlock verification (owner request after revision 3)
+
+**Finding: revision 3's "no deadlock" claim was wrong.** A deterministic lock-boundary harness
+(`evidence/sql/lock_matrix.mjs`) sequences two sessions by _observed lock waits_
+(`pg_blocking_pids`), not sleeps. Run against the committed revision-3 SQL, **20 of 40 scenarios
+ended in `40P01`**, through three lock cycles:
+
+| Cycle               | Session 1 holds → wants                                                    | Session 2 holds → wants                                                                 | Scenarios                            |
+| ------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------ |
+| Archive vs approval | approval: **version** (UPDATE) → asset (trigger `FOR SHARE`)               | raw archive: **asset** (UPDATE) → version (trigger `FOR SHARE` on referencing versions) | D1, D6 (RC and RR, primary and link) |
+| Parent vs asset     | service approval: **parent** → asset                                       | raw sibling approval: **asset** (trigger) → parent (pointer UPDATE)                     | D7                                   |
+| Owner rows          | demotion 1: **own member row** → other owner rows (`FOR UPDATE` at commit) | demotion 2: **own member row** → other owner rows                                       | O1, O2, O3, O4                       |
+
+The revision-3 sleep-based script never hit these windows. It also only checked the final
+invariant, and so counted the aborted transaction as a valid outcome.
+
+**Fix: one global lock order, enforced inside the triggers (§6.5):**
+**version → parent → asset rows (ascending id)**, and **member → project**.
+
+A row trigger runs _after_ its own row is locked, so each guard was rewritten to lock only rows
+that come **later** in that order:
+
+- **Approval:** locks the parent, then the assets in id order, then performs a **no-op UPDATE** of
+  those assets. The write "materializes the conflict" so that archival under REPEATABLE READ
+  gets `40001`.
+- **Archival:** touches only its own asset row; it no longer locks versions.
+- **Owner check:** writes the project row; it no longer locks other members' rows.
+- **Service algorithms** use the same order (§7).
+
+**Results (revision 4), all reproduced by `run-all.sh --negative-controls`:**
+
+- **Lock matrix:** 40/40 scenarios with the exact expected SQLSTATEs, **0 × `40P01`**, 0
+  invariant violations. Every contended scenario recorded the statement that blocked; O4 is
+  sequential by design.
+- **Timed A1–A4:** 16/16, asserting both sessions' exit codes and SQLSTATEs.
+- **C1–C6:** now end in `AC007`/`40001`/`LAST_OWNER`, never `40P01`.
+- **Negative controls:**
+  - rev-3 SQL deadlocks in 20/40 matrix scenarios;
+  - rev-2 SQL breaks the invariant in 14;
+  - removing the materializing write breaks the invariant under RR.
 
 ## 0.1 Revision 3: review findings and resolutions
 
@@ -423,16 +464,16 @@ Setup (reproduced by `run-all.sh`):
 
 ### 6.1 Trigger inventory ([`m1/triggers.sql`](m1/triggers.sql))
 
-| Trigger                       | Table / timing                                                                     | Rule                                                                                                                                                                                                                                              | SQLSTATE                      |
-| ----------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| `*_no_delete`                 | projects, channels, characters, environments, assets, content_items; BEFORE DELETE | Archive only                                                                                                                                                                                                                                      | `AC006`                       |
-| `*_versions_guard`            | character/environment versions; BEFORE INSERT/UPDATE/DELETE                        | Insert only as `draft`; approved rows are frozen (no UPDATE or DELETE); identity columns of drafts are frozen. **On `draft → approved`: locks the primary and every linked asset `FOR SHARE` (id order) and rejects any archived asset** (rev. 3) | `AC009`, `AC001`, **`AC010`** |
-| `*_version_assets_guard`      | link tables; BEFORE INSERT/UPDATE/DELETE                                           | No link changes for approved versions. Reads the parent `FOR SHARE`, so it **waits for an in-flight approval** and then sees its result. Link keys are immutable.                                                                                 | `AC002`                       |
-| `*_master_guard`              | characters/environments; BEFORE INSERT/UPDATE                                      | The pointer starts NULL. It may only move **forward** (higher version number) to an **approved** version and can never be cleared. Same-parent is enforced by the composite FK.                                                                   | `AC003`                       |
-| `*_approval_sets_master`      | versions; **deferred constraint trigger**, AFTER UPDATE OF status                  | At COMMIT, a version approved in the transaction must be the parent's master                                                                                                                                                                      | `AC004`                       |
-| `assets_guard`                | assets; BEFORE UPDATE                                                              | File identity and provenance columns are immutable. On archive (`archived_at` NULL → set): **first locks every version referencing the asset `FOR SHARE` (id order)**, then refuses if any is approved (rev. 3)                                   | `AC005`, `AC008`              |
-| `project_members_keep_owner`  | project_members; deferred, AFTER UPDATE/DELETE of an owner row                     | At COMMIT the project still has ≥ 1 owner. Locks the project row, then the remaining owner rows.                                                                                                                                                  | `AC007`                       |
-| `projects_created_with_owner` | projects; deferred, AFTER INSERT                                                   | A project must be created together with its owner membership                                                                                                                                                                                      | `AC007`                       |
+| Trigger                       | Table / timing                                                                     | Rule                                                                                                                                                                                                                                                                                                                                    | SQLSTATE                      |
+| ----------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `*_no_delete`                 | projects, channels, characters, environments, assets, content_items; BEFORE DELETE | Archive only                                                                                                                                                                                                                                                                                                                            | `AC006`                       |
+| `*_versions_guard`            | character/environment versions; BEFORE INSERT/UPDATE/DELETE                        | Insert only as `draft`; approved rows are frozen (no UPDATE or DELETE); identity columns of drafts are frozen. **On `draft → approved`: locks the parent, then the primary and every linked asset `FOR NO KEY UPDATE` in id order, writes them with a no-op UPDATE (materialized conflict), and rejects any archived asset** (rev. 3/4) | `AC009`, `AC001`, **`AC010`** |
+| `*_version_assets_guard`      | link tables; BEFORE INSERT/UPDATE/DELETE                                           | No link changes for approved versions. Reads the parent `FOR SHARE`, so it **waits for an in-flight approval** and then sees its result. Link keys are immutable.                                                                                                                                                                       | `AC002`                       |
+| `*_master_guard`              | characters/environments; BEFORE INSERT/UPDATE                                      | The pointer starts NULL. It may only move **forward** (higher version number) to an **approved** version and can never be cleared. Same-parent is enforced by the composite FK.                                                                                                                                                         | `AC003`                       |
+| `*_approval_sets_master`      | versions; **deferred constraint trigger**, AFTER UPDATE OF status                  | At COMMIT, a version approved in the transaction must be the parent's master                                                                                                                                                                                                                                                            | `AC004`                       |
+| `assets_guard`                | assets; BEFORE UPDATE                                                              | File identity and provenance columns are immutable. On archive (`archived_at` NULL → set): refuses if any referencing version is approved. **Locks nothing but its own row** (rev. 4: the rev-3 version locks formed the asset→version half of a deadlock cycle).                                                                       | `AC005`, `AC008`              |
+| `project_members_keep_owner`  | project_members; deferred, AFTER UPDATE/DELETE of an owner row                     | At COMMIT the project still has ≥ 1 owner. **Writes the project row** (no-op UPDATE), then counts owners. No other member rows are locked (rev. 4).                                                                                                                                                                                     | `AC007`                       |
+| `projects_created_with_owner` | projects; deferred, AFTER INSERT                                                   | A project must be created together with its owner membership                                                                                                                                                                                                                                                                            | `AC007`                       |
 
 ### 6.2 Behaviour under direct SQL (verified, 49/49)
 
@@ -463,28 +504,78 @@ case, for example:
 
 ### 6.3 Concurrency (verified with two concurrent sessions)
 
-| Case                                                                           | Result                                                                                                                                                                                                                                            |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| C1: two owners demote each other concurrently (READ COMMITTED, raw SQL)        | One commits; the other aborts (`AC007` or deadlock `40P01`). **The project always keeps an owner.**                                                                                                                                               |
-| C2: link insert while an approval of that version is in flight                 | The insert waits on the `FOR SHARE` lock, then fails with `AC002`; 0 links added                                                                                                                                                                  |
-| C3: approvals of v5 and v4 race without the service lock                       | v5 wins; v4's pointer move fails with `AC003`, and v4 stays draft                                                                                                                                                                                 |
-| C4: the same version approved twice with the service algorithm                 | The second caller blocks on the parent lock, then sees `approved` and does nothing                                                                                                                                                                |
-| C5: C1 under **REPEATABLE READ**                                               | **Initially left zero owners.** The trigger only locked the project row, which a stale RR snapshot does not protect. **Fixed**: the trigger also locks the remaining owner rows `FOR UPDATE`, so RR now raises `40001` (or `40P01`). Re-verified. |
-| C6: service last-owner algorithm                                               | READ COMMITTED: a clean `409 LAST_OWNER`. REPEATABLE READ: the service check passes on a stale snapshot, and the trigger raises `40001`.                                                                                                          |
-| **A1** (rev. 3): raw archive first, then approval (primary and link reference) | RC: approval waits on the asset lock, then `AC010`. RR: `40001`. Invariant holds.                                                                                                                                                                 |
-| **A2** (rev. 3): raw approval first, then archive                              | RC: archive waits on the version lock, then `AC008`. RR: `40001`. Invariant holds.                                                                                                                                                                |
-| **A3** (rev. 3): service approval first, then service archive                  | RC: the archive service sees the approval and returns `409 ASSET_IN_USE`. RR: `40001`.                                                                                                                                                            |
-| **A4** (rev. 3): service archive first, then service approval                  | RC: the approval service sees the archived asset and returns `409 ASSET_ARCHIVED`. RR: `40001`.                                                                                                                                                   |
-| Negative control: A2 at RR **without** the archive-side version locks          | **Invariant violated**: an approved version with an archived asset committed. This proves the archive-side lock is required.                                                                                                                      |
-| U3: `acf_app` tries to bypass the triggers                                     | `ALTER TABLE … DISABLE TRIGGER`, `TRUNCATE`, `DROP TRIGGER`, `SET session_replication_role` are all denied                                                                                                                                        |
+| Case                                                                              | Result                                                                                                                                                                                                                                                       |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| C1: two owners demote each other concurrently (READ COMMITTED, raw SQL)           | One commits; the other fails with `AC007` (rev. 4; in rev. 3 this could deadlock, `40P01`). **The project always keeps an owner.**                                                                                                                           |
+| C2: link insert while an approval of that version is in flight                    | The insert waits on the `FOR SHARE` lock, then fails with `AC002`; 0 links added                                                                                                                                                                             |
+| C3: approvals of v5 and v4 race without the service lock                          | v5 wins; v4's pointer move fails with `AC003`, and v4 stays draft                                                                                                                                                                                            |
+| C4: the same version approved twice with the service algorithm                    | The second caller blocks on the version lock, then sees `approved` and does nothing                                                                                                                                                                          |
+| C5: C1 under **REPEATABLE READ**                                                  | **Initially left zero owners.** The trigger only locked the project row, which a stale RR snapshot does not protect. **Fixed (rev. 4 form)**: the trigger writes the project row, so a concurrent change at RR raises `40001`. Re-verified, with no `40P01`. |
+| C6: service last-owner algorithm (rev. 4 order: member → project → count)         | READ COMMITTED: first commits, second gets a clean `409 LAST_OWNER`. REPEATABLE READ: second gets `40001`. SQLSTATEs asserted.                                                                                                                               |
+| **A1** (timed): raw archive first, then approval (primary and link)               | First commits. Second: RC `AC010`, RR `40001`. Asserted per session (exit code and SQLSTATE).                                                                                                                                                                |
+| **A2** (timed): raw approval first, then archive                                  | First commits. Second: RC `AC008`, RR `40001`.                                                                                                                                                                                                               |
+| **A3** (timed): service approval first, then service archive                      | First commits. Second: RC decision `409 ASSET_IN_USE`, RR `40001`.                                                                                                                                                                                           |
+| **A4** (timed): service archive first, then service approval                      | First commits. Second: RC decision `409 ASSET_ARCHIVED`, RR `40001`.                                                                                                                                                                                         |
+| Negative control: approval only _locks_ assets (no materializing write), A2 at RR | **Invariant violated** (`second=commit`, `invariant=BROKEN(1)`). This proves the no-op write is required for REPEATABLE READ.                                                                                                                                |
+| U3: `acf_app` tries to bypass the triggers                                        | `ALTER TABLE … DISABLE TRIGGER`, `TRUNCATE`, `DROP TRIGGER`, `SET session_replication_role` are all denied                                                                                                                                                   |
 
-A1–A4 ran for primary and linked references at both isolation levels (16 runs). No deadlocks
-occurred, because each side acquires both of its locks within its first statement (§6.5).
+A1–A4 ran for primary and linked references at both isolation levels (16 runs). Revision 3 said
+"no deadlocks occurred, because each side acquires both of its locks within its first statement".
+**That reasoning was wrong.** Within one statement the row lock and the trigger's locks are
+separate acquisitions, and opposite orders across sessions can still form a cycle. The
+deterministic matrix (§6.3.1) found exactly that.
+
+#### 6.3.1 Deterministic lock-boundary matrix (`evidence/sql/lock_matrix.mjs`)
+
+**How it works:**
+
+- Two sessions connect as `acf_app` and are driven step by step.
+- Before the next step, each step waits until its statement has either **completed** or is
+  **observed blocked** (`pg_blocking_pids(pid) <> '{}'`), so every run reproduces the same
+  interleaving at the same lock boundary.
+- The harness records every statement's outcome and SQLSTATE, and asserts the exact final outcome
+  of both sessions.
+- A scenario **fails** on:
+  - any `40P01`;
+  - any invariant violation (approved version referencing an archived asset; project without an
+    owner; master pointer not equal to the highest approved version);
+  - a schedule that never actually blocked (overlap not exercised; only O4 is exempt, being
+    sequential by design).
+- Each scenario runs for primary and linked references (link mode links **two** assets, to
+  exercise multi-row ordering) under READ COMMITTED and REPEATABLE READ.
+
+| Scenario | Lock boundary exercised                                                                            | Observed blocked    | RC result (A / B)             | RR result (A / B) |
+| -------- | -------------------------------------------------------------------------------------------------- | ------------------- | ----------------------------- | ----------------- |
+| D1       | approval holds **version**; raw archive takes **asset**; approval then needs the asset             | A: approve          | `AC010` / commit              | `40001` / commit  |
+| D2       | raw archive holds the asset; raw approval arrives                                                  | A: approve          | `AC010` / commit              | `40001` / commit  |
+| D3       | raw approval holds the assets; raw archive arrives                                                 | B: archive          | commit / `AC008`              | commit / `40001`  |
+| D4       | raw archive holds the asset; service approval locks version → parent → assets                      | A: svc lock assets  | `ASSET_ARCHIVED` / commit     | `40001` / commit  |
+| D5       | service approval holds the assets; raw archive arrives                                             | B: archive          | commit / `AC008`              | commit / `40001`  |
+| D6       | service archive holds the asset (checked unused); service approval arrives                         | A: svc lock assets  | `ASSET_ARCHIVED` / commit     | `40001` / commit  |
+| D7       | service approval of v1 holds version + **parent**; raw approval of v2 (same parent, shared assets) | B: approve v2       | commit / commit (master = v2) | commit / `40001`  |
+| D8       | two raw approvals on different parents sharing assets (multi-row ordering)                         | B: approve          | commit / commit               | commit / `40001`  |
+| O1       | two raw demotions; both deferred owner checks fired while both are open                            | B: owner check      | commit / `AC007`              | commit / `40001`  |
+| O2       | service demotion (member → project → count) vs raw demotion                                        | B: COMMIT           | commit / `AC007`              | commit / `40001`  |
+| O3       | two service demotions overlapping                                                                  | B: svc lock project | commit / `LAST_OWNER`         | commit / `40001`  |
+| O4       | two raw demotions, plain COMMITs (sequential by design)                                            | (none)              | commit / `AC007`              | commit / `40001`  |
+
+Totals: **revision 4: 40 runs, 40 pass, 0 × `40P01`, 0 invariant violations.**
+
+The same harness and schedules against the old SQL:
+
+- **Revision 3:** `40P01` in D1, D6, D7, O1, O2, O3, O4, i.e. **20/40 runs** (both isolation
+  levels; D-scenarios for both reference kinds).
+- **Revision 2:** **14** invariant violations (archived assets in approved versions).
+
+Results are identical for primary and linked references.
 
 Rule: **application transactions run at READ COMMITTED** (the PostgreSQL and Prisma default) and
-take explicit row locks (§7). The triggers stay correct at any isolation level, because a race
-surfaces as an error, never as a broken invariant. The API maps `40001`/`40P01` to
-`409 CONCURRENT_MODIFICATION` (`retryable: true`) after one internal retry.
+take explicit row locks in protocol order (§6.5, §7). The triggers stay correct at any isolation
+level: a race ends with `AC0xx` or `40001`, never a broken invariant, and never `40P01` on
+protocol-following paths. The API maps `40001` to `409 CONCURRENT_MODIFICATION`
+(`retryable: true`) after one internal retry. A `40P01` is treated as a **defect** (logged at
+error level and alerted), not a normal outcome. It is still mapped to the same retryable 409, so
+a client never sees a 500 if a future bug introduces a cycle.
 
 ### 6.4 Migration strategy
 
@@ -504,79 +595,138 @@ surfaces as an error, never as a broken invariant. The API maps `40001`/`40P01` 
    `prisma migrate deploy`. Each test file cleans up with
    `TRUNCATE … RESTART IDENTITY CASCADE`, which bypasses row triggers by design.
 
-### 6.5 Locking protocol and guarantees (summary)
+### 6.5 Locking protocol and guarantees (revision 4)
 
-**Lock order:** `project → parent (character/environment) → version → asset`. Every service
-transaction acquires locks in this order. Triggers acquire theirs within a single statement.
+**Global lock order:**
 
-| Operation                          | Locks, in order                                                                                                       | Conflicts with                                                                                  |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Approve version                    | parent `FOR NO KEY UPDATE` → version `FOR UPDATE` (the status UPDATE) → primary + linked assets `FOR SHARE`, id order | Archive of any of those assets; another approval of the same parent; link edits of that version |
-| Archive asset                      | referencing versions `FOR SHARE`, id order → asset row (`FOR NO KEY UPDATE` via its UPDATE)                           | Approval of any referencing version                                                             |
-| Add/remove/reorder version link    | version `FOR SHARE` (link trigger)                                                                                    | Approval of that version                                                                        |
-| Move master pointer                | parent row (UPDATE)                                                                                                   | Other pointer moves of that parent                                                              |
-| Change owner membership            | project `FOR NO KEY UPDATE` → remaining owner rows `FOR UPDATE`                                                       | Other owner changes in that project                                                             |
-| Session `set`/`touch` vs `destroy` | the session row (single statement)                                                                                    | Each other (§5.3.1)                                                                             |
+```text
+  link row ─▶ version ─▶ parent (character / environment) ─▶ asset rows (ascending id)
+  member row ─▶ project
+```
+
+Every operation acquires its exclusive or share row locks in this order, whether it runs through
+the service or as raw SQL via the triggers. A row trigger fires _after_ its own row is locked, so
+a guard may only lock rows that come **later** than the row being written. Revision 3 broke this
+in two places: archive locked versions, and the owner check locked other member rows.
+
+| Operation                          | Locks acquired, in order                                                                                                                                                         | Waits for                                                                                                         |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Approve (raw `UPDATE versions`)    | version (row lock of the UPDATE) → parent `FOR NO KEY UPDATE` (trigger) → assets `FOR NO KEY UPDATE`, id order, + no-op UPDATE (trigger) → parent (pointer UPDATE, already held) | archive of those assets; other approvals of the same parent or sharing an asset; link edits are blocked behind it |
+| Approve (service)                  | version `FOR UPDATE` → parent `FOR NO KEY UPDATE` → assets `FOR NO KEY UPDATE`, id order → (UPDATE version, UPDATE parent: already held)                                         | same                                                                                                              |
+| Archive (raw or service)           | asset row only (`FOR NO KEY UPDATE` / its UPDATE)                                                                                                                                | an approval holding that asset                                                                                    |
+| Link add/remove/reorder (draft)    | link row (for update/delete) → version `FOR SHARE` (trigger). FK checks take `KEY SHARE` on the version/asset, which does not conflict with `NO KEY UPDATE`.                     | an approval of that version                                                                                       |
+| Draft edit                         | version row                                                                                                                                                                      | an approval of that version                                                                                       |
+| Version creation (service)         | parent `FOR NO KEY UPDATE` (new version row: nobody can wait on it)                                                                                                              | approvals of that parent                                                                                          |
+| Master pointer move                | parent row                                                                                                                                                                       | approvals of that parent                                                                                          |
+| Owner change (raw or service)      | own member row → project row (no-op UPDATE; service immediately, trigger again at commit)                                                                                        | other owner changes of the same project                                                                           |
+| Session `set`/`touch` vs `destroy` | session row (single statement)                                                                                                                                                   | each other (§5.3.1)                                                                                               |
+
+**Why no cycle can form:**
+
+- Every multi-lock operation acquires locks in increasing protocol order, and assets are always
+  taken in ascending id.
+- A transaction holding a "later" row never waits for an "earlier" one: archive holds only an
+  asset, a pointer move holds only a parent, and the owner check holds member → project.
+- Therefore the wait-for graph is acyclic.
+- This is verified for every boundary listed in §6.3.1, including the three cycles found in
+  revision 3.
+
+**Why REPEATABLE READ is still safe ("materialized conflicts"):** a guard that reads rows to
+decide (archive: "is the asset used by an approved version?"; owner check: "is an owner left?")
+cannot lock earlier rows without recreating a cycle. Instead, the competing operation **writes
+the shared row that comes later in the order**:
+
+- approval writes the asset rows;
+- every owner change writes the project row.
+
+A REPEATABLE READ transaction that then updates or locks that row gets `40001`, because the row
+was changed by a concurrent transaction. It never acts on a stale snapshot. The negative control
+shows that without the write, the invariant breaks under RR.
 
 **Guarantees:**
 
 1. Invariants hold for **any** client: the service, raw SQL, or a future worker.
-2. Under **READ COMMITTED** (used by the application), a losing transaction waits, re-reads the
-   committed row, and fails with a precise code (`AC0xx`). The service pre-checks turn that into
-   a 409 before the trigger fires.
-3. Under **REPEATABLE READ / SERIALIZABLE**, a losing transaction fails with `40001` instead of
-   acting on a stale snapshot. This is why each guard locks the rows it reads, not just the rows
-   it writes.
-4. Races end in an error, **never** in an invalid commit. `40001`/`40P01` map to
-   `409 CONCURRENT_MODIFICATION` (`retryable: true`).
-5. Shared `FOR SHARE` locks do not conflict with each other, so two approvals that share an
-   asset do not block one another.
+2. **No deadlock (`40P01`) on any path that follows the protocol**: raw single statements and the
+   service algorithms. Verified: 0 in 40 deterministic runs, 0 in 16 timed runs, 0 in C1–C6.
+3. **READ COMMITTED** (the application): the loser waits, re-reads the committed row, and fails
+   with a precise `AC0xx`. The service pre-checks return the corresponding 409 first.
+4. **REPEATABLE READ / SERIALIZABLE**: the loser fails with `40001` (retryable).
+5. Races end in an error, never an invalid commit.
+
+**Cost of the protocol (accepted):**
+
+- Approvals that share an asset now **serialize** on that asset row (revision 3's `FOR SHARE`
+  allowed them in parallel). Under READ COMMITTED both succeed in turn (D7, D8); under RR the
+  second gets a retryable `40001`.
+- Each approval writes one dead tuple per referenced asset, and each owner change writes one per
+  project. This is negligible at MVP volume, and autovacuum reclaims it.
+- Raw SQL written _outside_ the protocol (e.g. a hand-written multi-statement transaction that
+  archives an asset and _then_ approves an unrelated version referencing a different locked
+  asset) can still deadlock. PostgreSQL then aborts one transaction; the invariants still hold,
+  and the abort is visible as `40P01`. The protocol is documented for operators in ADR-0011.
 
 ## 7. Approval and master-pointer concurrency strategy
 
-**Approve** `POST /character-versions/:id/approve` (editor+; optional `If-Match`):
+**Approve** `POST /character-versions/:id/approve` (editor+; optional `If-Match`). The lock
+order is **version → parent → assets**, the same order the trigger uses for raw SQL (§6.5):
 
 ```sql
 BEGIN;                                                    -- READ COMMITTED
+SELECT character_id, version, status, updated_at FROM character_versions
+  WHERE id = $version FOR UPDATE;                         -- 1. lock the version
 SELECT project_id, master_version_id FROM characters
-  WHERE id = $character FOR NO KEY UPDATE;                -- 1. serialize per character
+  WHERE id = $character FOR NO KEY UPDATE;                -- 2. lock the parent (serializes per character)
 -- authorization: ProjectAccess.require(actor, project_id, 'editor')
-SELECT version, status, updated_at FROM character_versions
-  WHERE id = $version AND character_id = $character FOR UPDATE;   -- 2. lock the version
-SELECT id, archived_at FROM assets                        -- 3. lock referenced assets (rev. 3)
-  WHERE id IN (<primary_asset_id>, <linked asset ids>) ORDER BY id FOR SHARE;
+SELECT id, archived_at FROM assets                        -- 3. lock referenced assets, ascending id
+  WHERE id IN (<primary_asset_id>, <linked asset ids>) ORDER BY id FOR NO KEY UPDATE;
 -- status = 'approved'           -> 409 ALREADY_APPROVED (no change, U5)
 -- If-Match given and mismatch   -> 412 PRECONDITION_FAILED
 -- version <= master.version     -> 409 STALE_DRAFT (U2)
 -- any locked asset archived     -> 409 ASSET_ARCHIVED (U4)
 UPDATE character_versions SET status='approved', approved_at=now(), approved_by_id=$actor
-  WHERE id = $version AND status = 'draft';
+  WHERE id = $version AND status = 'draft';               -- trigger: parent/asset locks already held; no-op asset write
 UPDATE characters SET master_version_id = $version WHERE id = $character;
 COMMIT;   -- deferred trigger confirms the pointer moved (AC004 otherwise)
 ```
 
-- **Lock order** is always parent → version → links, and project → member rows. All service
-  transactions follow it, which prevents deadlocks between service calls.
-- `FOR NO KEY UPDATE` on the parent does not block concurrent FK inserts (which take
-  `KEY SHARE`), so creating unrelated drafts and links isn't serialized behind an approval.
-- **Version creation** uses the same parent lock, then `max(version) + 1`. It is serialized, so
-  no retry loop is needed; `UNIQUE(character_id, version)` is the backstop.
-- **Draft edit vs approval**: the edit's `UPDATE` waits for the version lock. If the approval
-  committed first, the trigger sees `approved` and raises `AC001`, which maps to
-  `409 VERSION_IMMUTABLE`. `If-Match` on approve lets a reviewer guarantee they approve exactly
-  what they reviewed.
-- **Link edit vs approval**: covered by the link trigger's `FOR SHARE` (C2).
-- **Asset archive vs approval** (rev. 3): the archive service runs
-  `SELECT … FROM *_versions WHERE <references asset> ORDER BY id FOR SHARE`, then
-  `SELECT … FROM assets WHERE id = $a FOR NO KEY UPDATE`, then checks usages
-  (`409 ASSET_IN_USE`), then updates. The trigger repeats the same checks as a backstop
-  (A1–A4).
-- Prisma: an interactive `$transaction` with `$queryRaw` for the `FOR … UPDATE` reads (verified
-  end to end, including the stale-draft rejection).
+**Archive** `POST /assets/:id/archive` (editor+) locks only the asset:
 
-**Last owner** (`PATCH`/`DELETE /projects/:id/members/:userId`, owner): `BEGIN; SELECT … FROM
-projects WHERE id=$p FOR NO KEY UPDATE`, then count owners. Refuse with `409 LAST_OWNER` if the
-change would leave zero. Then mutate and `COMMIT` (the deferred trigger re-checks, C6).
+```sql
+BEGIN;
+SELECT id, archived_at FROM assets WHERE id = $asset FOR NO KEY UPDATE;  -- waits for an approval holding it
+SELECT EXISTS (… approved version references $asset …);                  -- fresh read (RC) -> 409 ASSET_IN_USE
+UPDATE assets SET archived_at = now() WHERE id = $asset;                  -- trigger re-checks (AC008)
+COMMIT;
+```
+
+**Version creation**: parent `FOR NO KEY UPDATE`, then `max(version) + 1`. It is serialized
+with approvals of that parent, so no retry loop is needed; `UNIQUE(character_id, version)` is
+the backstop.
+
+**Draft edit vs approval**: the edit's `UPDATE` waits for the version lock. If the approval
+committed first, the trigger sees `approved` and raises `AC001`, which maps to
+`409 VERSION_IMMUTABLE`. `If-Match` on approve guarantees a reviewer approves exactly what they
+reviewed.
+
+**Link edit vs approval**: the link trigger's `FOR SHARE` on the version waits for the approval
+(C2).
+
+**Prisma**: an interactive `$transaction` with `$queryRaw` for the locking reads, issued in
+exactly the order above.
+
+**Last owner** (`PATCH`/`DELETE /projects/:id/members/:userId`, owner). The lock order is
+**member → project**, the same as the commit-time trigger:
+
+```sql
+BEGIN;
+UPDATE project_members SET role = $role WHERE project_id = $p AND user_id = $u;  -- (or DELETE)
+UPDATE projects SET updated_at = updated_at WHERE id = $p;                        -- serialize owner changes
+SELECT count(*) FROM project_members WHERE project_id = $p AND role = 'owner';    -- 0 -> ROLLBACK, 409 LAST_OWNER
+COMMIT;                                                                           -- deferred trigger re-checks (AC007)
+```
+
+Revision 3 locked the project _before_ touching the member row, which is the opposite of the
+trigger's order. Verified in O2/O3 and C6.
 
 ## 8. API surface and permission matrix
 
@@ -708,9 +858,11 @@ normally never reach users.
 
 - **ADR-0009** (updated, rev. 3): D2 conditions, UPDATE-only `set()` / `createForLogin`, why no
   tombstone, Prisma 7 evidence.
-- **ADR-0010** (proposed, rev. 3): adds the approval-time asset check and the lock order.
-- **ADR-0011** (proposed, rev. 3): adds `AC010`, the archive-side version locks, RR-safety via
-  read locks, and U3 (approved).
+- **ADR-0010** (proposed, rev. 4): the approval-time asset check and the revised lock order
+  (version → parent → asset).
+- **ADR-0011** (proposed, rev. 4): `AC010`, the global lock protocol, materialized conflicts
+  for RR-safety (replacing rev. 3's backward read locks), "40P01 is a defect", and U3
+  (approved).
 - **ADR-0007**: D10 recorded as "not adopted; evaluation only".
 
 ## 11. Remaining risks and open decisions
@@ -731,20 +883,22 @@ No open decisions remain in this revision.
 
 ### Risks
 
-| Risk                                                                         | Mitigation                                                                                                  |
-| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| The session store is our code (persistence only)                             | Contract tests against express-session semantics (§5.9 suite); no crypto in it                              |
-| An in-flight request authorized before logout completes after it             | Accepted: authorization is per request, and its session writes are discarded (§5.3.1, R1)                   |
-| An anonymous `req.session` write issues an inert cookie                      | Design rule plus a public-routes-no-cookie test (§5.3.1, R7)                                                |
-| A future change adds a second session INSERT path                            | ADR-0009 records the "single creation path" invariant; the R1–R5 suite becomes a permanent integration test |
-| `csrf-csrf` has a single maintainer                                          | The Origin check is an independent second layer; the library is pinned                                      |
-| Triggers can be lost by a careless later migration                           | `pg_trigger`/`pg_constraint` presence test in CI (§6.4)                                                     |
-| Raw-SQL races can surface as deadlocks (`40P01`)                             | Service lock ordering avoids them; mapped to a retryable 409                                                |
-| express-session silently skips `Secure` cookies behind a misconfigured proxy | Login fail-closed check (§5.5) plus a production config rule for `TRUST_PROXY`                              |
-| `@nestjs/throttler` in-memory storage is per instance                        | Acceptable for the single-instance pilot; Redis storage later                                               |
-| Overlapping composite-FK scalars complicate Prisma nested writes             | Services write scalar FKs directly (§3)                                                                     |
-| `zod-openapi` coverage could drift from routes                               | Route-coverage test (§8.5)                                                                                  |
-| Next.js passes through a client-supplied `X-Forwarded-Proto`                 | The TLS proxy overwrites it; the API is not publicly reachable (§5.6). Deployment docs will state this.     |
+| Risk                                                                                                 | Mitigation                                                                                                                                        |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The session store is our code (persistence only)                                                     | Contract tests against express-session semantics (§5.9 suite); no crypto in it                                                                    |
+| An in-flight request authorized before logout completes after it                                     | Accepted: authorization is per request, and its session writes are discarded (§5.3.1, R1)                                                         |
+| An anonymous `req.session` write issues an inert cookie                                              | Design rule plus a public-routes-no-cookie test (§5.3.1, R7)                                                                                      |
+| A future change adds a second session INSERT path                                                    | ADR-0009 records the "single creation path" invariant; the R1–R5 suite becomes a permanent integration test                                       |
+| `csrf-csrf` has a single maintainer                                                                  | The Origin check is an independent second layer; the library is pinned                                                                            |
+| Triggers can be lost by a careless later migration                                                   | `pg_trigger`/`pg_constraint` presence test in CI (§6.4)                                                                                           |
+| Raw SQL written outside the lock protocol can still deadlock (`40P01`); protocol paths cannot (§6.5) | Protocol documented (ADR-0011); PostgreSQL aborts one side and invariants still hold; `40P01` is logged as a defect and mapped to a retryable 409 |
+| Approvals sharing an asset serialize on the asset row (rev. 4)                                       | Accepted: short transactions; under RC both succeed in turn; under RR the second gets a retryable `40001`                                         |
+| No-op writes add dead tuples (one per referenced asset per approval; one per owner change)           | Negligible at MVP volume; autovacuum                                                                                                              |
+| express-session silently skips `Secure` cookies behind a misconfigured proxy                         | Login fail-closed check (§5.5) plus a production config rule for `TRUST_PROXY`                                                                    |
+| `@nestjs/throttler` in-memory storage is per instance                                                | Acceptable for the single-instance pilot; Redis storage later                                                                                     |
+| Overlapping composite-FK scalars complicate Prisma nested writes                                     | Services write scalar FKs directly (§3)                                                                                                           |
+| `zod-openapi` coverage could drift from routes                                                       | Route-coverage test (§8.5)                                                                                                                        |
+| Next.js passes through a client-supplied `X-Forwarded-Proto`                                         | The TLS proxy overwrites it; the API is not publicly reachable (§5.6). Deployment docs will state this.                                           |
 
 ## 12. Implementation plan (after approval; each step ends green)
 

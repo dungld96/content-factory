@@ -9,8 +9,17 @@
 --   AC005 asset file identity is immutable       AC006 hard delete forbidden (archive instead)
 --   AC007 project must keep at least one owner   AC008 asset in use by an approved version
 --   AC009 versions must be created as drafts     AC010 approval references an archived asset
--- Isolation: every rule holds under READ COMMITTED, REPEATABLE READ and SERIALIZABLE; races
--- surface as AC0xx, 40001 (serialization) or 40P01 (deadlock), never as an invalid commit.
+-- Isolation: every rule holds under READ COMMITTED, REPEATABLE READ and SERIALIZABLE; a losing
+-- transaction fails with AC0xx (READ COMMITTED) or 40001 (REPEATABLE READ / SERIALIZABLE).
+--
+-- LOCK PROTOCOL (revision 4) — one global order, so no lock cycle can form:
+--     version  ->  parent (character/environment)  ->  asset rows (ascending id)
+--     member   ->  project
+-- A row trigger runs AFTER its own row is locked, so every guard only locks rows that come
+-- LATER in this order than the row being written. Guards that must detect a concurrent change
+-- under REPEATABLE READ do so by WRITING the shared row (a no-op UPDATE: "materialized
+-- conflict"), never by locking rows earlier in the order. Verified by
+-- evidence/sql/lock_matrix.mjs (no 40P01 in any scenario).
 -- =============================================================================
 
 -- ---------------------------------------------------------------- CHECK constraints
@@ -65,25 +74,36 @@ CREATE TRIGGER content_items_no_delete BEFORE DELETE ON "content_items" FOR EACH
 
 -- ---------------------------------------------------------------- versions
 
--- Approval-time asset check (CRITICAL-2 fix). Locks the version's primary + linked assets
--- FOR SHARE in id order. FOR SHARE conflicts with the FOR NO KEY UPDATE lock that any UPDATE of
--- an asset row (e.g. archiving) takes, so an in-flight archive and an approval of a version using
--- that asset serialize:
---   * archive first  -> this lock waits; READ COMMITTED then re-reads the archived row -> AC010;
---                       REPEATABLE READ/SERIALIZABLE raise 40001 (row changed after snapshot).
---   * approval first -> the archive's UPDATE waits; its guard then sees the approval -> AC008.
-CREATE FUNCTION acf_assert_version_assets_active(link_table text, link_fk text, version_id uuid, primary_asset uuid)
+-- Approval-time asset check (CRITICAL-2 fix; lock order revised in revision 4).
+-- Called from the version guard, i.e. after the version row is already locked by the UPDATE.
+--   1. lock the PARENT row (FOR NO KEY UPDATE)       -> same order as the service approval path
+--   2. lock the referenced ASSET rows in ascending id -> deterministic order between approvals
+--   3. no-op UPDATE of those asset rows               -> materializes the conflict with archival:
+--      a concurrent archive (UPDATE of the same row) now waits for us, and under REPEATABLE READ
+--      it gets 40001 because the row was changed by a concurrent transaction.
+--   4. reject if any asset is archived (READ COMMITTED re-reads the latest committed row after
+--      waiting, so an archive that committed first is seen; REPEATABLE READ gets 40001).
+-- Approval never locks a row that precedes the version in the protocol order.
+CREATE FUNCTION acf_assert_version_assets_active(link_table text, link_fk text, version_id uuid,
+                                                 primary_asset uuid, parent_table text, parent_id uuid)
 RETURNS void LANGUAGE plpgsql AS $$
 DECLARE
   ids uuid[];
   r record;
 BEGIN
+  EXECUTE format('SELECT 1 FROM %I WHERE id = $1 FOR NO KEY UPDATE', parent_table) USING parent_id;
+
   EXECUTE format('SELECT coalesce(array_agg(asset_id), ''{}'') FROM %I WHERE %I = $1', link_table, link_fk)
     INTO ids USING version_id;
   IF primary_asset IS NOT NULL THEN
     ids := ids || primary_asset;
   END IF;
-  FOR r IN SELECT id, archived_at FROM assets WHERE id = ANY (ids) ORDER BY id FOR SHARE LOOP
+  IF cardinality(ids) = 0 THEN
+    RETURN;
+  END IF;
+
+  PERFORM 1 FROM assets WHERE id = ANY (ids) ORDER BY id FOR NO KEY UPDATE;
+  FOR r IN UPDATE assets SET archived_at = archived_at WHERE id = ANY (ids) RETURNING id, archived_at LOOP
     IF r.archived_at IS NOT NULL THEN
       RAISE EXCEPTION USING ERRCODE = 'AC010',
         MESSAGE = format('cannot approve version %s: asset %s is archived', version_id, r.id);
@@ -122,17 +142,19 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- Approval: every referenced asset must be active (TG_ARGV[0] = link table, [1] = link FK column).
+  -- Approval: every referenced asset must be active.
+  -- TG_ARGV: [0] link table, [1] link FK column, [2] parent table, [3] parent FK column.
   IF OLD.status = 'draft' AND NEW.status = 'approved' THEN
-    PERFORM acf_assert_version_assets_active(TG_ARGV[0], TG_ARGV[1], NEW.id, NEW.primary_asset_id);
+    PERFORM acf_assert_version_assets_active(TG_ARGV[0], TG_ARGV[1], NEW.id, NEW.primary_asset_id,
+                                             TG_ARGV[2], (to_jsonb(NEW) ->> TG_ARGV[3])::uuid);
   END IF;
   RETURN NEW;
 END $$;
 
 CREATE TRIGGER character_versions_guard BEFORE INSERT OR UPDATE OR DELETE ON "character_versions"
-  FOR EACH ROW EXECUTE FUNCTION acf_version_guard('character_version_assets', 'character_version_id');
+  FOR EACH ROW EXECUTE FUNCTION acf_version_guard('character_version_assets', 'character_version_id', 'characters', 'character_id');
 CREATE TRIGGER environment_versions_guard BEFORE INSERT OR UPDATE OR DELETE ON "environment_versions"
-  FOR EACH ROW EXECUTE FUNCTION acf_version_guard('environment_version_assets', 'environment_version_id');
+  FOR EACH ROW EXECUTE FUNCTION acf_version_guard('environment_version_assets', 'environment_version_id', 'environments', 'environment_id');
 
 -- Asset links of an approved version are frozen. The parent version row is read FOR SHARE,
 -- which waits for an in-flight approval (which holds FOR UPDATE) and then sees its result.
@@ -236,7 +258,8 @@ CREATE CONSTRAINT TRIGGER environment_versions_approval_sets_master
 -- ---------------------------------------------------------------- assets
 
 -- File identity and provenance are immutable. Archiving an asset that an approved
--- version references is forbidden (see acf_assert_version_assets_active for the lock protocol).
+-- version references is forbidden. Archival locks only the asset row itself (protocol: asset is
+-- last in the order); see acf_assert_version_assets_active for why that is sufficient.
 CREATE FUNCTION acf_asset_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   frozen_keys text[] := ARRAY['id','project_id','content_item_id','asset_type','source_type',
@@ -251,17 +274,11 @@ BEGIN
   END LOOP;
 
   IF NEW.archived_at IS NOT NULL AND OLD.archived_at IS NULL THEN
-    -- Lock every version that references this asset (primary or link), drafts included, in id
-    -- order. This waits for an in-flight approval of any of them, and under REPEATABLE READ /
-    -- SERIALIZABLE turns a concurrently approved version into 40001 instead of a stale "unused".
-    PERFORM 1 FROM character_versions v
-      WHERE v.primary_asset_id = NEW.id
-         OR v.id IN (SELECT character_version_id FROM character_version_assets WHERE asset_id = NEW.id)
-      ORDER BY v.id FOR SHARE;
-    PERFORM 1 FROM environment_versions v
-      WHERE v.primary_asset_id = NEW.id
-         OR v.id IN (SELECT environment_version_id FROM environment_version_assets WHERE asset_id = NEW.id)
-      ORDER BY v.id FOR SHARE;
+    -- Revision 4: NO locks on versions here (locking versions after the asset row was the
+    -- asset -> version half of the revision-3 deadlock cycle). Correctness under concurrency:
+    --  * approval holds/has written this asset row (acf_assert_version_assets_active), so this
+    --    UPDATE waited for it; READ COMMITTED: the query below runs with a fresh snapshot and
+    --    sees the committed approval; REPEATABLE READ: the UPDATE already failed with 40001.
     IF EXISTS (SELECT 1 FROM character_versions   WHERE primary_asset_id = NEW.id AND status = 'approved')
     OR EXISTS (SELECT 1 FROM environment_versions WHERE primary_asset_id = NEW.id AND status = 'approved')
     OR EXISTS (SELECT 1 FROM character_version_assets l JOIN character_versions v ON v.id = l.character_version_id
@@ -279,19 +296,19 @@ CREATE TRIGGER assets_guard BEFORE UPDATE ON "assets" FOR EACH ROW EXECUTE FUNCT
 -- ---------------------------------------------------------------- last owner
 
 -- At commit, every affected project must still have >= 1 owner.
--- 1) Lock the project row: concurrent owner changes for the same project serialize here.
--- 2) Lock the remaining owner rows FOR UPDATE: under READ COMMITTED this re-reads the latest
---    committed rows; under REPEATABLE READ / SERIALIZABLE a row changed by a concurrent
---    committed transaction raises a serialization failure (40001) instead of passing on a
---    stale snapshot (verified: without step 2, REPEATABLE READ can leave zero owners).
+-- Runs at COMMIT (deferred), after this transaction's member rows are already locked.
+-- Revision 4: writes the PROJECT row (no-op UPDATE) instead of locking other owners' member rows.
+-- (Revision 3 locked the remaining owner rows FOR UPDATE: member -> project -> other member,
+-- which formed a cycle between two concurrent demotions.) Now:
+--  * concurrent owner changes of one project serialize on the project row (member -> project);
+--  * READ COMMITTED: the count below runs after the wait with a fresh snapshot -> sees the
+--    other transaction's committed demotion -> AC007;
+--  * REPEATABLE READ / SERIALIZABLE: the project row was changed by a concurrent committed
+--    transaction -> 40001 before the (stale) count is trusted.
 CREATE FUNCTION acf_assert_project_has_owner(pid uuid) RETURNS void LANGUAGE plpgsql AS $$
-DECLARE
-  owners int;
 BEGIN
-  PERFORM 1 FROM projects WHERE id = pid FOR NO KEY UPDATE;
-  SELECT count(*) INTO owners FROM (
-    SELECT 1 FROM project_members WHERE project_id = pid AND role = 'owner' FOR UPDATE) o;
-  IF owners = 0 THEN
+  UPDATE projects SET updated_at = updated_at WHERE id = pid;
+  IF NOT EXISTS (SELECT 1 FROM project_members WHERE project_id = pid AND role = 'owner') THEN
     RAISE EXCEPTION USING ERRCODE = 'AC007', MESSAGE = format('project %s must keep at least one owner', pid);
   END IF;
 END $$;
