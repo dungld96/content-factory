@@ -13,9 +13,9 @@ numbered sequentially. Never rewrite an accepted ADR — supersede it with a new
 | [0006](0006-s3-compatible-object-storage.md)            | S3-compatible object storage                     | Accepted                                 |
 | [0007](0007-toolchain-and-module-system.md)             | Toolchain baseline and ESM module system         | Accepted (M0) — review requested         |
 | [0008](0008-validation-contracts-and-error-envelope.md) | Zod contracts, env validation and error envelope | Accepted (M0) — review requested         |
-| [0009](0009-authentication-strategy.md) | Authentication strategy (incl. D2 session store) | Accepted; D2 design conditionally approved, pending package approval |
-| [0010](0010-versioning-master-pointer-and-approval.md) | Versioning, master pointer and approval concurrency | Proposed (M1 package) |
-| [0011](0011-database-enforced-integrity.md) | Database-enforced integrity | Proposed (M1 package) |
+| [0009](0009-authentication-strategy.md) | Authentication strategy (incl. D2 session store) | Accepted; D2 design conditionally approved, rev. 3 pending approval |
+| [0010](0010-versioning-master-pointer-and-approval.md) | Versioning, master pointer and approval concurrency | Proposed (M1 package, rev. 3) |
+| [0011](0011-database-enforced-integrity.md) | Database-enforced integrity | Proposed (M1 package, rev. 3) |
 
 ## Template
 

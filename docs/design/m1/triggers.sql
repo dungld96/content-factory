@@ -8,8 +8,9 @@
 --   AC003 invalid master pointer change          AC004 approval without master update
 --   AC005 asset file identity is immutable       AC006 hard delete forbidden (archive instead)
 --   AC007 project must keep at least one owner   AC008 asset in use by an approved version
---   AC009 versions must be created as drafts
--- Isolation: triggers are correct under READ COMMITTED (default) and SERIALIZABLE.
+--   AC009 versions must be created as drafts     AC010 approval references an archived asset
+-- Isolation: every rule holds under READ COMMITTED, REPEATABLE READ and SERIALIZABLE; races
+-- surface as AC0xx, 40001 (serialization) or 40P01 (deadlock), never as an invalid commit.
 -- =============================================================================
 
 -- ---------------------------------------------------------------- CHECK constraints
@@ -64,6 +65,32 @@ CREATE TRIGGER content_items_no_delete BEFORE DELETE ON "content_items" FOR EACH
 
 -- ---------------------------------------------------------------- versions
 
+-- Approval-time asset check (CRITICAL-2 fix). Locks the version's primary + linked assets
+-- FOR SHARE in id order. FOR SHARE conflicts with the FOR NO KEY UPDATE lock that any UPDATE of
+-- an asset row (e.g. archiving) takes, so an in-flight archive and an approval of a version using
+-- that asset serialize:
+--   * archive first  -> this lock waits; READ COMMITTED then re-reads the archived row -> AC010;
+--                       REPEATABLE READ/SERIALIZABLE raise 40001 (row changed after snapshot).
+--   * approval first -> the archive's UPDATE waits; its guard then sees the approval -> AC008.
+CREATE FUNCTION acf_assert_version_assets_active(link_table text, link_fk text, version_id uuid, primary_asset uuid)
+RETURNS void LANGUAGE plpgsql AS $$
+DECLARE
+  ids uuid[];
+  r record;
+BEGIN
+  EXECUTE format('SELECT coalesce(array_agg(asset_id), ''{}'') FROM %I WHERE %I = $1', link_table, link_fk)
+    INTO ids USING version_id;
+  IF primary_asset IS NOT NULL THEN
+    ids := ids || primary_asset;
+  END IF;
+  FOR r IN SELECT id, archived_at FROM assets WHERE id = ANY (ids) ORDER BY id FOR SHARE LOOP
+    IF r.archived_at IS NOT NULL THEN
+      RAISE EXCEPTION USING ERRCODE = 'AC010',
+        MESSAGE = format('cannot approve version %s: asset %s is archived', version_id, r.id);
+    END IF;
+  END LOOP;
+END $$;
+
 -- Versions are always born as drafts; approval is an UPDATE (so it goes through the
 -- master-pointer checks below). Approved rows are frozen: no UPDATE, no DELETE.
 -- Identity columns of drafts cannot change either.
@@ -94,13 +121,18 @@ BEGIN
       RAISE EXCEPTION USING ERRCODE = 'AC001', MESSAGE = format('column %s of a version is immutable', k);
     END IF;
   END LOOP;
+
+  -- Approval: every referenced asset must be active (TG_ARGV[0] = link table, [1] = link FK column).
+  IF OLD.status = 'draft' AND NEW.status = 'approved' THEN
+    PERFORM acf_assert_version_assets_active(TG_ARGV[0], TG_ARGV[1], NEW.id, NEW.primary_asset_id);
+  END IF;
   RETURN NEW;
 END $$;
 
 CREATE TRIGGER character_versions_guard BEFORE INSERT OR UPDATE OR DELETE ON "character_versions"
-  FOR EACH ROW EXECUTE FUNCTION acf_version_guard();
+  FOR EACH ROW EXECUTE FUNCTION acf_version_guard('character_version_assets', 'character_version_id');
 CREATE TRIGGER environment_versions_guard BEFORE INSERT OR UPDATE OR DELETE ON "environment_versions"
-  FOR EACH ROW EXECUTE FUNCTION acf_version_guard();
+  FOR EACH ROW EXECUTE FUNCTION acf_version_guard('environment_version_assets', 'environment_version_id');
 
 -- Asset links of an approved version are frozen. The parent version row is read FOR SHARE,
 -- which waits for an in-flight approval (which holds FOR UPDATE) and then sees its result.
@@ -204,7 +236,7 @@ CREATE CONSTRAINT TRIGGER environment_versions_approval_sets_master
 -- ---------------------------------------------------------------- assets
 
 -- File identity and provenance are immutable. Archiving an asset that an approved
--- version references is forbidden.
+-- version references is forbidden (see acf_assert_version_assets_active for the lock protocol).
 CREATE FUNCTION acf_asset_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   frozen_keys text[] := ARRAY['id','project_id','content_item_id','asset_type','source_type',
@@ -218,14 +250,26 @@ BEGIN
     END IF;
   END LOOP;
 
-  IF NEW.archived_at IS NOT NULL AND OLD.archived_at IS NULL AND (
-       EXISTS (SELECT 1 FROM character_versions   WHERE primary_asset_id = NEW.id AND status = 'approved')
+  IF NEW.archived_at IS NOT NULL AND OLD.archived_at IS NULL THEN
+    -- Lock every version that references this asset (primary or link), drafts included, in id
+    -- order. This waits for an in-flight approval of any of them, and under REPEATABLE READ /
+    -- SERIALIZABLE turns a concurrently approved version into 40001 instead of a stale "unused".
+    PERFORM 1 FROM character_versions v
+      WHERE v.primary_asset_id = NEW.id
+         OR v.id IN (SELECT character_version_id FROM character_version_assets WHERE asset_id = NEW.id)
+      ORDER BY v.id FOR SHARE;
+    PERFORM 1 FROM environment_versions v
+      WHERE v.primary_asset_id = NEW.id
+         OR v.id IN (SELECT environment_version_id FROM environment_version_assets WHERE asset_id = NEW.id)
+      ORDER BY v.id FOR SHARE;
+    IF EXISTS (SELECT 1 FROM character_versions   WHERE primary_asset_id = NEW.id AND status = 'approved')
     OR EXISTS (SELECT 1 FROM environment_versions WHERE primary_asset_id = NEW.id AND status = 'approved')
     OR EXISTS (SELECT 1 FROM character_version_assets l JOIN character_versions v ON v.id = l.character_version_id
                WHERE l.asset_id = NEW.id AND v.status = 'approved')
     OR EXISTS (SELECT 1 FROM environment_version_assets l JOIN environment_versions v ON v.id = l.environment_version_id
-               WHERE l.asset_id = NEW.id AND v.status = 'approved')) THEN
-    RAISE EXCEPTION USING ERRCODE = 'AC008', MESSAGE = 'asset is referenced by an approved version and cannot be archived';
+               WHERE l.asset_id = NEW.id AND v.status = 'approved') THEN
+      RAISE EXCEPTION USING ERRCODE = 'AC008', MESSAGE = 'asset is referenced by an approved version and cannot be archived';
+    END IF;
   END IF;
   RETURN NEW;
 END $$;

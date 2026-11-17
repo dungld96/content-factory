@@ -155,5 +155,68 @@ SELECT pg_temp.expect_ok('lineage: ancestors via recursive CTE', $$
     SELECT a.id, a.source_asset_id, c.depth + 1 FROM assets a JOIN chain c ON a.id = c.source_asset_id WHERE c.depth < 50)
   SELECT count(*) FROM chain$$);
 
+
+-- CRITICAL-2 regression: approval must reject archived primary/linked assets ------------------
+INSERT INTO assets (id, project_id, asset_type, source_type, storage_key, mime_type, size_bytes, checksum_sha256, created_by_id, updated_at) VALUES
+  ('20000000-0000-7000-8000-000000000011', '10000000-0000-7000-8000-000000000001', 'reference', 'upload', 'p1/arch-primary.png', 'image/png', 10, repeat('1', 64), '00000000-0000-7000-8000-000000000001', now()),
+  ('20000000-0000-7000-8000-000000000012', '10000000-0000-7000-8000-000000000001', 'reference', 'upload', 'p1/arch-link.png', 'image/png', 10, repeat('2', 64), '00000000-0000-7000-8000-000000000001', now()),
+  ('20000000-0000-7000-8000-000000000013', '10000000-0000-7000-8000-000000000001', 'reference', 'upload', 'p1/env-link.png', 'image/png', 10, repeat('3', 64), '00000000-0000-7000-8000-000000000001', now());
+INSERT INTO characters (id, project_id, name, slug, created_by_id, updated_at) VALUES
+  ('30000000-0000-7000-8000-000000000002', '10000000-0000-7000-8000-000000000001', 'Minh', 'minh', '00000000-0000-7000-8000-000000000001', now());
+INSERT INTO character_versions (id, project_id, character_id, version, description, primary_asset_id, created_by_id, updated_at) VALUES
+  ('32000000-0000-7000-8000-000000000001', '10000000-0000-7000-8000-000000000001', '30000000-0000-7000-8000-000000000002', 1, 'primary archived', '20000000-0000-7000-8000-000000000011', '00000000-0000-7000-8000-000000000001', now()),
+  ('32000000-0000-7000-8000-000000000002', '10000000-0000-7000-8000-000000000001', '30000000-0000-7000-8000-000000000002', 2, 'link archived', NULL, '00000000-0000-7000-8000-000000000001', now());
+INSERT INTO character_version_assets (project_id, character_version_id, asset_id) VALUES
+  ('10000000-0000-7000-8000-000000000001', '32000000-0000-7000-8000-000000000002', '20000000-0000-7000-8000-000000000012');
+SELECT pg_temp.expect_ok('U4: archive asset used only by drafts (allowed)',
+  $$UPDATE assets SET archived_at = now() WHERE id IN ('20000000-0000-7000-8000-000000000011', '20000000-0000-7000-8000-000000000012')$$);
+SELECT pg_temp.expect('approve draft whose PRIMARY asset is archived',
+  $$UPDATE character_versions SET status = 'approved', approved_at = now(), approved_by_id = '00000000-0000-7000-8000-000000000001'
+      WHERE id = '32000000-0000-7000-8000-000000000001';
+    UPDATE characters SET master_version_id = '32000000-0000-7000-8000-000000000001' WHERE id = '30000000-0000-7000-8000-000000000002'$$, 'AC010');
+SELECT pg_temp.expect('approve draft with a LINKED archived asset',
+  $$UPDATE character_versions SET status = 'approved', approved_at = now(), approved_by_id = '00000000-0000-7000-8000-000000000001'
+      WHERE id = '32000000-0000-7000-8000-000000000002';
+    UPDATE characters SET master_version_id = '32000000-0000-7000-8000-000000000002' WHERE id = '30000000-0000-7000-8000-000000000002'$$, 'AC010');
+SELECT pg_temp.expect('same txn: approve, then archive its asset',
+  $$UPDATE assets SET archived_at = NULL WHERE id = '20000000-0000-7000-8000-000000000011';
+    UPDATE character_versions SET status = 'approved', approved_at = now(), approved_by_id = '00000000-0000-7000-8000-000000000001'
+      WHERE id = '32000000-0000-7000-8000-000000000001';
+    UPDATE characters SET master_version_id = '32000000-0000-7000-8000-000000000001' WHERE id = '30000000-0000-7000-8000-000000000002';
+    UPDATE assets SET archived_at = now() WHERE id = '20000000-0000-7000-8000-000000000011'$$, 'AC008');
+SELECT pg_temp.expect_ok('unarchive then approve succeeds (control)',
+  $$UPDATE assets SET archived_at = NULL WHERE id = '20000000-0000-7000-8000-000000000012';
+    UPDATE character_versions SET status = 'approved', approved_at = now(), approved_by_id = '00000000-0000-7000-8000-000000000001'
+      WHERE id = '32000000-0000-7000-8000-000000000002';
+    UPDATE characters SET master_version_id = '32000000-0000-7000-8000-000000000002' WHERE id = '30000000-0000-7000-8000-000000000002';
+    SET CONSTRAINTS ALL IMMEDIATE$$);
+
+-- environments get the same guards ----------------------------------------------------------
+INSERT INTO environments (id, project_id, name, slug, created_by_id, updated_at) VALUES
+  ('40000000-0000-7000-8000-000000000001', '10000000-0000-7000-8000-000000000001', 'Office', 'office', '00000000-0000-7000-8000-000000000001', now());
+INSERT INTO environment_versions (id, project_id, environment_id, version, description, created_by_id, updated_at) VALUES
+  ('41000000-0000-7000-8000-000000000001', '10000000-0000-7000-8000-000000000001', '40000000-0000-7000-8000-000000000001', 1, 'env v1', '00000000-0000-7000-8000-000000000001', now());
+INSERT INTO environment_version_assets (project_id, environment_version_id, asset_id) VALUES
+  ('10000000-0000-7000-8000-000000000001', '41000000-0000-7000-8000-000000000001', '20000000-0000-7000-8000-000000000013');
+UPDATE assets SET archived_at = now() WHERE id = '20000000-0000-7000-8000-000000000013';
+SELECT pg_temp.expect('environment: approve with archived linked asset',
+  $$UPDATE environment_versions SET status = 'approved', approved_at = now(), approved_by_id = '00000000-0000-7000-8000-000000000001'
+      WHERE id = '41000000-0000-7000-8000-000000000001';
+    UPDATE environments SET master_version_id = '41000000-0000-7000-8000-000000000001' WHERE id = '40000000-0000-7000-8000-000000000001'$$, 'AC010');
+UPDATE assets SET archived_at = NULL WHERE id = '20000000-0000-7000-8000-000000000013';
+BEGIN;
+UPDATE environment_versions SET status = 'approved', approved_at = now(), approved_by_id = '00000000-0000-7000-8000-000000000001'
+  WHERE id = '41000000-0000-7000-8000-000000000001';
+UPDATE environments SET master_version_id = '41000000-0000-7000-8000-000000000001' WHERE id = '40000000-0000-7000-8000-000000000001';
+COMMIT;
+INSERT INTO results VALUES ('environment: approve + set master atomically', true, 'ok');
+SELECT pg_temp.expect('environment: approved version immutable',
+  $$UPDATE environment_versions SET description = 'x' WHERE id = '41000000-0000-7000-8000-000000000001'$$, 'AC001');
+SELECT pg_temp.expect('environment: approved links frozen',
+  $$DELETE FROM environment_version_assets WHERE environment_version_id = '41000000-0000-7000-8000-000000000001'$$, 'AC002');
+SELECT pg_temp.expect('environment: archive asset used by approved version',
+  $$UPDATE assets SET archived_at = now() WHERE id = '20000000-0000-7000-8000-000000000013'$$, 'AC008');
+SELECT pg_temp.expect('environment DELETE', $$DELETE FROM environments WHERE id = '40000000-0000-7000-8000-000000000001'$$, 'AC006');
+
 SELECT (CASE WHEN ok THEN 'PASS' ELSE 'FAIL' END) AS result, name, detail FROM results;
 SELECT count(*) FILTER (WHERE ok) AS passed, count(*) FILTER (WHERE NOT ok) AS failed FROM results;

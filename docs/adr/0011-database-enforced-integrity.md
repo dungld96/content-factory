@@ -1,6 +1,6 @@
 # ADR-0011: Database-enforced integrity (composite FKs, CHECKs, triggers)
 
-- Status: **Proposed** (part of the M1 design review package)
+- Status: **Proposed** (M1 design review package, revision 3). Role separation (U3) approved.
 - Date: 2026-11-17
 - Milestone: M1
 
@@ -24,16 +24,30 @@ behaviour under direct SQL.
    - forward-only master pointer (`AC003`);
    - approval-sets-master at commit (`AC004`);
    - immutable asset identity (`AC005`) and in-use archive block (`AC008`);
+   - **(rev. 3)** no approval while a referenced asset is archived (`AC010`);
    - at least one owner per project at commit (`AC007`);
    - draft-only version inserts (`AC009`).
 4. **SQLSTATE contract**: custom class `AC` codes are stable and mapped to API error codes.
    Messages are for operators.
-5. **Isolation**: application transactions use READ COMMITTED with explicit row locks. Triggers
-   take locks that make races fail loudly (`40001`/`40P01`/`AC007`) at any isolation level.
+5. **Isolation**: application transactions use READ COMMITTED with explicit row locks.
+   **Every guard locks the rows it reads**, not only the rows it writes:
+   - approval locks its assets;
+   - archive locks the referencing versions;
+   - the owner check locks the project and the remaining owner rows;
+   - link edits lock the version.
+
+   Under READ COMMITTED a loser re-reads committed data and fails with an `AC0xx` code. Under
+   REPEATABLE READ / SERIALIZABLE it fails with `40001` instead of trusting a stale snapshot.
+   Races always end in an error, never in an invalid commit. Two design-time defects confirmed
+   this rule: the RR last-owner race (rev. 2) and the RR archive-vs-approval race (rev. 3, caught
+   by a negative control).
+
 6. **Ownership in Prisma**: CHECKs, functions and triggers live in migration SQL. Prisma does not
    model them, and a drift diff is empty with them applied. CI asserts they exist and are enabled.
-7. **Roles** (pending decision U3): migrations run as the owner role; the API runs as a DML-only
-   role that cannot disable triggers or truncate.
+7. **Roles** (U3, approved): migrations, seed and test setup run as the owner role
+   `acf_migrator`; the API runs as `acf_app` with `SELECT/INSERT/UPDATE/DELETE` grants only.
+   Verified: `acf_app` cannot `DISABLE TRIGGER`, `DROP TRIGGER`, `TRUNCATE` or set
+   `session_replication_role`.
 
 ## Consequences
 

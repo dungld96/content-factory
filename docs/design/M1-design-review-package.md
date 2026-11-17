@@ -1,8 +1,8 @@
 # M1 Design Review Package — Domain, Persistence, Identity & Access
 
-- Status: **Revision 2, awaiting explicit approval. No M1 code has been written.**
+- Status: **Revision 3, awaiting explicit approval. No M1 application code has been written.**
 - Date: 2026-11-17
-- Supersedes: revision 1 of this file (`M1-domain-auth-proposal.md`, see git history)
+- Supersedes: revision 2 (commit `c5b9105`) and revision 1 (`M1-domain-auth-proposal.md`)
 - Companion files:
   - [`m1/schema.prisma`](m1/schema.prisma): complete Prisma schema proposal, validated with
     Prisma 7.10.1
@@ -14,21 +14,21 @@
 
 ## 0. Decision log
 
-| ID    | Decision                                                    | Status                                                  |
-| ----- | ----------------------------------------------------------- | ------------------------------------------------------- |
-| D1    | Master = latest approved version; approvals are append-only | Approved                                                |
-| D2    | Custom Prisma-backed express-session Store                  | **Conditionally approved**; conditions mapped in §5.10  |
-| D3    | Browser → Next.js (same origin) → API                       | Approved                                                |
-| D4    | Minimal login / project list / logout UI                    | Approved                                                |
-| D5    | 24 h idle / 7 d absolute session lifetime                   | Approved                                                |
-| D6    | Users via CLI and seed only                                 | Approved                                                |
-| D7    | 404 for non-members                                         | Approved                                                |
-| D8    | Metadata-only asset registration                            | Approved                                                |
-| D9    | `If-Match` optional now, designed to become mandatory       | Approved; design in §8.4                                |
-| D10   | `eslint-plugin-jsx-a11y-x`                                  | Not adopted; isolated evaluation in `docs/evaluations/` |
-| D11   | Drafts editable until approved                              | Approved                                                |
-| D12   | Global project slugs                                        | Approved                                                |
-| U1–U7 | New open questions from this revision                       | **Owner input requested** (§11)                         |
+| ID    | Decision                                                    | Status                                                                                                    |
+| ----- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| D1    | Master = latest approved version; approvals are append-only | Approved                                                                                                  |
+| D2    | Custom Prisma-backed express-session Store                  | **Conditionally approved**; conditions mapped in §5.10; now evidenced with the real Prisma 7 store (§5.9) |
+| D3    | Browser → Next.js (same origin) → API                       | Approved                                                                                                  |
+| D4    | Minimal login / project list / logout UI                    | Approved                                                                                                  |
+| D5    | 24 h idle / 7 d absolute session lifetime                   | Approved                                                                                                  |
+| D6    | Users via CLI and seed only                                 | Approved                                                                                                  |
+| D7    | 404 for non-members                                         | Approved                                                                                                  |
+| D8    | Metadata-only asset registration                            | Approved                                                                                                  |
+| D9    | `If-Match` optional now, designed to become mandatory       | Approved; design in §8.4                                                                                  |
+| D10   | `eslint-plugin-jsx-a11y-x`                                  | Not adopted; isolated evaluation in `docs/evaluations/`                                                   |
+| D11   | Drafts editable until approved                              | Approved                                                                                                  |
+| D12   | Global project slugs                                        | Approved                                                                                                  |
+| U1–U7 | Open questions from revision 2                              | **Approved as documented** (§11)                                                                          |
 
 **How D1 is reconciled with requirement 5** ("updating the current master pointer and approving
 must happen atomically"): the semantics stay D1, so the master is the highest-numbered approved
@@ -36,6 +36,29 @@ version. `characters.master_version_id` / `environments.master_version_id` is a 
 pointer** that always equals that version. It is written only in the approval transaction. The
 database rejects any commit where an approval did not move the pointer, and rejects any pointer
 move that is not forward to an approved version (§6, §7).
+
+## 0.1 Revision 3: review findings and resolutions
+
+| Finding (owner review of rev. 2)                                                       | Reproduced?                                                                       | Resolution                                                                                                                               | Evidence                                                                                                         |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **CRITICAL 1**: a modified session saved after logout is recreated by `set()` (upsert) | **Yes**. With the rev. 2 store, the old cookie got **200** after logout.          | Rows are created only by `createForLogin()` right after `regenerate()`. `set()`/`touch()` are UPDATE-only (§5.3, §5.3.1).                | Session suite 49/49 (R1–R8 new). The rev. 2 store fails 11 checks (negative control). SQL ordering test S1–S3.   |
+| **CRITICAL 2**: approving a draft that references an archived asset                    | **Yes**. Direct SQL committed an approved version with an archived primary asset. | Approval locks and checks every primary/linked asset (`AC010`). Archive locks referencing versions first (§6.1, §6.5).                   | Direct-SQL suite 49/49 (11 new). 16 archive/approval races at RC and RR. Two negative controls fail as expected. |
+| **IMPORTANT**: the spike used `pg.Pool`, not Prisma                                    | n/a                                                                               | The spike now uses the actual `PrismaSessionStore` (Prisma 7.10.1 + `@prisma/adapter-pg` 7.10.1), with **no change** to the D2 decision. | §5.9                                                                                                             |
+
+Also found and fixed during this revision:
+
+- An anonymous request that writes to `req.session` makes express-session issue an inert cookie.
+  It is now a design rule with a test (§5.3.1).
+- Environment tables gained direct-SQL coverage.
+- `agentRules: false` is verified to stop Next.js generating `AGENTS.md`.
+- The runtime role `acf_app` is verified unable to disable triggers, drop triggers, truncate or
+  switch `session_replication_role` (U3).
+
+All evidence reproduces with one command (§5.9, §6.3):
+
+```bash
+bash docs/design/m1/evidence/run-all.sh --negative-controls
+```
 
 ## 1. Scope
 
@@ -185,24 +208,69 @@ INDEX(user_id), INDEX(expires_at)
 
 ### 5.2 Responsibilities
 
-| Concern                                                                                                                                                                                          | Owner                                                                                                                                                                        |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Session ID generation (`uid-safe`, 24 random bytes / 192 bits), cookie signing and rotation-capable verification (`cookie-signature`, array of secrets), `regenerate`, `destroy`, rolling cookie | **express-session 1.19.0**, unmodified                                                                                                                                       |
-| Hashing the ID for the lookup key                                                                                                                                                                | `node:crypto` `createHash('sha256')` (standard library; no custom crypto). An unsalted fast hash is appropriate because the input is a 192-bit random token, not a password. |
-| Persistence (`get`, `set`, `touch`, `destroy`) and `destroyAllForUser`                                                                                                                           | Our `PrismaSessionStore extends session.Store` (persistence only)                                                                                                            |
-| Password hashing                                                                                                                                                                                 | `argon2` 0.45.2 (Argon2id)                                                                                                                                                   |
-| CSRF tokens (HMAC, constant-time compare)                                                                                                                                                        | `csrf-csrf` 4.1.0                                                                                                                                                            |
+| Concern                                                                                                                                                                                          | Owner                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Session ID generation (`uid-safe`, 24 random bytes / 192 bits), cookie signing and rotation-capable verification (`cookie-signature`, array of secrets), `regenerate`, `destroy`, rolling cookie | **express-session 1.19.0**, unmodified                                                                                                                                                                                                                                 |
+| Hashing the ID for the lookup key                                                                                                                                                                | `node:crypto` `createHash('sha256')` (standard library; no custom crypto). An unsalted fast hash is appropriate because the input is a 192-bit random token, not a password.                                                                                           |
+| Persistence (`createForLogin`, `get`, `set`, `touch`, `destroy`, `destroyAllForUser`, `pruneExpired`)                                                                                            | Our `PrismaSessionStore extends session.Store`: persistence only, **Prisma 7.10.1 + `@prisma/adapter-pg`**. Model API for create/read/delete, tagged `$executeRaw` for the two capped UPDATEs (`LEAST(…)`). Source: `m1/evidence/session/src/prisma-session-store.ts`. |
+| Password hashing                                                                                                                                                                                 | `argon2` 0.45.2 (Argon2id)                                                                                                                                                                                                                                             |
+| CSRF tokens (HMAC, constant-time compare)                                                                                                                                                        | `csrf-csrf` 4.1.0                                                                                                                                                                                                                                                      |
 
 ### 5.3 Store semantics
 
-| Method                      | SQL behaviour                                                                                                                                                                                                                                                   | Guarantees                                                                                                                |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `get(sid)`                  | `SELECT data … WHERE id_hash = sha256(sid) AND expires_at > now() AND absolute_expires_at > now()`                                                                                                                                                              | Expired or missing sessions resolve to `null`, so the request is unauthenticated                                          |
-| `set(sid, sess)`            | Refuses sessions without `userId`. Writes only `{cookie, userId, authenticatedAt}`. `INSERT … ON CONFLICT (id_hash) DO UPDATE … WHERE sessions.user_id = EXCLUDED.user_id`. New rows get `absolute_expires_at = now() + 7 d`, and `expires_at` is capped at it. | No anonymous rows (`saveUninitialized: false`). A conflicting hash can't switch users. Absolute expiry is never extended. |
-| `touch(sid, sess)`          | `UPDATE … SET expires_at = LEAST(cookie.expires, absolute_expires_at), last_seen_at = now() WHERE id_hash = … AND expires_at > now()`. Writes are throttled (only if `last_seen_at` is older than 60 s) to limit write load.                                    | **UPDATE only**: an in-flight request finishing after logout cannot resurrect the session (verified)                      |
-| `destroy(sid)`              | `DELETE … WHERE id_hash = …`                                                                                                                                                                                                                                    | Immediate revocation                                                                                                      |
-| `destroyAllForUser(userId)` | `DELETE … WHERE user_id = …`                                                                                                                                                                                                                                    | Used by password change, account disable and the CLI                                                                      |
-| Pruning                     | Hourly in-process job (`setInterval(…).unref()`): `DELETE … WHERE expires_at < now() OR absolute_expires_at < now()`                                                                                                                                            | Housekeeping only; correctness never depends on it                                                                        |
+All expiry comparisons use one injected application clock (`now()` option), so `get`, `set` and
+`touch` agree on what "expired" means.
+
+| Method                      | Statement                                                                                                                                                                                                                                                                                  | Guarantees                                                                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `createForLogin(sid, sess)` | `prisma.session.create(...)`: **the only INSERT**. `absolute_expires_at = now + 7 d`; `expires_at = min(cookie.expires, absolute)`. Plain INSERT (no upsert), so a duplicate hash fails loudly.                                                                                            | Called by `AuthService.login` only, immediately after `req.session.regenerate()`, for an ID no other request has seen                                                          |
+| `get(sid)`                  | `findFirst({ idHash, expiresAt > now, absoluteExpiresAt > now })`                                                                                                                                                                                                                          | Expired, revoked or unknown sessions resolve to `null`, so the request is unauthenticated                                                                                      |
+| `set(sid, sess)`            | **UPDATE only**: `UPDATE sessions SET data, expires_at = LEAST(cookie.expires, absolute_expires_at), last_seen_at WHERE id_hash = … AND user_id = … AND expires_at > now AND absolute_expires_at > now`. **There is no INSERT path.** Sessions without `userId` are a no-op, not an error. | Cannot recreate a revoked or expired session. Cannot switch the row's user. Absolute expiry is never extended. Payload is allow-listed to `{cookie, userId, authenticatedAt}`. |
+| `touch(sid, sess)`          | UPDATE only, same predicates, plus `last_seen_at <= now − 60 s` (throttle)                                                                                                                                                                                                                 | Same as `set`                                                                                                                                                                  |
+| `destroy(sid)`              | `deleteMany({ idHash })`                                                                                                                                                                                                                                                                   | Immediate revocation (logout, `regenerate`)                                                                                                                                    |
+| `destroyAllForUser(userId)` | `deleteMany({ userId })`                                                                                                                                                                                                                                                                   | Password change, disable, CLI                                                                                                                                                  |
+| `pruneExpired()`            | `deleteMany({ expiresAt <= now OR absoluteExpiresAt <= now })`, hourly, `unref`'d timer                                                                                                                                                                                                    | Housekeeping only; correctness never depends on it                                                                                                                             |
+
+### 5.3.1 Revocation safety (CRITICAL 1)
+
+**The defect (rev. 2)**: request A loads session S and modifies it, B logs out (deletes S), then
+A finishes and express-session calls `set(S)`. Rev. 2's upsert recreated S, and the old cookie
+worked again. Reproduced: after logout the old cookie got `200`.
+
+**The fix: creation is separated from update.**
+
+- Only the login handler creates rows (`createForLogin`), right after `regenerate()` has minted a
+  fresh 192-bit ID that has never been sent to any client.
+- Every other write (`set`, `touch`) is an `UPDATE … WHERE id_hash = … AND <not expired>`.
+- A destroyed ID therefore has no code path back into the table.
+
+| Interleaving (same row)                           | What PostgreSQL does                                                                                            | Outcome                          |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| DELETE committed, then late UPDATE (`set`)        | The UPDATE matches 0 rows                                                                                       | Stays revoked (verified: S3, R1) |
+| DELETE in flight, UPDATE arrives                  | The UPDATE waits on the row lock. After the DELETE commits it re-checks, finds the row gone, and affects 0 rows | Stays revoked (verified: S1)     |
+| UPDATE in flight, DELETE arrives                  | The DELETE waits, then deletes the updated row                                                                  | Revoked (verified: S2)           |
+| `regenerate()` or revoke-all while A is in flight | Same as the first row (the old row is deleted)                                                                  | Stays revoked (verified: R3, R4) |
+
+Each store call is a single autocommit statement (READ COMMITTED), so set/destroy ordering is
+atomic per statement. No multi-statement transaction or tombstone table is needed.
+
+**Why not a tombstone table?** A tombstone protects an INSERT path. Here no INSERT path exists
+for an existing or revoked ID: `set()` cannot insert, and `createForLogin()` only ever receives a
+freshly generated ID. A tombstone would add a second table to maintain and prune, and a
+check-then-insert race of its own, without closing any additional path. If a future change ever
+needs to create rows elsewhere, this decision must be revisited (recorded in ADR-0009).
+
+**Accepted residual behaviour (documented, tested):**
+
+- A request that was authorized **before** logout may still complete (R1: A returns 200). Its
+  session writes are discarded. Authorization is per request, and the next request is
+  unauthenticated.
+- With `rolling: true`, such a late response may re-send `Set-Cookie` with the dead ID. The
+  cookie is inert: no row, so 401.
+- If application code writes to an **anonymous** session, express-session issues a cookie even
+  though nothing is stored (R7). The cookie is inert. **Design rule**: public handlers never
+  write to `req.session`; only login does, after `regenerate()` + `createForLogin()`. An M1 test
+  asserts that no public route (including a failed login) sets a session cookie.
 
 ### 5.4 Configuration
 
@@ -252,7 +320,9 @@ app.use(csrfProtection); // csrf-csrf; skips safe methods and POST /auth/login
       against a fixed dummy hash so timing is uniform. Disabled users get the same generic
       `401 INVALID_CREDENTIALS`.
    3. `req.session.regenerate()` (fixation defence; the previous row is deleted). Set
-      `userId` / `authenticatedAt`, then `save()`.
+      `userId` / `authenticatedAt`, then call `store.createForLogin(req.sessionID, req.session)`
+      (the only INSERT). express-session's end-of-request save then goes through UPDATE-only
+      `set()`.
    4. If `argon2.needsRehash`, re-hash and store.
    5. Respond with the profile and a fresh CSRF token (bound to the new session ID).
    6. **Fail closed**: if `cookie.secure` is on but `req.secure` is false (proxy
@@ -302,19 +372,31 @@ browser ──HTTPS──> TLS proxy ──HTTP──> Next.js (web) ──HTTP 
 - Types come from `@types/express-session` 1.19.0. The `SessionData` augmentation lives in
   `apps/api/src/auth/session.types.ts`.
 
-### 5.9 Verification results (spike, through the Next.js proxy): 25/25 passed
+### 5.9 Verification results: real `PrismaSessionStore`, 49/49 passed
 
-Covered:
+Setup (reproduced by `run-all.sh`):
 
-- Cookie attributes; the raw session ID is absent from the row; payload allow-list.
-- CSRF: missing, valid and forged tokens.
-- Fixation: the ID changes and the old row is deleted; an old or forged cookie gets 401.
-- Logout: 204, the cookie is cleared, and reusing the cookie gets 401.
-- **A request in flight across logout does not resurrect the session.**
-- 20 concurrent requests all succeed with exactly one row.
-- Idle expiry and absolute expiry each give 401.
-- Rolling never extends past absolute expiry.
-- Revoke-all; garbage cookie; no anonymous rows.
+- **Stack:** NestJS 12.3.2 (Express 5.3.0), express-session 1.19.0, csrf-csrf 4.1.0,
+  **Prisma 7.10.1 + `@prisma/adapter-pg` 7.10.1**, PostgreSQL 17.12.
+- **Database:** a fresh database built from the committed `generated-tables.sql` +
+  `triggers.sql`.
+- **Credentials:** the API connects as the DML-only role **`acf_app`** (U3).
+- **Traffic:** all requests go **through the Next.js 16.4.6 rewrite proxy**.
+
+| Group                                     | Checks                                                                                                                                                                                                                                                                |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Baseline (25, ported to the Prisma store) | Cookie attributes; hashed key; allow-listed payload; CSRF missing/valid/forged; fixation (new ID, old row deleted); logout; read-only in-flight request; 20 concurrent requests; idle and absolute expiry; rolling cap; revoke-all; garbage cookie; no anonymous rows |
+| **R1**: the reviewer's scenario           | A modifies a persisted field and pauses; B logs out; A completes. The store's event log proves **`set()` ran after the destroy and matched 0 rows**. The row stays absent and the old cookie gets 401.                                                                |
+| R2                                        | Same, with a non-persisted field (still triggers `set`)                                                                                                                                                                                                               |
+| R3                                        | Re-login (`regenerate`) while A is in flight on the old ID: old ID absent and 401; new session created legitimately and works                                                                                                                                         |
+| R4                                        | Revoke-all (password change/disable) while two modifying requests are in flight: both stay revoked                                                                                                                                                                    |
+| R5                                        | 10 concurrent modifying requests with logout in the middle: no resurrection                                                                                                                                                                                           |
+| R6                                        | A legitimate modification without logout still persists (`set` updated 1 row)                                                                                                                                                                                         |
+| R7                                        | An anonymous session write gives 200 (no 500) and no row. A failed login sets no cookie. An inert cookie is documented (§5.3.1).                                                                                                                                      |
+| R8                                        | Login after logout yields a fresh, different ID                                                                                                                                                                                                                       |
+
+**Negative control:** the same suite against the rev. 2 `set()` (upsert) fails **11** checks
+(R1–R5). The regression tests detect the defect; the old read-only test did not.
 
 ### 5.10 D2 condition traceability
 
@@ -331,23 +413,28 @@ Covered:
 | Tests: expiration, logout, invalid sessions, fixation, concurrency    | Spike suite (§5.9) becomes `apps/api/test/auth/*.integration.test.ts` |
 | Verify on the real NestJS 12 adapter and document                     | §5.8                                                                  |
 | No passwords or sensitive data in payloads                            | §5.4                                                                  |
+| (rev. 3) `set()` cannot recreate a revoked ID                         | §5.3 (UPDATE-only), §5.3.1; R1–R5, S1–S3                              |
+| (rev. 3) Legitimate creation after login/regenerate preserved         | `createForLogin`, §5.5; R3, R6, R8                                    |
+| (rev. 3) set/destroy ordering atomic under concurrency                | §5.3.1 interleaving table; S1–S3                                      |
+| (rev. 3) A modifies + pauses, B logs out, A completes; old cookie 401 | R1 (exact scenario), with store event proof                           |
+| (rev. 3) Actual Prisma-backed store evidenced                         | §5.9 (Prisma 7.10.1 + adapter-pg)                                     |
 
 ## 6. PostgreSQL triggers and migration strategy
 
 ### 6.1 Trigger inventory ([`m1/triggers.sql`](m1/triggers.sql))
 
-| Trigger                       | Table / timing                                                                     | Rule                                                                                                                                                                            | SQLSTATE         |
-| ----------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| `*_no_delete`                 | projects, channels, characters, environments, assets, content_items; BEFORE DELETE | Archive only                                                                                                                                                                    | `AC006`          |
-| `*_versions_guard`            | character/environment versions; BEFORE INSERT/UPDATE/DELETE                        | Insert only as `draft`; approved rows are frozen (no UPDATE or DELETE); identity columns of drafts are frozen                                                                   | `AC009`, `AC001` |
-| `*_version_assets_guard`      | link tables; BEFORE INSERT/UPDATE/DELETE                                           | No link changes for approved versions. Reads the parent `FOR SHARE`, so it **waits for an in-flight approval** and then sees its result. Link keys are immutable.               | `AC002`          |
-| `*_master_guard`              | characters/environments; BEFORE INSERT/UPDATE                                      | The pointer starts NULL. It may only move **forward** (higher version number) to an **approved** version and can never be cleared. Same-parent is enforced by the composite FK. | `AC003`          |
-| `*_approval_sets_master`      | versions; **deferred constraint trigger**, AFTER UPDATE OF status                  | At COMMIT, a version approved in the transaction must be the parent's master                                                                                                    | `AC004`          |
-| `assets_guard`                | assets; BEFORE UPDATE                                                              | File identity and provenance columns are immutable; an asset referenced by an approved version can't be archived                                                                | `AC005`, `AC008` |
-| `project_members_keep_owner`  | project_members; deferred, AFTER UPDATE/DELETE of an owner row                     | At COMMIT the project still has ≥ 1 owner. Locks the project row, then the remaining owner rows.                                                                                | `AC007`          |
-| `projects_created_with_owner` | projects; deferred, AFTER INSERT                                                   | A project must be created together with its owner membership                                                                                                                    | `AC007`          |
+| Trigger                       | Table / timing                                                                     | Rule                                                                                                                                                                                                                                              | SQLSTATE                      |
+| ----------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `*_no_delete`                 | projects, channels, characters, environments, assets, content_items; BEFORE DELETE | Archive only                                                                                                                                                                                                                                      | `AC006`                       |
+| `*_versions_guard`            | character/environment versions; BEFORE INSERT/UPDATE/DELETE                        | Insert only as `draft`; approved rows are frozen (no UPDATE or DELETE); identity columns of drafts are frozen. **On `draft → approved`: locks the primary and every linked asset `FOR SHARE` (id order) and rejects any archived asset** (rev. 3) | `AC009`, `AC001`, **`AC010`** |
+| `*_version_assets_guard`      | link tables; BEFORE INSERT/UPDATE/DELETE                                           | No link changes for approved versions. Reads the parent `FOR SHARE`, so it **waits for an in-flight approval** and then sees its result. Link keys are immutable.                                                                                 | `AC002`                       |
+| `*_master_guard`              | characters/environments; BEFORE INSERT/UPDATE                                      | The pointer starts NULL. It may only move **forward** (higher version number) to an **approved** version and can never be cleared. Same-parent is enforced by the composite FK.                                                                   | `AC003`                       |
+| `*_approval_sets_master`      | versions; **deferred constraint trigger**, AFTER UPDATE OF status                  | At COMMIT, a version approved in the transaction must be the parent's master                                                                                                                                                                      | `AC004`                       |
+| `assets_guard`                | assets; BEFORE UPDATE                                                              | File identity and provenance columns are immutable. On archive (`archived_at` NULL → set): **first locks every version referencing the asset `FOR SHARE` (id order)**, then refuses if any is approved (rev. 3)                                   | `AC005`, `AC008`              |
+| `project_members_keep_owner`  | project_members; deferred, AFTER UPDATE/DELETE of an owner row                     | At COMMIT the project still has ≥ 1 owner. Locks the project row, then the remaining owner rows.                                                                                                                                                  | `AC007`                       |
+| `projects_created_with_owner` | projects; deferred, AFTER INSERT                                                   | A project must be created together with its owner membership                                                                                                                                                                                      | `AC007`                       |
 
-### 6.2 Behaviour under direct SQL (verified, 38/38)
+### 6.2 Behaviour under direct SQL (verified, 49/49)
 
 Every rule above fires for raw `UPDATE`/`DELETE`/`INSERT` issued outside the application, as
 does the composite-FK project isolation. The test script
@@ -365,17 +452,34 @@ case, for example:
 - Cross-project link or lineage: `23503`.
 - Demoting or deleting the last owner: `AC007`.
 - Hard deletes: `AC006`.
+- (rev. 3) Approving a draft whose **primary** asset is archived: `AC010`.
+- (rev. 3) Approving a draft with a **linked** archived asset: `AC010`. The same for
+  environments.
+- (rev. 3) Approve, then archive its asset in the same transaction: `AC008`.
+- (rev. 3) Archiving an asset used only by drafts is allowed (U4). Unarchive-then-approve
+  succeeds (control).
+- (rev. 3) Environment tables: immutability `AC001`, frozen links `AC002`, in-use archive
+  `AC008`, delete `AC006`.
 
 ### 6.3 Concurrency (verified with two concurrent sessions)
 
-| Case                                                                    | Result                                                                                                                                                                                                                                            |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| C1: two owners demote each other concurrently (READ COMMITTED, raw SQL) | One commits; the other aborts (`AC007` or deadlock `40P01`). **The project always keeps an owner.**                                                                                                                                               |
-| C2: link insert while an approval of that version is in flight          | The insert waits on the `FOR SHARE` lock, then fails with `AC002`; 0 links added                                                                                                                                                                  |
-| C3: approvals of v5 and v4 race without the service lock                | v5 wins; v4's pointer move fails with `AC003`, and v4 stays draft                                                                                                                                                                                 |
-| C4: the same version approved twice with the service algorithm          | The second caller blocks on the parent lock, then sees `approved` and does nothing                                                                                                                                                                |
-| C5: C1 under **REPEATABLE READ**                                        | **Initially left zero owners.** The trigger only locked the project row, which a stale RR snapshot does not protect. **Fixed**: the trigger also locks the remaining owner rows `FOR UPDATE`, so RR now raises `40001` (or `40P01`). Re-verified. |
-| C6: service last-owner algorithm                                        | READ COMMITTED: a clean `409 LAST_OWNER`. REPEATABLE READ: the service check passes on a stale snapshot, and the trigger raises `40001`.                                                                                                          |
+| Case                                                                           | Result                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1: two owners demote each other concurrently (READ COMMITTED, raw SQL)        | One commits; the other aborts (`AC007` or deadlock `40P01`). **The project always keeps an owner.**                                                                                                                                               |
+| C2: link insert while an approval of that version is in flight                 | The insert waits on the `FOR SHARE` lock, then fails with `AC002`; 0 links added                                                                                                                                                                  |
+| C3: approvals of v5 and v4 race without the service lock                       | v5 wins; v4's pointer move fails with `AC003`, and v4 stays draft                                                                                                                                                                                 |
+| C4: the same version approved twice with the service algorithm                 | The second caller blocks on the parent lock, then sees `approved` and does nothing                                                                                                                                                                |
+| C5: C1 under **REPEATABLE READ**                                               | **Initially left zero owners.** The trigger only locked the project row, which a stale RR snapshot does not protect. **Fixed**: the trigger also locks the remaining owner rows `FOR UPDATE`, so RR now raises `40001` (or `40P01`). Re-verified. |
+| C6: service last-owner algorithm                                               | READ COMMITTED: a clean `409 LAST_OWNER`. REPEATABLE READ: the service check passes on a stale snapshot, and the trigger raises `40001`.                                                                                                          |
+| **A1** (rev. 3): raw archive first, then approval (primary and link reference) | RC: approval waits on the asset lock, then `AC010`. RR: `40001`. Invariant holds.                                                                                                                                                                 |
+| **A2** (rev. 3): raw approval first, then archive                              | RC: archive waits on the version lock, then `AC008`. RR: `40001`. Invariant holds.                                                                                                                                                                |
+| **A3** (rev. 3): service approval first, then service archive                  | RC: the archive service sees the approval and returns `409 ASSET_IN_USE`. RR: `40001`.                                                                                                                                                            |
+| **A4** (rev. 3): service archive first, then service approval                  | RC: the approval service sees the archived asset and returns `409 ASSET_ARCHIVED`. RR: `40001`.                                                                                                                                                   |
+| Negative control: A2 at RR **without** the archive-side version locks          | **Invariant violated**: an approved version with an archived asset committed. This proves the archive-side lock is required.                                                                                                                      |
+| U3: `acf_app` tries to bypass the triggers                                     | `ALTER TABLE … DISABLE TRIGGER`, `TRUNCATE`, `DROP TRIGGER`, `SET session_replication_role` are all denied                                                                                                                                        |
+
+A1–A4 ran for primary and linked references at both isolation levels (16 runs). No deadlocks
+occurred, because each side acquires both of its locks within its first statement (§6.5).
 
 Rule: **application transactions run at READ COMMITTED** (the PostgreSQL and Prisma default) and
 take explicit row locks (§7). The triggers stay correct at any isolation level, because a race
@@ -400,6 +504,34 @@ surfaces as an error, never as a broken invariant. The API maps `40001`/`40P01` 
    `prisma migrate deploy`. Each test file cleans up with
    `TRUNCATE … RESTART IDENTITY CASCADE`, which bypasses row triggers by design.
 
+### 6.5 Locking protocol and guarantees (summary)
+
+**Lock order:** `project → parent (character/environment) → version → asset`. Every service
+transaction acquires locks in this order. Triggers acquire theirs within a single statement.
+
+| Operation                          | Locks, in order                                                                                                       | Conflicts with                                                                                  |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Approve version                    | parent `FOR NO KEY UPDATE` → version `FOR UPDATE` (the status UPDATE) → primary + linked assets `FOR SHARE`, id order | Archive of any of those assets; another approval of the same parent; link edits of that version |
+| Archive asset                      | referencing versions `FOR SHARE`, id order → asset row (`FOR NO KEY UPDATE` via its UPDATE)                           | Approval of any referencing version                                                             |
+| Add/remove/reorder version link    | version `FOR SHARE` (link trigger)                                                                                    | Approval of that version                                                                        |
+| Move master pointer                | parent row (UPDATE)                                                                                                   | Other pointer moves of that parent                                                              |
+| Change owner membership            | project `FOR NO KEY UPDATE` → remaining owner rows `FOR UPDATE`                                                       | Other owner changes in that project                                                             |
+| Session `set`/`touch` vs `destroy` | the session row (single statement)                                                                                    | Each other (§5.3.1)                                                                             |
+
+**Guarantees:**
+
+1. Invariants hold for **any** client: the service, raw SQL, or a future worker.
+2. Under **READ COMMITTED** (used by the application), a losing transaction waits, re-reads the
+   committed row, and fails with a precise code (`AC0xx`). The service pre-checks turn that into
+   a 409 before the trigger fires.
+3. Under **REPEATABLE READ / SERIALIZABLE**, a losing transaction fails with `40001` instead of
+   acting on a stale snapshot. This is why each guard locks the rows it reads, not just the rows
+   it writes.
+4. Races end in an error, **never** in an invalid commit. `40001`/`40P01` map to
+   `409 CONCURRENT_MODIFICATION` (`retryable: true`).
+5. Shared `FOR SHARE` locks do not conflict with each other, so two approvals that share an
+   asset do not block one another.
+
 ## 7. Approval and master-pointer concurrency strategy
 
 **Approve** `POST /character-versions/:id/approve` (editor+; optional `If-Match`):
@@ -411,10 +543,12 @@ SELECT project_id, master_version_id FROM characters
 -- authorization: ProjectAccess.require(actor, project_id, 'editor')
 SELECT version, status, updated_at FROM character_versions
   WHERE id = $version AND character_id = $character FOR UPDATE;   -- 2. lock the version
--- status = 'approved'           -> 409 ALREADY_APPROVED (no change)
+SELECT id, archived_at FROM assets                        -- 3. lock referenced assets (rev. 3)
+  WHERE id IN (<primary_asset_id>, <linked asset ids>) ORDER BY id FOR SHARE;
+-- status = 'approved'           -> 409 ALREADY_APPROVED (no change, U5)
 -- If-Match given and mismatch   -> 412 PRECONDITION_FAILED
 -- version <= master.version     -> 409 STALE_DRAFT (U2)
--- primary/linked asset archived -> 409 ASSET_ARCHIVED (U4)
+-- any locked asset archived     -> 409 ASSET_ARCHIVED (U4)
 UPDATE character_versions SET status='approved', approved_at=now(), approved_by_id=$actor
   WHERE id = $version AND status = 'draft';
 UPDATE characters SET master_version_id = $version WHERE id = $character;
@@ -432,6 +566,11 @@ COMMIT;   -- deferred trigger confirms the pointer moved (AC004 otherwise)
   `409 VERSION_IMMUTABLE`. `If-Match` on approve lets a reviewer guarantee they approve exactly
   what they reviewed.
 - **Link edit vs approval**: covered by the link trigger's `FOR SHARE` (C2).
+- **Asset archive vs approval** (rev. 3): the archive service runs
+  `SELECT … FROM *_versions WHERE <references asset> ORDER BY id FOR SHARE`, then
+  `SELECT … FROM assets WHERE id = $a FOR NO KEY UPDATE`, then checks usages
+  (`409 ASSET_IN_USE`), then updates. The trigger repeats the same checks as a backstop
+  (A1–A4).
 - Prisma: an interactive `$transaction` with `$queryRaw` for the `FOR … UPDATE` reads (verified
   end to end, including the stale-draft rejection).
 
@@ -521,6 +660,7 @@ The envelope is unchanged (API_SPEC §10). Validation failures add
 | `AC006`                            | 409 `ARCHIVE_ONLY`                                                          |
 | `AC007`                            | 409 `LAST_OWNER`                                                            |
 | `AC008`                            | 409 `ASSET_IN_USE`                                                          |
+| `AC010` (rev. 3)                   | 409 `ASSET_ARCHIVED`                                                        |
 | `40001` / `40P01`                  | 409 `CONCURRENT_MODIFICATION`, `retryable: true` (after one internal retry) |
 
 Model-operation errors arrive as `PrismaClientKnownRequestError` with
@@ -566,47 +706,53 @@ normally never reach users.
 
 ## 10. ADR changes in this package
 
-- **ADR-0009** (updated): D2 conditions and the concrete session design.
-- **ADR-0010** (new, proposed): versioning, master pointer and approval concurrency.
-- **ADR-0011** (new, proposed): database-enforced integrity (composite FKs, CHECKs, triggers,
-  SQLSTATE contract, isolation rules).
+- **ADR-0009** (updated, rev. 3): D2 conditions, UPDATE-only `set()` / `createForLogin`, why no
+  tombstone, Prisma 7 evidence.
+- **ADR-0010** (proposed, rev. 3): adds the approval-time asset check and the lock order.
+- **ADR-0011** (proposed, rev. 3): adds `AC010`, the archive-side version locks, RR-safety via
+  read locks, and U3 (approved).
 - **ADR-0007**: D10 recorded as "not adopted; evaluation only".
 
 ## 11. Remaining risks and open decisions
 
-### Open decisions (owner input requested)
+### Decisions U1–U7 (approved by the owner as documented)
 
-| #   | Question                                                                                                             | Recommendation                                                                                                                                                                                                                |
-| --- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U1  | `ContentStatus` values differ between `DATABASE.md` §4 and `CONTENT_PIPELINE.md` §1.                                 | Adopt the **CONTENT_PIPELINE** list (as in the schema proposal) and update `DATABASE.md`. Only `draft` is used in M1.                                                                                                         |
-| U2  | Approving a draft numbered **below** the current master.                                                             | Reject with `409 STALE_DRAFT`; the user creates a new draft `basedOnVersionId` it. This keeps the master monotonic, as the trigger enforces.                                                                                  |
-| U3  | Database roles: should the API connect as a non-owner role (DML only), so it cannot `DISABLE TRIGGER` or `TRUNCATE`? | **Yes**: `acf_migrator` (owner; used by migrations, tests and seed) and `acf_app` (runtime DML grants), from M1 in compose and CI. Without it, the "direct SQL" protections can be switched off by the app's own credentials. |
-| U4  | Draft versions referencing an asset that is later archived.                                                          | Allowed while draft; **approval is refused** with `409 ASSET_ARCHIVED`.                                                                                                                                                       |
-| U5  | Second approval of an already-approved version.                                                                      | `409 ALREADY_APPROVED` with the current state in the body (not a silent 200).                                                                                                                                                 |
-| U6  | Discarding drafts.                                                                                                   | No delete endpoint in M1; drafts stay until approved or superseded. Add `DELETE` (drafts only) later if needed.                                                                                                               |
-| U7  | Unarchive.                                                                                                           | Not in M1; owner-only `POST …/unarchive` in a later milestone.                                                                                                                                                                |
+| #   | Question                                                                                                             | Recommendation                                                                                                                                                                                                                                                                                                                                  |
+| --- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1  | `ContentStatus` values differ between `DATABASE.md` §4 and `CONTENT_PIPELINE.md` §1.                                 | Adopt the **CONTENT_PIPELINE** list (as in the schema proposal) and update `DATABASE.md`. Only `draft` is used in M1.                                                                                                                                                                                                                           |
+| U2  | Approving a draft numbered **below** the current master.                                                             | Reject with `409 STALE_DRAFT`; the user creates a new draft `basedOnVersionId` it. This keeps the master monotonic, as the trigger enforces.                                                                                                                                                                                                    |
+| U3  | Database roles: should the API connect as a non-owner role (DML only), so it cannot `DISABLE TRIGGER` or `TRUNCATE`? | **Yes**: `acf_migrator` (owner; used by migrations, tests and seed) and `acf_app` (runtime DML grants), from M1 in compose and CI. Without it, the "direct SQL" protections can be switched off by the app's own credentials. **Rev. 3: verified** that `acf_app` cannot disable or drop triggers, truncate, or set `session_replication_role`. |
+| U4  | Draft versions referencing an asset that is later archived.                                                          | Allowed while draft; **approval is refused** with `409 ASSET_ARCHIVED`.                                                                                                                                                                                                                                                                         |
+| U5  | Second approval of an already-approved version.                                                                      | `409 ALREADY_APPROVED` with the current state in the body (not a silent 200).                                                                                                                                                                                                                                                                   |
+| U6  | Discarding drafts.                                                                                                   | No delete endpoint in M1; drafts stay until approved or superseded. Add `DELETE` (drafts only) later if needed.                                                                                                                                                                                                                                 |
+| U7  | Unarchive.                                                                                                           | Not in M1; owner-only `POST …/unarchive` in a later milestone.                                                                                                                                                                                                                                                                                  |
+
+No open decisions remain in this revision.
 
 ### Risks
 
-| Risk                                                                         | Mitigation                                                                                              |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| The session store is our code (persistence only)                             | Contract tests against express-session semantics (§5.9 suite); no crypto in it                          |
-| `csrf-csrf` has a single maintainer                                          | The Origin check is an independent second layer; the library is pinned                                  |
-| Triggers can be lost by a careless later migration                           | `pg_trigger`/`pg_constraint` presence test in CI (§6.4)                                                 |
-| Raw-SQL races can surface as deadlocks (`40P01`)                             | Service lock ordering avoids them; mapped to a retryable 409                                            |
-| express-session silently skips `Secure` cookies behind a misconfigured proxy | Login fail-closed check (§5.5) plus a production config rule for `TRUST_PROXY`                          |
-| `@nestjs/throttler` in-memory storage is per instance                        | Acceptable for the single-instance pilot; Redis storage later                                           |
-| Overlapping composite-FK scalars complicate Prisma nested writes             | Services write scalar FKs directly (§3)                                                                 |
-| `zod-openapi` coverage could drift from routes                               | Route-coverage test (§8.5)                                                                              |
-| Next.js passes through a client-supplied `X-Forwarded-Proto`                 | The TLS proxy overwrites it; the API is not publicly reachable (§5.6). Deployment docs will state this. |
+| Risk                                                                         | Mitigation                                                                                                  |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| The session store is our code (persistence only)                             | Contract tests against express-session semantics (§5.9 suite); no crypto in it                              |
+| An in-flight request authorized before logout completes after it             | Accepted: authorization is per request, and its session writes are discarded (§5.3.1, R1)                   |
+| An anonymous `req.session` write issues an inert cookie                      | Design rule plus a public-routes-no-cookie test (§5.3.1, R7)                                                |
+| A future change adds a second session INSERT path                            | ADR-0009 records the "single creation path" invariant; the R1–R5 suite becomes a permanent integration test |
+| `csrf-csrf` has a single maintainer                                          | The Origin check is an independent second layer; the library is pinned                                      |
+| Triggers can be lost by a careless later migration                           | `pg_trigger`/`pg_constraint` presence test in CI (§6.4)                                                     |
+| Raw-SQL races can surface as deadlocks (`40P01`)                             | Service lock ordering avoids them; mapped to a retryable 409                                                |
+| express-session silently skips `Secure` cookies behind a misconfigured proxy | Login fail-closed check (§5.5) plus a production config rule for `TRUST_PROXY`                              |
+| `@nestjs/throttler` in-memory storage is per instance                        | Acceptable for the single-instance pilot; Redis storage later                                               |
+| Overlapping composite-FK scalars complicate Prisma nested writes             | Services write scalar FKs directly (§3)                                                                     |
+| `zod-openapi` coverage could drift from routes                               | Route-coverage test (§8.5)                                                                                  |
+| Next.js passes through a client-supplied `X-Forwarded-Proto`                 | The TLS proxy overwrites it; the API is not publicly reachable (§5.6). Deployment docs will state this.     |
 
 ## 12. Implementation plan (after approval; each step ends green)
 
-1. Database roles (if U3 is approved), the schema, the `init_m1` migration with the triggers,
+1. Database roles (U3: `acf_migrator` / `acf_app`), the schema, the `init_m1` migration with the triggers,
    trigger-presence and drift tests, and the direct-SQL and concurrency suites ported to Vitest.
 2. Contracts, `ZodValidationPipe`, the error mapper (§8.3), pagination, ETag/`If-Match`,
    OpenAPI, helmet.
-3. Auth: config, `PrismaSessionStore`, express-session wiring, login/logout/me/csrf, Origin and
+3. Auth: config, `PrismaSessionStore` (as evidenced in §5.9), express-session wiring, login/logout/me/csrf, Origin and
    CSRF, throttler, guard, CLI (`user:create`, `user:set-password`, `user:disable`), and the
    session integration suite.
 4. `ProjectAccess`, projects and members (last owner).
