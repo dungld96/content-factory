@@ -432,7 +432,18 @@ pre-check every rule, so these are a backstop for races and direct SQL:
 | `AC007` | `409 LAST_OWNER` |
 | `AC008` | `409 ASSET_IN_USE` |
 | `AC010` | `409 ASSET_ARCHIVED` |
-| `40001` / `40P01` | `409 CONCURRENT_MODIFICATION`, `retryable: true` (transactions retry once internally first; a `40P01` is also logged as a defect) |
+| `40001` / `40P01` | `409 CONCURRENT_MODIFICATION`, `retryable: true` (a `40001` is first retried once internally; a `40P01` is never retried, see below) |
+
+Transaction retry policy (`apps/api/src/infrastructure/transaction-runner.ts`). Every attempt runs
+at READ COMMITTED (ADR-0011 §6); the error that ends the last attempt propagates unchanged to the
+mapper above:
+
+| SQLSTATE | Behavior |
+|---|---|
+| `40001` (serialization failure) | Retry once; if the retry also fails, propagate the second error |
+| `40P01` (deadlock) | Log `deadlock_detected` at error level (a defect: protocol paths cannot deadlock) and propagate immediately; never retried |
+| `AC001`–`AC010` | No retry |
+| Other errors | No retry |
 
 ## 11. API conventions
 

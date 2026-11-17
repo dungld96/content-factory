@@ -813,6 +813,8 @@ The envelope is unchanged (API_SPEC §10). Validation failures add
 | `AC010` (rev. 3)                   | 409 `ASSET_ARCHIVED`                                                        |
 | `40001` / `40P01`                  | 409 `CONCURRENT_MODIFICATION`, `retryable: true` (after one internal retry) |
 
+Only `40001` gets the internal retry; a `40P01` is a defect (§6.3.1) and is never retried.
+
 Model-operation errors arrive as `PrismaClientKnownRequestError` with
 `meta.driverAdapterError.cause.originalCode` set to the SQLSTATE. **Deferred-trigger errors raised
 at COMMIT arrive as a bare `DriverAdapterError`.** The mapper handles both shapes (verified in
