@@ -902,15 +902,21 @@ No open decisions remain in this revision.
 
 ## 12. Implementation plan (after approval; each step ends green)
 
+Owner decisions recorded at the M1b–M1d review (2026-11-17): the API exposes one `rules` field
+for character identity rules and environment visual rules; `sourceType: generated` is refused
+until provider jobs exist (M4); new references to archived assets are refused
+(`409 ASSET_ARCHIVED`), while drafts keep references to assets archived later (U4); `pnpm
+db:seed` creates a development-only demo workspace.
+
 Delivery is split into five review slices; each is reviewed before the next starts:
 
 | Slice | Steps | Scope                                                                                                              | Status                             |
 | ----- | ----- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
 | M1a   | 1     | Database roles, schema, `init_m1` migration with triggers, presence/drift tests, direct-SQL and concurrency suites | Done, reviewed (owner, 2026-11-17) |
-| M1b   | 2–3   | API foundation (contracts, validation, error mapper, pagination, ETag, OpenAPI, helmet) and auth                   | Implemented, awaiting review       |
-| M1c   | 4–5   | `ProjectAccess`, projects, members (last owner), channels, content items                                           | Implemented, awaiting review       |
-| M1d   | 6–7   | Characters, environments, versions and approval, asset links; assets, lineage, usages, archive                     | Implemented, awaiting review       |
-| M1e   | 8–10  | Seed, permission-matrix test, web (login, projects, logout, E2E), docs                                             | Not started                        |
+| M1b   | 2–3   | API foundation (contracts, validation, error mapper, pagination, ETag, OpenAPI, helmet) and auth                   | Done, reviewed (owner, 2026-11-17) |
+| M1c   | 4–5   | `ProjectAccess`, projects, members (last owner), channels, content items                                           | Done, reviewed (owner, 2026-11-17) |
+| M1d   | 6–7   | Characters, environments, versions and approval, asset links; assets, lineage, usages, archive                     | Done, reviewed (owner, 2026-11-17) |
+| M1e   | 8–10  | Seed, permission-matrix test, web (login, projects, logout, E2E), docs                                             | In progress                        |
 
 1. Database roles (U3: `acf_migrator` / `acf_app`), the schema, the `init_m1` migration with the triggers,
    trigger-presence and drift tests, and the direct-SQL and concurrency suites ported to Vitest.

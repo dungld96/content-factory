@@ -70,7 +70,7 @@ pnpm test:integration
 | Milestone | Status |
 |---|---|
 | M0 — Foundation | Done: workspace, config validation, health checks, Prisma bootstrap, ADRs |
-| M1 — Domain, persistence, identity & access | Design revision 4 approved (`docs/design/M1-design-review-package.md`). Delivered in slices M1a–M1e (§12). M1a (database foundation) done and reviewed; M1b (API foundation + auth), M1c (projects, members, channels, content) and M1d (characters, environments, versions, assets) implemented, awaiting review; M1e not started |
+| M1 — Domain, persistence, identity & access | Design revision 4 approved (`docs/design/M1-design-review-package.md`). Delivered in slices M1a–M1e (§12). M1a–M1d (database, API foundation + auth, projects/members/channels/content, characters/environments/versions/assets) done and reviewed; M1e (seed, web, E2E, docs) in progress |
 | M2–M8 | Not started |
 
 ## Decisions fixed for MVP
