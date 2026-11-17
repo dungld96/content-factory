@@ -128,17 +128,31 @@ Do not implement direct social publishing, multi-tenant SaaS billing, fine-tunin
 
 Do not build all milestones in one task. Implement one milestone at a time and wait for review.
 
-## 12. First task
+## 12. Project status
 
-Start with M0 only:
-- Inspect repository.
-- Create monorepo skeleton.
-- Configure pnpm, TypeScript, lint, formatting, and tests.
-- Add Docker Compose for PostgreSQL and Redis.
-- Add validated environment configuration.
-- Add NestJS health endpoint and Next.js shell.
-- Add Prisma bootstrap.
-- Add ADR directory and initial ADRs.
-- Document exact commands to run locally.
+_Last updated: 2026-11-17 (branch `claude/gracious-planck-kuf4pq`, commit `b1340a8`)._
 
-Do not implement AI provider integrations or content generation during M0.
+| Milestone | Status |
+|---|---|
+| M0 — Foundation | **Done and reviewed.** pnpm workspace, NestJS API with `/api/v1/health` and `/api/v1/health/ready`, Next.js shell, validated env config, Prisma bootstrap, Docker Compose (PostgreSQL 17, Redis 7.4), ESLint/Prettier/Vitest, CI (Node 22 + 24), ADRs 0001–0009. |
+| M1 — Domain, persistence, identity & access | **Design phase. Revision 4 of the design package awaits owner approval. No M1 application code exists.** |
+| M2–M8 | Not started. |
+
+Current M1 design artifacts (read these before any M1 work):
+- `docs/design/M1-design-review-package.md` — ERD, constraints, sessions, triggers, lock protocol, API/permission matrix, decision log.
+- `docs/design/m1/schema.prisma`, `docs/design/m1/triggers.sql`, `docs/design/m1/generated-tables.sql`.
+- `docs/design/m1/evidence/` — reproducible verification (`bash docs/design/m1/evidence/run-all.sh --negative-controls`, requires `pnpm infra:up`).
+- ADR-0009 (auth/sessions), ADR-0010 (versioning/approval), ADR-0011 (database-enforced integrity).
+
+Decisions already made by the owner (do not re-open without being asked):
+- D1–D9, D11, D12 and U1–U7 approved as recorded in the design package; D2 (Prisma-backed express-session store) conditionally approved.
+- D10 (`eslint-plugin-jsx-a11y-x`): evaluation only; must not become a workspace dependency.
+- Node.js 22 stays the default runtime; Node 24 is a CI compatibility target only.
+- Runtime DB role `acf_app` (DML only) separate from the owner/migration role `acf_migrator`.
+
+Invariants established in the M1 design that implementation must preserve:
+- Session rows are created only by `createForLogin()` after `regenerate()`; `set()`/`touch()` are UPDATE-only.
+- Lock order: version → parent → asset rows (ascending id); member → project. Guards only lock rows later in the order; a `40P01` on these paths is a defect.
+- Approved versions, their asset links and asset file identity are immutable; entities are archived, not deleted.
+
+Next step: wait for explicit owner approval of design revision 4, then implement M1 incrementally per §12 of the design package. Do not start M2 without review.
