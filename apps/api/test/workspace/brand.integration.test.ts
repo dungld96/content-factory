@@ -255,32 +255,35 @@ describe('concurrency (service paths, READ COMMITTED)', () => {
   it.each([
     ['without existing links', false],
     ['with existing links', true],
-  ])('concurrent link replacements %s never deadlock or merge (ADR-0011 §5 exception)', async (_name, linked) => {
-    const before = await deadlockCount();
-    for (let round = 0; round < 10; round++) {
-      const f = await ctx.fixture();
-      const extra = bodyOf<{ id: string }>(
-        await ctx.as('editor', 'POST', `/projects/${f.projectId}/assets`, {
-          body: newAsset(f.projectId),
-        }),
-      ).id;
-      const path = `/character-versions/${f.characterVersionId}/assets`;
-      if (linked) {
-        await ctx.as('editor', 'PUT', path, { body: { assets: [{ assetId: f.assetId }] } });
+  ])(
+    'concurrent link replacements %s never deadlock or merge (ADR-0011 §5 exception)',
+    async (_name, linked) => {
+      const before = await deadlockCount();
+      for (let round = 0; round < 10; round++) {
+        const f = await ctx.fixture();
+        const extra = bodyOf<{ id: string }>(
+          await ctx.as('editor', 'POST', `/projects/${f.projectId}/assets`, {
+            body: newAsset(f.projectId),
+          }),
+        ).id;
+        const path = `/character-versions/${f.characterVersionId}/assets`;
+        if (linked) {
+          await ctx.as('editor', 'PUT', path, { body: { assets: [{ assetId: f.assetId }] } });
+        }
+        const [a, b] = await Promise.all([
+          ctx.as('editor', 'PUT', path, { body: { assets: [{ assetId: f.spareAssetId }] } }),
+          ctx.as('owner', 'PUT', path, { body: { assets: [{ assetId: extra }] } }),
+        ]);
+        expect([a.status, b.status]).toEqual([200, 200]);
+        // Last writer wins (no If-Match): exactly one of the two link sets remains.
+        const final = bodyOf<VersionDto>(
+          await ctx.as('viewer', 'GET', `/character-versions/${f.characterVersionId}`),
+        );
+        expect([[f.spareAssetId], [extra]]).toContainEqual(final.assets.map((l) => l.assetId));
       }
-      const [a, b] = await Promise.all([
-        ctx.as('editor', 'PUT', path, { body: { assets: [{ assetId: f.spareAssetId }] } }),
-        ctx.as('owner', 'PUT', path, { body: { assets: [{ assetId: extra }] } }),
-      ]);
-      expect([a.status, b.status]).toEqual([200, 200]);
-      // Last writer wins (no If-Match): exactly one of the two link sets remains.
-      const final = bodyOf<VersionDto>(
-        await ctx.as('viewer', 'GET', `/character-versions/${f.characterVersionId}`),
-      );
-      expect([[f.spareAssetId], [extra]]).toContainEqual(final.assets.map((l) => l.assetId));
-    }
-    expect(await deadlockCount()).toBe(before);
-  });
+      expect(await deadlockCount()).toBe(before);
+    },
+  );
 
   it('concurrent approvals of v1 and v2: the master ends at the highest approved version', async () => {
     for (let round = 0; round < 5; round++) {
