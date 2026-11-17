@@ -131,7 +131,8 @@ Do not build all milestones in one task. Implement one milestone at a time and w
 ## 12. Project status
 
 - **M0 — Foundation:** done and reviewed.
-- **M1 — Domain, persistence, identity & access:** design revision 4 approved; delivered in slices M1a–M1e (design package §12). M1a–M1d (database, API foundation + auth, projects/members/channels/content, characters/environments/versions/assets) done and reviewed. M1e (seed, web, E2E, docs) implemented, awaiting review.
-- **M2–M8:** not started.
+- **M1 — Domain, persistence, identity & access:** done and approved (design revision 4, slices M1a–M1e).
+- **M2 — AI core and model registry:** design package revision 1 proposed (`docs/design/M2-design-review-package.md`, ADR-0012); no M2 code until it is approved.
+- **M3–M8:** not started.
 
-Before M1 work, read `docs/design/M1-design-review-package.md` and ADR-0009 to ADR-0011. Do not start M2 without review.
+Before M1-area work, read `docs/design/M1-design-review-package.md` and ADR-0009 to ADR-0011. Before M2 work, read `docs/design/M2-design-review-package.md`, its verification record and ADR-0012.

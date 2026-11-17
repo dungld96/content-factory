@@ -16,6 +16,7 @@ numbered sequentially. Never rewrite an accepted ADR — supersede it with a new
 | [0009](0009-authentication-strategy.md) | Authentication strategy (incl. D2 session store) | Accepted (D2 approved with M1 package rev. 4) |
 | [0010](0010-versioning-master-pointer-and-approval.md) | Versioning, master pointer and approval concurrency | Accepted (M1 package, rev. 4) |
 | [0011](0011-database-enforced-integrity.md) | Database-enforced integrity | Accepted (M1 package, rev. 4) |
+| [0012](0012-ai-registry-usage-ledger-and-money.md) | AI registry, usage ledger and money precision | Proposed (M2 package, rev. 1) |
 
 ## Template
 

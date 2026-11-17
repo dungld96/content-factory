@@ -1,6 +1,6 @@
 # M1 Design Review Package — Domain, Persistence, Identity & Access
 
-- Status: **Revision 4, approved by the owner (2026-11-17).** Implemented in slices M1a–M1e (§12).
+- Status: **Revision 4, approved by the owner (2026-11-17).** Implemented in slices M1a–M1e (§12); M1 accepted (2026-11-17).
 - Date: 2026-11-17
 - Supersedes: revision 3 (`372d976`), revision 2 (`c5b9105`) and revision 1 (`M1-domain-auth-proposal.md`)
 - Companion files:
@@ -917,7 +917,7 @@ Delivery is split into five review slices; each is reviewed before the next star
 | M1b   | 2–3   | API foundation (contracts, validation, error mapper, pagination, ETag, OpenAPI, helmet) and auth                   | Done, reviewed (owner, 2026-11-17) |
 | M1c   | 4–5   | `ProjectAccess`, projects, members (last owner), channels, content items                                           | Done, reviewed (owner, 2026-11-17) |
 | M1d   | 6–7   | Characters, environments, versions and approval, asset links; assets, lineage, usages, archive                     | Done, reviewed (owner, 2026-11-17) |
-| M1e   | 8–10  | Seed, permission-matrix test, web (login, projects, logout, E2E), docs                                             | Implemented, awaiting review       |
+| M1e   | 8–10  | Seed, permission-matrix test, web (login, projects, logout, E2E), docs                                             | Done, reviewed (owner, 2026-11-17) |
 
 1. Database roles (U3: `acf_migrator` / `acf_app`), the schema, the `init_m1` migration with the triggers,
    trigger-presence and drift tests, and the direct-SQL and concurrency suites ported to Vitest.
