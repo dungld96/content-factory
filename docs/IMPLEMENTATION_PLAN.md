@@ -37,6 +37,11 @@ Acceptance:
 - Integration tests cover core CRUD.
 - Authorization boundaries are defined.
 
+Delivery: the design in `docs/design/M1-design-review-package.md` (revision 4) is implemented in
+five reviewed slices: M1a database foundation, M1b API foundation and auth, M1c
+projects/members/channels/content, M1d characters/environments/versions/assets, M1e seed,
+permission matrix, web and docs (package §12).
+
 ### M2 — AI core and model registry
 Deliverables:
 - Capability interfaces.

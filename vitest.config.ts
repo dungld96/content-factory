@@ -56,6 +56,20 @@ export default defineConfig({
         },
       },
       {
+        test: {
+          name: 'integration:database',
+          root: path.join(root, 'packages/database'),
+          include: ['test/**/*.integration.test.ts'],
+          environment: 'node',
+          // Builds the disposable `acf_test` database from the committed migrations.
+          globalSetup: [path.join(root, 'packages/database/test/global-setup.ts')],
+          // Files share one database and TRUNCATE it: run them one at a time.
+          fileParallelism: false,
+          testTimeout: 30_000,
+          hookTimeout: 120_000,
+        },
+      },
+      {
         plugins: [nestSwc()],
         test: {
           name: 'integration:api',

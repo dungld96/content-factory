@@ -28,6 +28,15 @@ pnpm infra:up
 until both are healthy. The ports are bound to `127.0.0.1` only.
 
 ```bash
+pnpm db:setup
+```
+
+`pnpm db:setup` creates the database roles `acf_migrator` (schema owner) and `acf_app` (runtime,
+DML only) from the URLs in `.env`, makes `acf_migrator` the owner of the `acf` and `acf_shadow`
+databases, applies the migrations as `acf_migrator`, and grants `acf_app` access. It is
+idempotent: run it again after pulling new migrations. See `docs/DATABASE.md` §8.
+
+```bash
 pnpm env:check
 ```
 
@@ -74,21 +83,55 @@ curl -s localhost:4000/api/v1/health/ready
 | `pnpm format` / `pnpm format:check` | Prettier write / check                                                 |
 | `pnpm typecheck`                    | Builds shared packages, then `tsc --noEmit` in every workspace         |
 | `pnpm test`                         | Unit and HTTP tests with mocked dependencies (no Docker, no network)   |
-| `pnpm test:integration`             | Readiness against real PostgreSQL and Redis (requires `pnpm infra:up`) |
+| `pnpm test:integration`             | Integration tests against real PostgreSQL and Redis (requires `pnpm infra:up` and `pnpm db:setup`) |
 | `pnpm test:coverage`                | Unit tests with V8 coverage                                            |
 | `pnpm build`                        | Builds all packages and apps (`next build`, `nest build`)              |
 | `pnpm check`                        | format:check + lint + typecheck + test + build (run before pushing)    |
 
 ## Database (Prisma 7)
 
-| Command            | What it does                                                                     |
-| ------------------ | -------------------------------------------------------------------------------- |
-| `pnpm db:generate` | Generates the Prisma client into `packages/database/src/generated` (git-ignored) |
-| `pnpm db:validate` | Validates `packages/database/prisma/schema.prisma`                               |
-| `pnpm db:migrate`  | `prisma migrate dev`: creates and applies a migration (no models exist until M1) |
-| `pnpm db:studio`   | Prisma Studio                                                                    |
+| Command                  | What it does                                                                                   |
+| ------------------------ | ---------------------------------------------------------------------------------------------- |
+| `pnpm db:setup`          | Roles, databases and grants, then `prisma migrate deploy`, then grants again (idempotent)      |
+| `pnpm db:bootstrap`      | Roles, databases and grants only                                                               |
+| `pnpm db:generate`       | Generates the Prisma client into `packages/database/src/generated` (git-ignored)               |
+| `pnpm db:validate`       | Validates `packages/database/prisma/schema.prisma`                                             |
+| `pnpm db:migrate`        | `prisma migrate dev`: creates and applies a migration (uses the `acf_shadow` database)         |
+| `pnpm db:migrate:deploy` | Applies pending migrations without creating new ones                                           |
+| `pnpm db:studio`         | Prisma Studio                                                                                  |
 
-The Prisma CLI reads `DATABASE_URL` from the repository-root `.env` (`packages/database/prisma.config.ts`).
+Connection URLs (all in the repository-root `.env`):
+
+| Variable                 | Role           | Used by                                                       |
+| ------------------------ | -------------- | ------------------------------------------------------------- |
+| `DATABASE_URL`           | `acf_app`      | The API (DML only)                                            |
+| `DATABASE_MIGRATION_URL` | `acf_migrator` | The Prisma CLI (`packages/database/prisma.config.ts`)         |
+| `DATABASE_SHADOW_URL`    | `acf_migrator` | `prisma migrate dev` shadow database                          |
+| `DATABASE_ADMIN_URL`     | superuser      | `pnpm db:setup` and the integration-test setup only           |
+
+The M1 migration ends with hand-written SQL (CHECK constraints, functions and triggers) that
+Prisma does not model. When you create a migration that touches a guarded table, keep the
+triggers intact; the `integration:database` tests fail if any trigger or CHECK is missing or if
+the database drifts from `schema.prisma`.
+
+### Database integration tests
+
+`pnpm test:integration` includes the `integration:database` project. Its global setup drops and
+recreates a disposable `acf_test` database, runs `prisma migrate deploy` as `acf_migrator`, and the
+tests connect as `acf_app`:
+
+- `direct-sql`: every constraint and trigger rejects forbidden direct SQL with the exact SQLSTATE.
+- `concurrency`: a deterministic two-session lock-boundary matrix (approval vs archive, owner
+  changes, out-of-order and double approvals, session `set()` vs logout). Any deadlock (`40P01`)
+  fails the test.
+- `schema-objects`: trigger/CHECK presence, Prisma drift, and the `acf_app` privilege limits.
+- `prisma-errors`: how Prisma surfaces the integrity errors (`databaseErrorInfo`).
+
+To run only these:
+
+```bash
+pnpm build:packages && pnpm vitest run --project integration:database
+```
 
 ## Infrastructure lifecycle
 
@@ -117,3 +160,7 @@ pnpm start:web
 - **Port already in use**: change `POSTGRES_PORT`, `REDIS_PORT` or `API_PORT` in `.env`. If you
   change a port, update `DATABASE_URL` / `REDIS_URL` to match.
 - **`Cannot find module '@acf/...'`**: the shared packages are not built yet. Run `pnpm build:packages`.
+- **`permission denied` or `password authentication failed for user "acf_app"`**: run
+  `pnpm db:setup`. Existing `.env` files from M0 must add `DATABASE_ADMIN_URL`,
+  `DATABASE_MIGRATION_URL` and `DATABASE_SHADOW_URL`, and point `DATABASE_URL` at `acf_app`
+  (compare with `.env.example`).

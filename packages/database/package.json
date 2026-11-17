@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./admin": {
+      "types": "./dist/admin/index.d.ts",
+      "default": "./dist/admin/index.js"
     }
   },
   "files": [
@@ -22,13 +26,17 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:bootstrap": "node scripts/db-setup.mjs bootstrap",
+    "db:setup": "node scripts/db-setup.mjs setup"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.1",
-    "@prisma/client": "7.10.1"
+    "@prisma/client": "7.10.1",
+    "pg": "8.23.1"
   },
   "devDependencies": {
+    "@types/pg": "8.23.1",
     "prisma": "7.10.1"
   }
 }

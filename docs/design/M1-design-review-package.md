@@ -902,6 +902,16 @@ No open decisions remain in this revision.
 
 ## 12. Implementation plan (after approval; each step ends green)
 
+Delivery is split into five review slices; each is reviewed before the next starts:
+
+| Slice | Steps | Scope                                                                                                              | Status                       |
+| ----- | ----- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| M1a   | 1     | Database roles, schema, `init_m1` migration with triggers, presence/drift tests, direct-SQL and concurrency suites | Implemented, awaiting review |
+| M1b   | 2–3   | API foundation (contracts, validation, error mapper, pagination, ETag, OpenAPI, helmet) and auth                   | Not started                  |
+| M1c   | 4–5   | `ProjectAccess`, projects, members (last owner), channels, content items                                           | Not started                  |
+| M1d   | 6–7   | Characters, environments, versions and approval, asset links; assets, lineage, usages, archive                     | Not started                  |
+| M1e   | 8–10  | Seed, permission-matrix test, web (login, projects, logout, E2E), docs                                             | Not started                  |
+
 1. Database roles (U3: `acf_migrator` / `acf_app`), the schema, the `init_m1` migration with the triggers,
    trigger-presence and drift tests, and the direct-SQL and concurrency suites ported to Vitest.
 2. Contracts, `ZodValidationPipe`, the error mapper (§8.3), pagination, ETag/`If-Match`,

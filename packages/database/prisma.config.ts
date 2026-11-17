@@ -11,13 +11,19 @@ try {
   // No .env file: rely on the process environment (CI, containers).
 }
 
+const shadowDatabaseUrl = process.env['DATABASE_SHADOW_URL'];
+
 export default defineConfig({
   schema: path.join('prisma', 'schema.prisma'),
   migrations: {
     path: path.join('prisma', 'migrations'),
   },
   datasource: {
-    // Not required for `prisma generate`; required for migrate/studio commands.
-    url: process.env['DATABASE_URL'] ?? '',
+    // Migrations run as the schema-owner role (acf_migrator), never as the runtime role
+    // (DATABASE_URL = acf_app, DML only). See ADR-0011 §8. Not required for `prisma generate`.
+    url: process.env['DATABASE_MIGRATION_URL'] ?? '',
+    // `prisma migrate dev` needs a shadow database; acf_migrator has no CREATEDB, so
+    // `pnpm db:bootstrap` pre-creates it.
+    ...(shadowDatabaseUrl ? { shadowDatabaseUrl } : {}),
   },
 });

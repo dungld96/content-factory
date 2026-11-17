@@ -39,7 +39,10 @@ jobs:
         options: >-
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
     env:
-      DATABASE_URL: postgresql://acf:acf_ci_only@localhost:5432/acf?schema=public
+      # Role separation (ADR-0011 §8): `pnpm db:setup` creates acf_migrator / acf_app from these.
+      DATABASE_ADMIN_URL: postgresql://acf:acf_ci_only@localhost:5432/acf
+      DATABASE_MIGRATION_URL: postgresql://acf_migrator:acf_migrator_ci_only@localhost:5432/acf?schema=public
+      DATABASE_URL: postgresql://acf_app:acf_app_ci_only@localhost:5432/acf?schema=public
       REDIS_URL: redis://localhost:6379
     steps:
       # Third-party actions are pinned to full commit SHAs (tag in the trailing comment).
@@ -57,6 +60,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm db:setup
       - run: pnpm test:integration
       - run: pnpm build
       - name: Dependency audit
