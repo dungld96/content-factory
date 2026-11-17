@@ -28,3 +28,7 @@ pnpm-debug.log*
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Next.js-generated files (re-created by `next dev` / `next typegen`)
+apps/web/next-env.d.ts
+apps/web/AGENTS.md

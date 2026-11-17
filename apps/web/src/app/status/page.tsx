@@ -1,3 +1,4 @@
+import { LocalTime } from '@/components/local-time';
 import { fetchApiHealth } from '@/lib/api-health';
 
 // Always render at request time: status must never be served from a build-time cache.
@@ -50,7 +51,9 @@ export default async function StatusPage() {
               ))}
             </tbody>
           </table>
-          <p className="muted">Checked at {new Date(health.data.timestamp).toLocaleString()}</p>
+          <p className="muted">
+            Checked at <LocalTime iso={health.data.timestamp} />
+          </p>
         </section>
       )}
     </>

@@ -9,7 +9,7 @@ export default function ErrorBoundary({
   return (
     <section className="card" role="alert">
       <h2>Something went wrong</h2>
-      <p className="muted">The page failed to render. Details were logged on the server.</p>
+      <p className="muted">The page failed to render. Please try again.</p>
       <button type="button" onClick={reset}>
         Try again
       </button>

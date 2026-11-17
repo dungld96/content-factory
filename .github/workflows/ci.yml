@@ -14,8 +14,15 @@ concurrency:
 
 jobs:
   checks:
+    name: checks (node ${{ matrix.node }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22 is the development baseline (.nvmrc). 24 is a compatibility target only:
+        # the default runtime does not change until every app and dependency passes on it.
+        node: ['22', '24']
     services:
       postgres:
         image: postgres:17.12-alpine
@@ -35,12 +42,16 @@ jobs:
       DATABASE_URL: postgresql://acf:acf_ci_only@localhost:5432/acf?schema=public
       REDIS_URL: redis://localhost:6379
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      # Third-party actions are pinned to full commit SHAs (tag in the trailing comment).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version-file: .nvmrc
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
           cache: pnpm
+      - run: node --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm lint
@@ -48,4 +59,6 @@ jobs:
       - run: pnpm test
       - run: pnpm test:integration
       - run: pnpm build
-      - run: pnpm audit --audit-level=moderate
+      - name: Dependency audit
+        if: matrix.node == '22'
+        run: pnpm audit --audit-level=moderate
