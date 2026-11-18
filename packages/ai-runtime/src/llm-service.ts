@@ -1,5 +1,3 @@
-import { Inject, Injectable } from '@nestjs/common';
-
 import {
   activePrices,
   assessCost,
@@ -17,13 +15,9 @@ import {
   type LlmResult,
   type RoutingDecision,
 } from '@acf/ai-core';
-import type { ApiEnv } from '@acf/config';
-import { Prisma, type AiInvocationStatus } from '@acf/database';
+import { type Prisma, type AiInvocationStatus, type PrismaClient } from '@acf/database';
 
-import { API_ENV } from '../config/api-config.module.js';
-import { PrismaService } from '../infrastructure/prisma.service.js';
-import { LLM_PROVIDERS } from './ai.tokens.js';
-import { RegistryService, type CandidateRow } from './registry/registry.service.js';
+import { type ModelCatalog, type CandidateRow } from './model-catalog.js';
 
 /** No eligible model for a request. Nothing was sent and no invocation was recorded. */
 export class RoutingError extends Error {
@@ -42,7 +36,7 @@ export interface LlmCallOptions {
   /** Restrict to one provider when several register the same model key. */
   readonly providerKey?: string;
   readonly signal?: AbortSignal;
-  /** Set by the job layer (M5); unique per attempt. */
+  /** Set by the job layer; unique per call (`{jobId}:{attempt}:{call}`, M3). */
   readonly idempotencyKey?: string;
   /**
    * Operator smoke test only (`pnpm ai:registry smoke`): route to a disabled model/provider so
@@ -62,13 +56,17 @@ const ABANDON_GRACE_MS = 60_000;
  * Adapters never retry and neither does this service (decision P4); callers (M3/M5 jobs) act on
  * `ProviderError.retryable` / `fallbackAllowed`.
  */
-@Injectable()
+export interface LlmServiceOptions {
+  /** The longest provider timeout in use; with a grace period it defines an abandoned call. */
+  readonly providerTimeoutMs: number;
+}
+
 export class LlmService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly registry: RegistryService,
-    @Inject(LLM_PROVIDERS) private readonly providers: ReadonlyMap<string, LlmProvider>,
-    @Inject(API_ENV) private readonly env: ApiEnv,
+    private readonly prisma: PrismaClient,
+    private readonly catalog: ModelCatalog,
+    private readonly providers: ReadonlyMap<string, LlmProvider>,
+    private readonly options: LlmServiceOptions,
   ) {}
 
   async complete(
@@ -81,7 +79,7 @@ export class LlmService {
     const provider = this.providers.get(row.candidate.providerKey);
     if (!provider) throw new RoutingError(request.modelKey, decision); // unreachable: filtered
 
-    const invocation = await this.prisma.client.aiInvocation.create({
+    const invocation = await this.prisma.aiInvocation.create({
       data: {
         projectId: context.projectId,
         contentItemId: context.contentItemId ?? null,
@@ -126,8 +124,8 @@ export class LlmService {
    * never as a hidden side effect of API start-up, which must not depend on the database.
    */
   async markAbandoned(now: Date = new Date()): Promise<number> {
-    const cutoff = new Date(now.getTime() - this.env.OPENROUTER_TIMEOUT_MS - ABANDON_GRACE_MS);
-    const { count } = await this.prisma.client.aiInvocation.updateMany({
+    const cutoff = new Date(now.getTime() - this.options.providerTimeoutMs - ABANDON_GRACE_MS);
+    const { count } = await this.prisma.aiInvocation.updateMany({
       where: { status: 'started', startedAt: { lt: cutoff } },
       data: {
         status: 'outcome_unknown',
@@ -144,7 +142,7 @@ export class LlmService {
     request: LlmRequest,
     options: LlmCallOptions,
   ): Promise<{ row: CandidateRow; decision: RoutingDecision }> {
-    const rows = (await this.registry.candidates(Capability.LLM, request.modelKey)).filter(
+    const rows = (await this.catalog.candidates(Capability.LLM, request.modelKey)).filter(
       (r) => options.providerKey === undefined || r.candidate.providerKey === options.providerKey,
     );
     const decision = filterCandidates(
@@ -216,7 +214,7 @@ export class LlmService {
           estimatedCost: cost.estimatedCost?.toString() ?? null,
         }
       : { costStatus: 'unknown' as const, reportedCost: null, estimatedCost: null };
-    await this.prisma.client.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       // Guarded: the row gets exactly one outcome (the AC011 trigger enforces it too).
       const { count } = await tx.aiInvocation.updateMany({
         where: { id: invocationId, status: 'started' },

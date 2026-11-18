@@ -1,13 +1,13 @@
-// The only module that may construct vendor adapters (ESLint `no-restricted-imports`, decision P6).
+// The only module that may construct vendor adapters (ESLint `no-restricted-imports`, M2 P6).
 import type { LlmProvider } from '@acf/ai-core';
 import { OPENROUTER_PROVIDER_KEY, OpenRouterLlmProvider } from '@acf/ai-core/openrouter';
-import type { ApiEnv } from '@acf/config';
+import type { AiProviderEnv } from '@acf/config';
 
 /**
  * Builds the LLM adapters this deployment has credentials for. A provider without credentials
  * is simply absent: the registry reports it as `configured: false` and routing skips it.
  */
-export function createLlmProviders(env: ApiEnv): ReadonlyMap<string, LlmProvider> {
+export function createLlmProviders(env: AiProviderEnv): ReadonlyMap<string, LlmProvider> {
   const providers = new Map<string, LlmProvider>();
   if (env.OPENROUTER_API_KEY !== undefined) {
     providers.set(

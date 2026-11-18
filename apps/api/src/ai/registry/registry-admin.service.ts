@@ -1,7 +1,7 @@
 import { UsdAmount, type PriceMetric } from '@acf/ai-core';
 import type { AiPriceSource, AiProviderStatus, AiQualityTier, PrismaClient } from '@acf/database';
 
-import { usdFromDecimal } from '../money.js';
+import { usdFromDecimal } from '@acf/ai-runtime';
 import type { ImportPlanEntry, PlannedModel } from '../providers/openrouter-catalog.js';
 
 export class RegistryAdminError extends Error {

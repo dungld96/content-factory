@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@acf/ai-core": "workspace:*",
+    "@acf/ai-runtime": "workspace:*",
     "@acf/config": "workspace:*",
     "@acf/contracts": "workspace:*",
     "@acf/database": "workspace:*",

@@ -440,10 +440,10 @@ under `apps/worker/test/` and is never part of the production build.
 
 ## 13. Implementation plan (each slice tested before the next)
 
-| Slice | Scope                                                                                                                                        |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| M3a   | `packages/content-domain` (brief, schemas, prompts, repair ladder, pipeline); `packages/ai-runtime` extraction (Q1) with M2 tests green      |
-| M3b   | Migration `m3_script_storyboard`; integrity triggers/CHECKs; DB tests; lock-matrix extension; ai_invocations job FK                          |
-| M3c   | BullMQ + `apps/worker`: queue, processors, retries/backoff/jitter, DLQ, reconciler, cancel, restarts; worker integration tests on real Redis |
-| M3d   | API endpoints, contracts, OpenAPI, permission matrix, error codes; `ai_task_routes` CLI; seed routes                                         |
-| M3e   | Web UI, Playwright E2E with the fixture LLM; docs (API_SPEC, DATABASE, CONTENT_PIPELINE, ARCHITECTURE, LOCAL_DEVELOPMENT, ADR-0013)          |
+| Slice | Scope                                                                                                                                        | Status      |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| M3a   | `packages/content-domain` (brief, schemas, prompts, repair ladder, pipeline); `packages/ai-runtime` extraction (Q1) with M2 tests green      | Done        |
+| M3b   | Migration `m3_script_storyboard`; integrity triggers/CHECKs; DB tests; lock-matrix extension; ai_invocations job FK                          | Not started |
+| M3c   | BullMQ + `apps/worker`: queue, processors, retries/backoff/jitter, DLQ, reconciler, cancel, restarts; worker integration tests on real Redis | Not started |
+| M3d   | API endpoints, contracts, OpenAPI, permission matrix, error codes; `ai_task_routes` CLI; seed routes                                         | Not started |
+| M3e   | Web UI, Playwright E2E with the fixture LLM; docs (API_SPEC, DATABASE, CONTENT_PIPELINE, ARCHITECTURE, LOCAL_DEVELOPMENT, ADR-0013)          | Not started |

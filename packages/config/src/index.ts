@@ -2,3 +2,4 @@ export { apiEnvSchema, loadApiEnv, type ApiEnv, type TrustProxy } from './api-en
 export { webServerEnvSchema, loadWebServerEnv, type WebServerEnv } from './web-env.js';
 export { EnvValidationError, type EnvIssue } from './errors.js';
 export { redactUrl } from './redact.js';
+export { aiProviderEnvShape, checkAiProviderEnv, type AiProviderEnv } from './ai-provider-env.js';

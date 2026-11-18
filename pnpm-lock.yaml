@@ -59,6 +59,9 @@ importers:
       '@acf/ai-core':
         specifier: workspace:*
         version: link:../../packages/ai-core
+      '@acf/ai-runtime':
+        specifier: workspace:*
+        version: link:../../packages/ai-runtime
       '@acf/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -182,8 +185,29 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
+  packages/ai-runtime:
+    dependencies:
+      '@acf/ai-core':
+        specifier: workspace:*
+        version: link:../ai-core
+      '@acf/config':
+        specifier: workspace:*
+        version: link:../config
+      '@acf/database':
+        specifier: workspace:*
+        version: link:../database
+
   packages/config:
     dependencies:
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+
+  packages/content-domain:
+    dependencies:
+      '@acf/ai-core':
+        specifier: workspace:*
+        version: link:../ai-core
       zod:
         specifier: 4.6.7
         version: 4.6.7

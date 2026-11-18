@@ -1,12 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import {
-  activePrices,
-  effectiveParameters,
-  type LlmProvider,
-  type ModelCandidate,
-  type PriceComponent,
-} from '@acf/ai-core';
+import { activePrices, type LlmProvider } from '@acf/ai-core';
+import { toPriceComponents, usdFromDecimal } from '@acf/ai-runtime';
 import type {
   AiModelDetailDto,
   AiModelDto,
@@ -16,19 +11,12 @@ import type {
   ListAiModelsQuery,
   Page,
 } from '@acf/contracts';
-import type {
-  AiCapability,
-  AiModel,
-  AiModelCapability,
-  AiModelPrice,
-  AiProvider,
-} from '@acf/database';
+import type { AiModel, AiModelCapability, AiModelPrice, AiProvider } from '@acf/database';
 
 import { notFound } from '../../common/domain-errors.js';
 import { keysetAfter, NEWEST_FIRST, toPage } from '../../common/http/pagination.js';
 import { PrismaService } from '../../infrastructure/prisma.service.js';
 import { LLM_PROVIDERS } from '../ai.tokens.js';
-import { usdFromDecimal } from '../money.js';
 
 type ModelRow = AiModel & {
   provider: AiProvider;
@@ -55,17 +43,6 @@ export function toPriceDto(p: AiModelPrice): AiPriceDto {
     sourceUrl: p.sourceUrl,
     capturedAt: p.capturedAt.toISOString(),
   };
-}
-
-/** Registry price rows → ai-core price components (exact USD). */
-export function toPriceComponents(prices: readonly AiModelPrice[]): PriceComponent[] {
-  return prices.map((p) => ({
-    id: p.id,
-    metric: p.metric,
-    unitPrice: usdFromDecimal(p.unitPrice),
-    minPromptTokens: p.minPromptTokens,
-    effectiveFrom: p.effectiveFrom,
-  }));
 }
 
 /**
@@ -115,36 +92,6 @@ export class RegistryService {
     return { ...this.toModelDto(row, new Date()), priceHistory: row.prices.map(toPriceDto) };
   }
 
-  /**
-   * Routing candidates for a capability, restricted to one model key (M2 callers name the model).
-   * Parameters are limited to what the provider's adapter can send.
-   */
-  async candidates(capability: AiCapability, modelKey: string): Promise<CandidateRow[]> {
-    const rows = await this.prisma.client.aiModel.findMany({
-      where: { modelKey, capabilities: { some: { capability } } },
-      include: MODEL_INCLUDE,
-      orderBy: { provider: { key: 'asc' } },
-    });
-    return rows.map((row) => {
-      const adapter = this.llmProviders.get(row.provider.key);
-      const candidate: ModelCandidate = {
-        modelId: row.id,
-        modelKey: row.modelKey,
-        providerKey: row.provider.key,
-        capabilities: row.capabilities.map((c) => c.capability),
-        supportedParameters: effectiveParameters(
-          row.supportedParameters,
-          adapter?.supportedParameters ?? new Set<string>(),
-        ),
-        qualityTier: row.qualityTier,
-        modelStatus: row.status,
-        providerStatus: row.provider.status,
-        providerConfigured: adapter !== undefined,
-      };
-      return { candidate, providerId: row.providerId, prices: toPriceComponents(row.prices) };
-    });
-  }
-
   private toProviderDto(p: AiProvider): AiProviderDto {
     return {
       id: p.id,
@@ -186,11 +133,4 @@ export class RegistryService {
       updatedAt: row.updatedAt.toISOString(),
     };
   }
-}
-
-export interface CandidateRow {
-  readonly candidate: ModelCandidate;
-  readonly providerId: string;
-  /** Every price row of the model (history included); select with `activePrices(at)`. */
-  readonly prices: readonly PriceComponent[];
 }

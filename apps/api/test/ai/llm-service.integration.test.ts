@@ -18,10 +18,8 @@ import {
 import { MockLlmProvider } from '@acf/ai-core/testing';
 import type { PrismaClient } from '@acf/database';
 
-import { ABANDONED_ERROR_CODE, LlmService, RoutingError } from '../../src/ai/llm.service.js';
-import { RegistryService } from '../../src/ai/registry/registry.service.js';
+import { ABANDONED_ERROR_CODE, LlmService, ModelCatalog, RoutingError } from '@acf/ai-runtime';
 import { seedAiRegistry } from '../../src/cli/seed-ai.js';
-import type { PrismaService } from '../../src/infrastructure/prisma.service.js';
 import { authTestEnv, inspector, resetDatabase, userAdmin } from '../support/auth-app.js';
 import { seedUsers } from '../support/workspace.js';
 
@@ -34,13 +32,9 @@ let openrouter: MockLlmProvider; // stands in for the OpenRouter adapter (priced
 let llm: LlmService;
 
 function service(providers: ReadonlyMap<string, LlmProvider>): LlmService {
-  const prismaService = { client: prisma } as unknown as PrismaService;
-  return new LlmService(
-    prismaService,
-    new RegistryService(prismaService, providers),
-    providers,
-    authTestEnv(),
-  );
+  return new LlmService(prisma, new ModelCatalog(prisma, providers), providers, {
+    providerTimeoutMs: authTestEnv().OPENROUTER_TIMEOUT_MS,
+  });
 }
 
 const context = (overrides: Partial<GenerationContext> = {}): GenerationContext => ({

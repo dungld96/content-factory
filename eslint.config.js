@@ -55,13 +55,13 @@ export default defineConfig(
   },
   {
     // Business code sees only provider-agnostic interfaces (ADR-0004; M2 package §3.1, P6):
-    // vendor adapters are wired in one API module, and test doubles stay in tests.
+    // vendor adapters are wired in one ai-runtime module, and test doubles stay in tests.
     files: ['**/*.{ts,tsx}'],
     ignores: [
       '**/*.test.ts',
       'apps/api/test/**',
       'test-support/**',
-      'apps/api/src/ai/providers/**',
+      'packages/ai-runtime/src/providers/**',
     ],
     rules: {
       'no-restricted-imports': [
@@ -71,7 +71,7 @@ export default defineConfig(
             {
               group: ['@acf/ai-core/*'],
               message:
-                'Import provider-agnostic types from `@acf/ai-core`. Vendor adapters are wired only in apps/api/src/ai/providers; test doubles only in tests.',
+                'Import provider-agnostic types from `@acf/ai-core`. Vendor adapters are wired only in packages/ai-runtime/src/providers; test doubles only in tests.',
             },
           ],
         },
@@ -79,7 +79,7 @@ export default defineConfig(
     },
   },
   {
-    files: ['apps/api/src/ai/providers/**/*.ts'],
+    files: ['packages/ai-runtime/src/providers/**/*.ts'],
     ignores: ['**/*.test.ts'],
     rules: {
       'no-restricted-imports': [

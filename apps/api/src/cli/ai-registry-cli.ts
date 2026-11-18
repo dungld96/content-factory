@@ -23,6 +23,13 @@ import {
   type GenerationContext,
   type LlmUsage,
 } from '@acf/ai-core';
+import {
+  createLlmProviders,
+  LlmService,
+  ModelCatalog,
+  RoutingError,
+  toPriceComponents,
+} from '@acf/ai-runtime';
 import { loadApiEnv } from '@acf/config';
 import {
   createPrismaClient,
@@ -32,12 +39,8 @@ import {
   type PrismaClient,
 } from '@acf/database';
 
-import { LlmService, RoutingError } from '../ai/llm.service.js';
-import { createLlmProviders } from '../ai/providers/llm-providers.js';
 import { catalogUrl, planOpenRouterImport } from '../ai/providers/openrouter-catalog.js';
 import { RegistryAdminError, RegistryAdminService } from '../ai/registry/registry-admin.service.js';
-import { RegistryService, toPriceComponents } from '../ai/registry/registry.service.js';
-import type { PrismaService } from '../infrastructure/prisma.service.js';
 
 const STATUSES = new Set<string>(['enabled', 'disabled', 'degraded']);
 const TIERS = new Set<string>(['economy', 'balanced', 'premium']);
@@ -262,14 +265,10 @@ export async function runAiRegistryCli(
     }
     if (group === 'invocations' && command === 'mark-abandoned') {
       const env = loadApiEnv(rawEnv);
-      const prismaService = { client: prisma } as unknown as PrismaService;
       const providers = createLlmProviders(env);
-      const llm = new LlmService(
-        prismaService,
-        new RegistryService(prismaService, providers),
-        providers,
-        env,
-      );
+      const llm = new LlmService(prisma, new ModelCatalog(prisma, providers), providers, {
+        providerTimeoutMs: env.OPENROUTER_TIMEOUT_MS,
+      });
       const count = await llm.markAbandoned();
       io.out(
         `✔ ${String(count)} abandoned invocation(s) marked outcome_unknown (never re-sent automatically)`,
@@ -347,13 +346,9 @@ async function smoke(
     return 1;
   }
 
-  const prismaService = { client: prisma } as unknown as PrismaService;
-  const llm = new LlmService(
-    prismaService,
-    new RegistryService(prismaService, providers),
-    providers,
-    env,
-  );
+  const llm = new LlmService(prisma, new ModelCatalog(prisma, providers), providers, {
+    providerTimeoutMs: env.OPENROUTER_TIMEOUT_MS,
+  });
   const context: GenerationContext = {
     projectId: project.id,
     correlationId: `smoke-${String(Date.now())}`,
