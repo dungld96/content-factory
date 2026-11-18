@@ -17,7 +17,7 @@ numbered sequentially. Never rewrite an accepted ADR — supersede it with a new
 | [0010](0010-versioning-master-pointer-and-approval.md) | Versioning, master pointer and approval concurrency | Accepted (M1 package, rev. 4) |
 | [0011](0011-database-enforced-integrity.md) | Database-enforced integrity | Accepted (M1 package, rev. 4) |
 | [0012](0012-ai-registry-usage-ledger-and-money.md) | AI registry, usage ledger and money precision | Accepted (M2 package, rev. 1) |
-| [0013](0013-generation-jobs-queue-and-worker.md) | Generation jobs, queue and worker process | Proposed (M3 package, rev. 1) |
+| [0013](0013-generation-jobs-queue-and-worker.md) | Generation jobs, queue and worker process | Accepted (M3 package, rev. 1) |
 
 ## Template
 

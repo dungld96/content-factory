@@ -1,6 +1,6 @@
 # ADR-0013: Generation jobs, queue and worker process
 
-- Status: Proposed (M3 design package, revision 1)
+- Status: Accepted (M3 design package, revision 1, approved 2026-11-18)
 - Date: 2026-11-18
 - Milestone: M3
 

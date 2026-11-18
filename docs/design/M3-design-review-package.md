@@ -1,9 +1,9 @@
 # M3 Design Review Package — Script and Storyboard Pipeline
 
-- Status: **Revision 1, proposed. No M3 code until the owner approves.**
+- Status: **Revision 1, approved by the owner (2026-11-18).** Implemented in slices M3a–M3e (§13).
 - Date: 2026-11-18
 - Baseline: M2 accepted (`80060cc`)
-- Companion: ADR-0013 (new, proposed) — generation jobs, queue and worker process
+- Companion: ADR-0013 (accepted) — generation jobs, queue and worker process
 
 ## 0. Decision log
 
@@ -16,7 +16,7 @@ Owner decisions taken before this package (2026-11-18):
 | F3  | The **content plan** (angle, hooks, key message, CTA) is part of the script output, reviewed at the script gate | Approved |
 | F4  | **Minimal working web UI** for scripts and storyboards, with Playwright E2E on a mocked LLM                     | Approved |
 
-Proposals in this package (§12 lists them for approval):
+Decisions in this package (§12), **all approved by the owner as proposed (2026-11-18)**:
 
 | ID  | Proposal                                                                                                                              | Section |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------- | ------- |
