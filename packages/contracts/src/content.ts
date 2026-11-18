@@ -31,7 +31,7 @@ export type AspectRatio = z.infer<typeof aspectRatioSchema>;
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 
-/** Content brief (docs/CONTENT_PIPELINE.md stage 1). Character/environment refs arrive in M3. */
+/** Content brief (docs/CONTENT_PIPELINE.md stage 1). */
 export const contentBriefSchema = z
   .strictObject({
     topic: text(500),
@@ -44,6 +44,10 @@ export const contentBriefSchema = z
       .array(z.url({ protocol: /^https?$/ }).max(2048))
       .max(20)
       .optional(),
+    /** Recurring character of the same project; its approved master is used (M3). */
+    characterId: z.uuid().optional(),
+    /** Fixed environment of the same project; its approved master is used (M3). */
+    environmentId: z.uuid().optional(),
   })
   .meta({ id: 'ContentBrief' });
 export type ContentBrief = z.infer<typeof contentBriefSchema>;
@@ -84,6 +88,10 @@ export const contentItemSchema = z
     aspectRatio: aspectRatioSchema,
     language: z.string(),
     brief: contentBriefSchema,
+    /** Gate 1: the approved script in use (M3). */
+    approvedScriptVersionId: z.uuid().nullable(),
+    /** Gate 2: the approved storyboard (M3). */
+    approvedStoryboardVersionId: z.uuid().nullable(),
     archivedAt: isoDateTimeSchema.nullable(),
     createdAt: isoDateTimeSchema,
     updatedAt: isoDateTimeSchema,

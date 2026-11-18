@@ -180,6 +180,7 @@ never called. Tests never need it and cannot reach `openrouter.ai` (network guar
 | `pnpm ai:registry model import-openrouter <modelKey>... [--tier <tier>] [--apply]` | Reads OpenRouter's public catalog and prints a plan; with `--apply`, creates new models **disabled** (a tier is required) and appends a price row only for a changed published price |
 | `pnpm ai:registry model set-status <modelKey> <status>` | Enable/disable a model |
 | `pnpm ai:registry price add <modelKey> <metric> <usdPerUnit> --source <source> --url <url>` | Append a price row (rows are never edited) |
+| `pnpm ai:registry route list` / `route set <script_generation\|storyboard_generation> <modelKey> [--provider <key>]` | Which model each generation task uses (M3); `pnpm db:seed` routes both to `mock/echo` |
 | `pnpm ai:registry invocations mark-abandoned` | Marks invocations stuck in `started` past every deadline as `outcome_unknown` (never re-sent) |
 | `ACF_PAID_SMOKE=1 pnpm ai:registry smoke <modelKey> --project <slug> --max-cost-usd <usd>` | **One real, paid call.** Refused unless enabled, a key is set, input and output prices are known, and the worst case (fixed tiny prompt, 16 output tokens) is within the cap. Prints reported vs estimated cost to check assumptions A1–A3 |
 

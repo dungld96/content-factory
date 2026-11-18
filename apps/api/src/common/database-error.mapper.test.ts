@@ -26,6 +26,8 @@ describe('mapDatabaseError', () => {
     ['AC009', 409, 'VERSION_IMMUTABLE'],
     ['AC010', 409, 'ASSET_ARCHIVED'],
     ['AC011', 409, 'LEDGER_IMMUTABLE'],
+    ['AC012', 409, 'ARTIFACT_IMMUTABLE'],
+    ['AC013', 409, 'STALE_STORYBOARD'],
     ['23503', 422, 'REFERENCE_NOT_FOUND'],
     ['23514', 422, 'CONSTRAINT_VIOLATION'],
   ])('maps %s to %i %s', (sqlState, status, code) => {

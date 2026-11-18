@@ -74,7 +74,7 @@ const jobRow = (id: string) =>
 const contentStatus = async () =>
   (await prisma.contentItem.findUniqueOrThrow({ where: { id: world.contentItemId } })).status;
 
-beforeAll(async () => {
+beforeAll(() => {
   prisma = appPrisma();
   migrator = migratorPrisma();
 });

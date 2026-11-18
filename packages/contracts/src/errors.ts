@@ -53,6 +53,24 @@ export const ApiErrorCode = {
   /** Price and usage rows are append-only; an invocation's outcome is recorded once (AC011). */
   LedgerImmutable: 'LEDGER_IMMUTABLE',
 
+  // --- M3: script and storyboard pipeline (design package §10) ---
+  /** The brief has errors that block generation (details list them). */
+  BriefInvalid: 'BRIEF_INVALID',
+  /** No enabled, configured model is routed to (or given for) this task. */
+  NoModelRoute: 'NO_MODEL_ROUTE',
+  /** A generation of this kind is already queued or running for the content item. */
+  GenerationInProgress: 'GENERATION_IN_PROGRESS',
+  /** The content item's status does not allow this stage now. */
+  InvalidPipelineState: 'INVALID_PIPELINE_STATE',
+  /** Storyboards are generated only from the approved script (gate 1). */
+  ScriptNotApproved: 'SCRIPT_NOT_APPROVED',
+  /** The storyboard's script is no longer the approved script. */
+  StaleStoryboard: 'STALE_STORYBOARD',
+  /** The version was already reviewed; edits create new versions. */
+  ArtifactImmutable: 'ARTIFACT_IMMUTABLE',
+  /** Only queued or running work can be canceled. */
+  NotCancelable: 'NOT_CANCELABLE',
+
   // --- M1: authentication (ADR-0009) ---
   /** Unknown email, wrong password or disabled account (deliberately indistinguishable). */
   InvalidCredentials: 'INVALID_CREDENTIALS',

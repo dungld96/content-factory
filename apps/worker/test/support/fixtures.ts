@@ -222,7 +222,7 @@ export async function createJob(
           promptTemplateId: kind === 'script_generation' ? 'script.v1' : 'storyboard.v1',
           modelId: w.modelId,
         }),
-        input: input as unknown as object,
+        input: input,
         previousContentStatus: item.status,
         promptTemplateId: kind === 'script_generation' ? 'script.v1' : 'storyboard.v1',
         modelId: w.modelId,

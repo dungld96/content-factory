@@ -65,6 +65,9 @@ importers:
       '@acf/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@acf/content-domain':
+        specifier: workspace:*
+        version: link:../../packages/content-domain
       '@acf/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -244,6 +247,9 @@ importers:
 
   packages/contracts:
     dependencies:
+      '@acf/content-domain':
+        specifier: workspace:*
+        version: link:../content-domain
       zod:
         specifier: 4.6.7
         version: 4.6.7

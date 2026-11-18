@@ -17,6 +17,7 @@
     "@acf/ai-core": "workspace:*",
     "@acf/ai-runtime": "workspace:*",
     "@acf/config": "workspace:*",
+    "@acf/content-domain": "workspace:*",
     "@acf/contracts": "workspace:*",
     "@acf/database": "workspace:*",
     "@nestjs/common": "12.3.2",

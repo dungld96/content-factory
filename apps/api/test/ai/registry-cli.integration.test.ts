@@ -262,6 +262,29 @@ describe('status, prices and listing', () => {
   });
 });
 
+describe('task routes (M3 Q4)', () => {
+  it('routes a task to a model, warns while it is disabled, and lists routes', async () => {
+    const set = await cli('route set script_generation anthropic/claude-haiku-5.5');
+    expect(set.code).toBe(0);
+    expect(set.out).toContain('✔ script_generation → openrouter/anthropic/claude-haiku-5.5');
+    expect(set.out).toContain('not enabled');
+    expect((await cli('route list')).out).toContain(
+      'script_generation\topenrouter/anthropic/claude-haiku-5.5\tdisabled',
+    );
+  });
+
+  it.each(['route set image_generation x', 'route set script_generation'])(
+    'rejects bad usage: %s',
+    async (args) => {
+      expect((await cli(args)).code).toBe(2);
+    },
+  );
+
+  it('refuses an unknown model', async () => {
+    expect((await cli('route set storyboard_generation nobody/nothing')).code).toBe(1);
+  });
+});
+
 describe('invocations mark-abandoned', () => {
   it('marks only stale started invocations', async () => {
     const result = await cli('invocations mark-abandoned', apiEnv);

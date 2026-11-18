@@ -47,6 +47,8 @@ export function toContentItemDto(c: ContentItem): ContentItemDto {
     language: c.language,
     // Written only through the validated contract schema.
     brief: c.brief as ContentBrief,
+    approvedScriptVersionId: c.approvedScriptVersionId,
+    approvedStoryboardVersionId: c.approvedStoryboardVersionId,
     archivedAt: c.archivedAt?.toISOString() ?? null,
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),

@@ -171,5 +171,17 @@ export async function seedAiRegistry(
       }
     });
   }
+  // Development routes (M3 Q4): both generation tasks use the mock model until an operator
+  // routes them to an enabled, reviewed model. Existing routes are kept.
+  const echo = await prisma.aiModel.findUniqueOrThrow({
+    where: { providerId_modelKey: { providerId: mock.id, modelKey: 'mock/echo' } },
+  });
+  for (const task of ['script_generation', 'storyboard_generation'] as const) {
+    await prisma.aiTaskRoute.upsert({
+      where: { task },
+      create: { task, modelId: echo.id },
+      update: {},
+    });
+  }
   return { openrouterStatus: provider.status, models };
 }

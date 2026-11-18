@@ -179,3 +179,87 @@ export const newAsset = (projectId: string, extra: Record<string, unknown> = {})
     ...extra,
   };
 };
+
+export interface GenerationFixture {
+  /** Generated script v1, approved and pointed to (gate 1). */
+  readonly scriptId: string;
+  /** Edited script v2, pending review. */
+  readonly pendingScriptId: string;
+  /** Storyboard v1 of the approved script, pending review, one 30 s scene. */
+  readonly storyboardId: string;
+  readonly sceneId: string;
+  /** Succeeded run/job that generated the script. */
+  readonly runId: string;
+  readonly jobId: string;
+}
+
+/**
+ * M3 rows on top of {@link createFixture} (needs the `mock/echo` model, e.g. from the AI seed):
+ * content in `script_review` with an approved script, a pending edit, and a pending storyboard.
+ */
+export async function addGenerationFixture(
+  db: pg.Client,
+  ids: Record<string, string>,
+  f: Fixture,
+): Promise<GenerationFixture> {
+  const [runId, jobId, scriptId, pendingScriptId, storyboardId, sceneId] = Array.from(
+    { length: 6 },
+    () => randomUUID(),
+  ) as [string, string, string, string, string, string];
+  const owner = ids['owner'] ?? '';
+  await db.query(`BEGIN;
+    INSERT INTO production_runs (id, project_id, content_item_id, requested_by_id, updated_at)
+      VALUES ('${runId}', '${f.projectId}', '${f.contentId}', '${owner}', now());
+    INSERT INTO generation_jobs (id, project_id, content_item_id, production_run_id, kind, active_key,
+        idempotency_key, execution_key, input, previous_content_status, prompt_template_id, model_id,
+        requested_by_id, updated_at)
+      SELECT '${jobId}', '${f.projectId}', '${f.contentId}', '${runId}', 'script_generation',
+        '${f.contentId}:script_generation', 'fx-${jobId}', repeat('e', 64), '{}', 'draft', 'script.v1', m.id,
+        '${owner}', now()
+      FROM ai_models m WHERE m.model_key = 'mock/echo';
+    INSERT INTO script_versions (id, project_id, content_item_id, version, source, generation_job_id,
+        schema_version, content)
+      VALUES ('${scriptId}', '${f.projectId}', '${f.contentId}', 1, 'generated', '${jobId}', 1,
+        '${JSON.stringify(SAMPLE_SCRIPT)}');
+    UPDATE generation_jobs SET status = 'succeeded', active_key = NULL, attempt = 1, completed_at = now(),
+      result_script_version_id = '${scriptId}' WHERE id = '${jobId}';
+    UPDATE production_runs SET status = 'succeeded', completed_at = now() WHERE id = '${runId}';
+    UPDATE script_versions SET status = 'approved', reviewed_by_id = '${owner}', reviewed_at = now()
+      WHERE id = '${scriptId}';
+    INSERT INTO script_versions (id, project_id, content_item_id, version, source, based_on_version_id,
+        schema_version, content, created_by_id)
+      VALUES ('${pendingScriptId}', '${f.projectId}', '${f.contentId}', 2, 'edited', '${scriptId}', 1,
+        '${JSON.stringify(SAMPLE_SCRIPT)}', '${owner}');
+    UPDATE content_items SET status = 'script_review', approved_script_version_id = '${scriptId}'
+      WHERE id = '${f.contentId}';
+    INSERT INTO storyboard_versions (id, project_id, content_item_id, script_version_id, version, source,
+        generation_job_id, schema_version, total_duration_seconds)
+      VALUES ('${storyboardId}', '${f.projectId}', '${f.contentId}', '${scriptId}', 1, 'generated', '${jobId}', 1, 30);
+    INSERT INTO storyboard_scenes (id, project_id, storyboard_version_id, scene_number, duration_seconds,
+        shot_type, camera_angle, camera_movement, character_action, visual_description, image_prompt,
+        video_prompt, negative_prompt, voice_over_segment, on_screen_text, acceptance_checks)
+      VALUES ('${sceneId}', '${f.projectId}', '${storyboardId}', 1, 30, 'wide', 'eye level', 'static', '',
+        'Desk', 'A desk', 'Push in', '', 'Hello', '', '{gadget visible}');
+    COMMIT`);
+  return { scriptId, pendingScriptId, storyboardId, sceneId, runId, jobId };
+}
+
+/** A schema-valid ScriptContent (content-domain `sampleScript`), as stored JSON. */
+export const SAMPLE_SCRIPT = {
+  title: '5 desk gadgets',
+  plan: {
+    angle: 'Small upgrades',
+    audienceInsight: 'Afternoon slump',
+    hookOptions: ['Your desk is stealing your energy'],
+    keyMessage: 'Cheap upgrades help',
+    callToAction: 'Follow',
+    estimatedSceneCount: 1,
+  },
+  hook: 'Your desk is stealing your energy.',
+  voiceOver: 'Here are five gadgets.',
+  onScreenText: ['5 gadgets'],
+  sceneOutline: [{ order: 1, summary: 'Gadgets', approxSeconds: 30 }],
+  callToAction: 'Follow',
+  claimsRequiringVerification: [],
+  sources: [],
+};

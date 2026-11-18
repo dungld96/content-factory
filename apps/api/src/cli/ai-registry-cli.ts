@@ -6,6 +6,8 @@
 //   pnpm ai:registry model import-openrouter <modelKey>... [--tier economy|balanced|premium] [--apply]
 //   pnpm ai:registry price add <modelKey> <metric> <usdPerUnit> --source <source> --url <url>
 //                              [--effective-from <ISO>] [--min-prompt-tokens <n>] [--provider openrouter]
+//   pnpm ai:registry route list
+//   pnpm ai:registry route set <script_generation|storyboard_generation> <modelKey> [--provider openrouter]
 //   pnpm ai:registry invocations mark-abandoned
 //   ACF_PAID_SMOKE=1 pnpm ai:registry smoke <modelKey> --project <slug> --max-cost-usd <usd>
 // Runs as the runtime role (DATABASE_URL). The import only reads OpenRouter's public catalog and
@@ -261,6 +263,28 @@ export async function runAiRegistryCli(
         ...(minPromptTokens === undefined ? {} : { minPromptTokens }),
       });
       io.out(`✔ price ${id} appended (existing rows are never changed)`);
+      return 0;
+    }
+    if (group === 'route' && command === 'list') {
+      for (const r of await prisma.aiTaskRoute.findMany({
+        include: { model: { include: { provider: true } } },
+        orderBy: { task: 'asc' },
+      })) {
+        io.out(`${r.task}\t${r.model.provider.key}/${r.model.modelKey}\t${r.model.status}`);
+      }
+      return 0;
+    }
+    if (group === 'route' && command === 'set') {
+      const [task, modelKey] = positionals;
+      if ((task !== 'script_generation' && task !== 'storyboard_generation') || !modelKey) {
+        return usage(
+          'route set <script_generation|storyboard_generation> <modelKey> [--provider <key>]',
+        );
+      }
+      const { enabled } = await admin.setRoute(task, values.provider, modelKey);
+      io.out(`✔ ${task} → ${values.provider}/${modelKey}`);
+      if (!enabled)
+        io.out('  ! the model or provider is not enabled: generation refuses until it is');
       return 0;
     }
     if (group === 'invocations' && command === 'mark-abandoned') {

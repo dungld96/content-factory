@@ -5,11 +5,14 @@ import {
   deadLetterPayloadSchema,
   GENERATION_DLQ,
   GENERATION_QUEUE,
+  generationJobOptions,
   generationJobPayloadSchema,
   RETRY_POLICY,
   type DeadLetterPayload,
   type GenerationJobPayload,
 } from '@acf/content-domain';
+
+export { generationJobOptions };
 
 import type { GenerationProcessor } from './generation-processor.js';
 import type { Logger } from './logger.js';
@@ -30,15 +33,6 @@ export function createQueues(connection: Redis, prefix: string): Queues {
     deadLetter: new Queue<DeadLetterPayload>(GENERATION_DLQ, { connection, prefix }),
   };
 }
-
-/** BullMQ job options for a generation job. The BullMQ id is the DB id: duplicate adds are no-ops. */
-export const generationJobOptions = (jobId: string) => ({
-  jobId,
-  attempts: RETRY_POLICY.maxAttempts,
-  backoff: { type: 'acf' },
-  removeOnComplete: { age: 7 * 24 * 3600 },
-  removeOnFail: { age: 30 * 24 * 3600 },
-});
 
 /** Thrown to BullMQ to schedule the next attempt; carries the delay the processor decided. */
 export class RetryLaterError extends Error {

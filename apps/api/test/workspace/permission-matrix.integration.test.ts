@@ -16,6 +16,8 @@ import {
   userAdmin,
   type AuthTestApp,
 } from '../support/auth-app.js';
+import { MockLlmProvider } from '@acf/ai-core/testing';
+
 import { seedAiRegistry } from '../../src/cli/seed-ai.js';
 import { OpenApiService } from '../../src/openapi/openapi.service.js';
 import {
@@ -26,7 +28,10 @@ import {
   newContent,
   seedUsers,
   signInAll,
+  addGenerationFixture,
+  SAMPLE_SCRIPT,
   type Fixture,
+  type GenerationFixture,
   type Persona,
 } from '../support/workspace.js';
 
@@ -35,11 +40,13 @@ const CALLERS: readonly Caller[] = ['unauthenticated', 'outsider', 'viewer', 'ed
 
 interface Row {
   readonly method: string;
-  readonly path: (f: Fixture, ids: Record<string, string>) => string;
-  readonly body?: (f: Fixture) => unknown;
+  readonly path: (f: MatrixFixture, ids: Record<string, string>) => string;
+  readonly body?: (f: MatrixFixture) => unknown;
   /** Expected status for: unauthenticated, non-member, viewer, editor, owner. */
   readonly expect: readonly [number, number, number, number, number];
 }
+
+type MatrixFixture = Fixture & GenerationFixture;
 
 const slug = () => `s-${randomUUID().slice(0, 12)}`;
 
@@ -51,6 +58,94 @@ const ROWS: Record<string, Row> = {
     expect: [401, 201, 201, 201, 201],
   },
   'GET /projects': { method: 'GET', path: () => '/projects', expect: [401, 200, 200, 200, 200] },
+  // Script and storyboard pipeline (M3 design §10). Generation and approval need editor; viewers
+  // read. Cancel on the fixture's finished run is 409 NOT_CANCELABLE once authorized.
+  'POST /content/:contentId/brief/validate': {
+    method: 'POST',
+    path: (f) => `/content/${f.contentId}/brief/validate`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'POST /content/:contentId/scripts/generate': {
+    method: 'POST',
+    path: (f) => `/content/${f.contentId}/scripts/generate`,
+    body: () => ({ regenerate: true }),
+    expect: [401, 404, 403, 202, 202],
+  },
+  'GET /content/:contentId/scripts': {
+    method: 'GET',
+    path: (f) => `/content/${f.contentId}/scripts`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'GET /scripts/:scriptVersionId': {
+    method: 'GET',
+    path: (f) => `/scripts/${f.scriptId}`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'PATCH /scripts/:scriptVersionId': {
+    method: 'PATCH',
+    path: (f) => `/scripts/${f.scriptId}`,
+    body: () => ({ content: { ...SAMPLE_SCRIPT, hook: 'A sharper hook.' } }),
+    expect: [401, 404, 403, 201, 201],
+  },
+  'POST /scripts/:scriptVersionId/approve': {
+    method: 'POST',
+    path: (f) => `/scripts/${f.pendingScriptId}/approve`,
+    expect: [401, 404, 403, 200, 200],
+  },
+  'POST /scripts/:scriptVersionId/reject': {
+    method: 'POST',
+    path: (f) => `/scripts/${f.pendingScriptId}/reject`,
+    body: () => ({ note: 'too long' }),
+    expect: [401, 404, 403, 200, 200],
+  },
+  'POST /scripts/:scriptVersionId/storyboards/generate': {
+    method: 'POST',
+    path: (f) => `/scripts/${f.scriptId}/storyboards/generate`,
+    body: () => ({ regenerate: true }),
+    expect: [401, 404, 403, 202, 202],
+  },
+  'GET /content/:contentId/storyboards': {
+    method: 'GET',
+    path: (f) => `/content/${f.contentId}/storyboards`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'GET /storyboards/:storyboardVersionId': {
+    method: 'GET',
+    path: (f) => `/storyboards/${f.storyboardId}`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'PATCH /scenes/:sceneId': {
+    method: 'PATCH',
+    path: (f) => `/scenes/${f.sceneId}`,
+    body: () => ({ imagePrompt: 'A brighter desk' }),
+    expect: [401, 404, 403, 201, 201],
+  },
+  'POST /storyboards/:storyboardVersionId/approve': {
+    method: 'POST',
+    path: (f) => `/storyboards/${f.storyboardId}/approve`,
+    expect: [401, 404, 403, 200, 200],
+  },
+  'POST /storyboards/:storyboardVersionId/reject': {
+    method: 'POST',
+    path: (f) => `/storyboards/${f.storyboardId}/reject`,
+    body: () => ({}),
+    expect: [401, 404, 403, 200, 200],
+  },
+  'GET /production-runs/:runId': {
+    method: 'GET',
+    path: (f) => `/production-runs/${f.runId}`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'POST /production-runs/:runId/cancel': {
+    method: 'POST',
+    path: (f) => `/production-runs/${f.runId}/cancel`,
+    expect: [401, 404, 403, 409, 409],
+  },
+  'GET /generation-jobs/:jobId': {
+    method: 'GET',
+    path: (f) => `/generation-jobs/${f.jobId}`,
+    expect: [401, 404, 200, 200, 200],
+  },
   // AI registry (M2 §8.2): global, read-only, any authenticated user; never project-scoped.
   'GET /ai/providers': {
     method: 'GET',
@@ -300,7 +395,13 @@ beforeAll(async () => {
   ids = await seedUsers(admin.users);
   await seedAiRegistry(prisma, { openrouterConfigured: false });
   ids['aiModel'] = (await prisma.aiModel.findFirstOrThrow({ select: { id: true } })).id;
-  api = await startAuthApp();
+  api = await startAuthApp(
+    {
+      REDIS_URL: process.env['REDIS_URL'] ?? 'redis://localhost:6379',
+      QUEUE_PREFIX: `acf-matrix-${randomUUID().slice(0, 8)}`,
+    },
+    { llmProviders: new Map([['mock', new MockLlmProvider({ providerKey: 'mock' })]]) },
+  );
   as = actAs(api.baseUrl, await signInAll(api.baseUrl, ids));
 });
 
@@ -314,7 +415,8 @@ describe.each(Object.entries(ROWS))('%s', (_route, row) => {
   it.each(CALLERS.map((caller, i) => [caller, row.expect[i]] as const))(
     'as %s -> %i',
     async (caller, expected) => {
-      const fixture = await createFixture(db, ids);
+      const base = await createFixture(db, ids);
+      const fixture: MatrixFixture = { ...base, ...(await addGenerationFixture(db, ids, base)) };
       const body = row.body?.(fixture);
       const res = await as(
         caller === 'unauthenticated' ? null : caller,

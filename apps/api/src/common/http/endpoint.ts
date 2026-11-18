@@ -33,7 +33,7 @@ export interface EndpointSpec {
   /** Documented error statuses (the envelope schema is added automatically). */
   readonly errors?: readonly number[];
   /** Request headers the endpoint reads (documented only). */
-  readonly headers?: readonly ('If-Match' | 'x-csrf-token')[];
+  readonly headers?: readonly ('If-Match' | 'x-csrf-token' | 'Idempotency-Key')[];
 }
 
 export const ENDPOINT_METADATA = 'acf:endpoint';

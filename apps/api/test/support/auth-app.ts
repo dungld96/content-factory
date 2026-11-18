@@ -18,6 +18,9 @@ import { inject } from 'vitest';
 import { loadApiEnv, type ApiEnv } from '@acf/config';
 import { createPrismaClient, type PrismaClient } from '@acf/database';
 
+import type { LlmProvider } from '@acf/ai-core';
+
+import { LLM_PROVIDERS } from '../../src/ai/ai.tokens.js';
 import { configureApp, createLogger } from '../../src/app.factory.js';
 import { AppModule } from '../../src/app.module.js';
 import { Public } from '../../src/auth/public.decorator.js';
@@ -119,10 +122,18 @@ export function authTestEnv(overrides: Record<string, string> = {}): ApiEnv {
 }
 
 /** The real application (plus test-only routes) listening on an ephemeral port. */
-export async function startAuthApp(overrides: Record<string, string> = {}): Promise<AuthTestApp> {
+export interface StartAuthAppOptions {
+  /** Replaces the configured LLM adapters (e.g. with MockLlmProvider). */
+  readonly llmProviders?: ReadonlyMap<string, LlmProvider>;
+}
+
+export async function startAuthApp(
+  overrides: Record<string, string> = {},
+  options: StartAuthAppOptions = {},
+): Promise<AuthTestApp> {
   const env = authTestEnv(overrides);
   const events: SessionStoreEvent[] = [];
-  const moduleRef = await Test.createTestingModule({
+  let builder = Test.createTestingModule({
     imports: [AppModule.register(env), TestSessionModule],
   })
     .overrideProvider(PrismaSessionStore)
@@ -135,8 +146,11 @@ export async function startAuthApp(overrides: Record<string, string> = {}): Prom
           touchThrottleMs: SESSION_TOUCH_THROTTLE_MS,
           onEvent: (event) => events.push(event),
         }),
-    })
-    .compile();
+    });
+  if (options.llmProviders) {
+    builder = builder.overrideProvider(LLM_PROVIDERS).useValue(options.llmProviders);
+  }
+  const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication({ logger: false });
   configureApp(app, env, createLogger(env));
   await app.listen(0, '127.0.0.1');

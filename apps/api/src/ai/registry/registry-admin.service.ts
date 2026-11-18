@@ -1,5 +1,11 @@
 import { UsdAmount, type PriceMetric } from '@acf/ai-core';
-import type { AiPriceSource, AiProviderStatus, AiQualityTier, PrismaClient } from '@acf/database';
+import type {
+  AiPriceSource,
+  AiProviderStatus,
+  AiQualityTier,
+  GenerationJobKind,
+  PrismaClient,
+} from '@acf/database';
 
 import { usdFromDecimal } from '@acf/ai-runtime';
 import type { ImportPlanEntry, PlannedModel } from '../providers/openrouter-catalog.js';
@@ -48,6 +54,31 @@ export class RegistryAdminService {
       data: { status },
     });
     if (count === 0) throw new RegistryAdminError(`unknown model ${providerKey}/${modelKey}`);
+  }
+
+  /**
+   * Routes a generation task to a model (M3 Q4). The model needs the `llm` capability; it may be
+   * disabled (generation then refuses with NO_MODEL_ROUTE until it is enabled).
+   */
+  async setRoute(
+    task: GenerationJobKind,
+    providerKey: string,
+    modelKey: string,
+  ): Promise<{ enabled: boolean }> {
+    const model = await this.prisma.aiModel.findFirst({
+      where: { modelKey, provider: { key: providerKey } },
+      include: { capabilities: true, provider: true },
+    });
+    if (!model) throw new RegistryAdminError(`unknown model ${providerKey}/${modelKey}`);
+    if (!model.capabilities.some((c) => c.capability === 'llm')) {
+      throw new RegistryAdminError(`${providerKey}/${modelKey} has no llm capability`);
+    }
+    await this.prisma.aiTaskRoute.upsert({
+      where: { task },
+      create: { task, modelId: model.id },
+      update: { modelId: model.id },
+    });
+    return { enabled: model.status === 'enabled' && model.provider.status === 'enabled' };
   }
 
   async addPrice(input: {

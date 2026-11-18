@@ -87,3 +87,16 @@ export const activeJobKey = (
   contentItemId: string,
   kind: 'script_generation' | 'storyboard_generation',
 ) => `${contentItemId}:${kind}`;
+
+/**
+ * BullMQ options for a generation job, shared by the API (enqueue) and the worker (reconcile).
+ * The BullMQ id is the DB id, so duplicate adds are no-ops; `backoff.type: 'acf'` selects the
+ * worker's strategy, which applies the delay the processor decided (`retryDelayMs`).
+ */
+export const generationJobOptions = (jobId: string) => ({
+  jobId,
+  attempts: RETRY_POLICY.maxAttempts,
+  backoff: { type: 'acf' },
+  removeOnComplete: { age: 7 * 24 * 3600 },
+  removeOnFail: { age: 30 * 24 * 3600 },
+});

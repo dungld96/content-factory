@@ -271,6 +271,27 @@ Resume eligible failed/waiting stages.
 
 ## 5. Script and storyboard
 
+### Implemented in M3
+
+Design: `docs/design/M3-design-review-package.md` §6–§10. Viewers read; generating, editing,
+approving, rejecting and canceling need editor (owner included); non-members get 404.
+
+| Endpoint | Behaviour |
+|---|---|
+| `POST /content/:contentId/brief/validate` | Deterministic brief check (no LLM): `errors` (block generation), `warnings`, claim `flags` |
+| `POST /content/:contentId/scripts/generate` | `202 { productionRunId, job, reused }`. Body `{ modelKey?, regenerate? }`, optional `Idempotency-Key` header. Identical inputs reuse the earlier result (`reused: true`, no new cost) unless `regenerate` |
+| `GET /content/:contentId/scripts`, `GET /scripts/:id` | Versions newest first; `content` is the schema-validated script with the content plan; `isApproved` marks gate 1 |
+| `PATCH /scripts/:id` | Body `{ content }` (full script): **new** version based on `:id` (201); the original never changes |
+| `POST /scripts/:id/approve`, `POST /scripts/:id/reject` | One-time review (`{ note? }` on reject). Approval moves gate 1 and clears gate 2 (older storyboards become stale) |
+| `POST /scripts/:id/storyboards/generate` | `202`, only from the approved script |
+| `GET /content/:contentId/storyboards`, `GET /storyboards/:id` | Versions with `stale`, `isApproved`; detail includes scenes |
+| `PATCH /scenes/:sceneId` | Partial scene: **new** storyboard version with that scene changed (201); numbering and total duration (target ± max(1 s, 5 %)) re-validated |
+| `POST /storyboards/:id/approve`, `/reject` | One-time review; approval sets gate 2; a stale storyboard is refused |
+| `GET /production-runs/:runId`, `POST /production-runs/:runId/cancel` | Run with jobs and cost; cancel stops queued work (a running call finishes and its result is discarded) |
+| `GET /generation-jobs/:jobId` | Status, attempts, events, sanitized error, cost (`reportedUsd`, `estimatedUsd`, `unknownCalls`) |
+
+### Original sketch
+
 - `GET /content/:contentId/scripts`
 - `POST /content/:contentId/scripts/generate`
 - `PATCH /scripts/:scriptVersionId`
@@ -450,6 +471,8 @@ pre-check every rule, so these are a backstop for races and direct SQL:
 | `AC007` | `409 LAST_OWNER` |
 | `AC008` | `409 ASSET_IN_USE` |
 | `AC010` | `409 ASSET_ARCHIVED` |
+| `AC012` | `409 ARTIFACT_IMMUTABLE` (M3: a reviewed version cannot change; edits create new versions) |
+| `AC013` | `409 STALE_STORYBOARD` (M3: pointer/staleness rules) |
 | `AC011` | `409 LEDGER_IMMUTABLE` (M2: price/usage rows append-only; an invocation's outcome is recorded once) |
 | `40001` / `40P01` | `409 CONCURRENT_MODIFICATION`, `retryable: true` (a `40001` is first retried once internally; a `40P01` is never retried, see below) |
 
@@ -463,6 +486,11 @@ mapper above:
 | `40P01` (deadlock) | Log `deadlock_detected` at error level (a defect: protocol paths cannot deadlock) and propagate immediately; never retried |
 | `AC001`–`AC010` | No retry |
 | Other errors | No retry |
+
+M3 error codes: `BRIEF_INVALID` (422, details list the errors), `NO_MODEL_ROUTE` (422),
+`GENERATION_IN_PROGRESS` (409, one active job per content item and kind), `INVALID_PIPELINE_STATE`
+(409), `SCRIPT_NOT_APPROVED` (409), `STALE_STORYBOARD` (409), `ARTIFACT_IMMUTABLE` (409),
+`NOT_CANCELABLE` (409).
 
 ## 11. API conventions
 

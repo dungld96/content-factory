@@ -452,6 +452,10 @@ under `apps/worker/test/` and is never part of the production build.
 - `generation_jobs.active_key` (unique, set while queued/running) implements "one active job per
   item and kind" without a partial index, which Prisma cannot model (drift check).
 - The worker, not the API, sweeps abandoned LLM invocations at start-up.
+- Script edits send the full `content` (validated by the same schema) rather than a partial
+  patch: simpler and unambiguous for a JSON document.
+- `POST /production-runs/:runId/cancel` on a run without queued/running work answers
+  `409 NOT_CANCELABLE`.
 - pnpm keeps the optional `msgpackr-extract` build script (a BullMQ transitive dependency)
   blocked; msgpackr falls back to its JavaScript implementation.
 
@@ -462,5 +466,5 @@ under `apps/worker/test/` and is never part of the production build.
 | M3a   | `packages/content-domain` (brief, schemas, prompts, repair ladder, pipeline); `packages/ai-runtime` extraction (Q1) with M2 tests green      | Done        |
 | M3b   | Migration `m3_script_storyboard`; integrity triggers/CHECKs; DB tests; lock-matrix extension; ai_invocations job FK                          | Done        |
 | M3c   | BullMQ + `apps/worker`: queue, processors, retries/backoff/jitter, DLQ, reconciler, cancel, restarts; worker integration tests on real Redis | Done        |
-| M3d   | API endpoints, contracts, OpenAPI, permission matrix, error codes; `ai_task_routes` CLI; seed routes                                         | Not started |
+| M3d   | API endpoints, contracts, OpenAPI, permission matrix, error codes; `ai_task_routes` CLI; seed routes                                         | Done        |
 | M3e   | Web UI, Playwright E2E with the fixture LLM; docs (API_SPEC, DATABASE, CONTENT_PIPELINE, ARCHITECTURE, LOCAL_DEVELOPMENT, ADR-0013)          | Not started |

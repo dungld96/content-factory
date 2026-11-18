@@ -66,6 +66,16 @@ const SQLSTATE_MAP: Readonly<Record<string, Mapping>> = {
     code: ApiErrorCode.AssetArchived,
     message: 'The version references an archived asset.',
   },
+  [IntegritySqlState.ARTIFACT_IMMUTABLE]: {
+    status: CONFLICT,
+    code: ApiErrorCode.ArtifactImmutable,
+    message: 'This version was already reviewed; edits create a new version.',
+  },
+  [IntegritySqlState.ARTIFACT_POINTER_INVALID]: {
+    status: CONFLICT,
+    code: ApiErrorCode.StaleStoryboard,
+    message: "The storyboard's script is no longer the approved script.",
+  },
   [IntegritySqlState.LEDGER_ROW_IMMUTABLE]: {
     status: CONFLICT,
     code: ApiErrorCode.LedgerImmutable,
