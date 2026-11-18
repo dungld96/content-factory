@@ -60,6 +60,7 @@ export default defineConfig(
     ignores: [
       '**/*.test.ts',
       'apps/api/test/**',
+      'apps/worker/test/**',
       'test-support/**',
       'packages/ai-runtime/src/providers/**',
     ],

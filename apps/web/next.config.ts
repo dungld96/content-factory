@@ -16,6 +16,12 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Stop Next.js from generating AGENTS.md (it leaked into the M0 commit; verified in M1 design).
   agentRules: false,
+  experimental: {
+    // The proxy buffers request bodies and silently truncates beyond this size. Image uploads are
+    // up to 25 MB (API UPLOAD_MAX_IMAGE_BYTES, M4a); larger bodies keep their Content-Length and
+    // are refused by the API with 413 before it reads them.
+    proxyClientMaxBodySize: '26mb',
+  },
   // /api/v1/* is forwarded to the API at runtime by src/proxy.ts (same-origin topology, D3).
 };
 

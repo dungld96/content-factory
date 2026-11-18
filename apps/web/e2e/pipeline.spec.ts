@@ -79,10 +79,51 @@ test('editor: brief → script → edit → approve → storyboard → scene edi
   await expect(page.getByRole('article', { name: 'Storyboard version 2' })).toContainText('In use');
 });
 
+test('editor: scene images → review → keyframes (gate 3)', async ({ page }) => {
+  test.setTimeout(120_000);
+  await openDemoContent(page, EDITOR, passwordOf('EDITOR'));
+  const panel = page.getByLabel('Scene image controls');
+  await expect(panel).toBeVisible();
+
+  // Estimate first: the seeded mock image model is free (estimated 0, never "unknown").
+  await panel.getByRole('button', { name: 'Estimate cost' }).click();
+  await expect(panel.getByLabel('Image estimate')).toContainText('mock/solid-image');
+  await expect(panel.getByLabel('Image estimate')).toContainText('estimated 0 USD');
+
+  // One job per scene; the worker generates, validates and stores the images.
+  await panel.getByRole('button', { name: 'Generate images' }).click();
+  await expect(page.getByLabel('Content status')).toHaveText('asset_review', {
+    timeout: GENERATION_TIMEOUT,
+  });
+  await page.reload();
+  const scenes = page.getByRole('article', { name: /^Scene \d+ images$/ });
+  const sceneCount = await scenes.count();
+  expect(sceneCount).toBeGreaterThan(0);
+
+  for (let n = 1; n <= sceneCount; n++) {
+    const scene = page.getByRole('article', { name: `Scene ${String(n)} images` });
+    const candidate = scene.getByRole('listitem', { name: `Scene ${String(n)} candidate 1` });
+    // The image is streamed through the API from object storage and decodes in the browser.
+    const img = candidate.getByRole('img', { name: `Scene ${String(n)} candidate 1` });
+    await expect(img).toBeVisible();
+    await expect
+      .poll(() => img.evaluate((el) => (el as HTMLImageElement).naturalWidth))
+      .toBeGreaterThan(0);
+    await candidate.getByRole('button', { name: 'Approve' }).click();
+    await expect(candidate).toContainText('approved');
+    await candidate.getByRole('button', { name: 'Use as keyframe' }).click();
+    await expect(scene).toContainText('Keyframe chosen');
+  }
+  await expect(page.getByLabel('Keyframe gate')).toHaveText('All scenes have a keyframe');
+});
+
 test('viewer: sees the versions but no generate, edit or review controls', async ({ page }) => {
   await openDemoContent(page, VIEWER, passwordOf('VIEWER'));
   await expect(page.getByRole('article', { name: 'Script version 2' })).toBeVisible();
   await expect(page.getByRole('article', { name: 'Storyboard version 2' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Generate/ })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Edit|Approve|Reject/ })).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: /Edit|Approve|Reject|keyframe|Regenerate/ }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel('Keyframe gate')).toHaveText('All scenes have a keyframe');
 });

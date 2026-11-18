@@ -44,7 +44,8 @@ Redis was unavailable. The remaining items arrive with M4–M6.
 - `content-domain`: content, script, storyboard, approval rules; since R0 also the format and
   platform registries, format × platform compatibility and content master/variant rules
   (ADR-0015).
-- `media`: file validation, FFmpeg commands, metadata extraction.
+- `storage` (M4a): S3 object store (write-once, checksummed), image validation, content-addressed
+  keys, bucket setup. `media` (FFmpeg/FFprobe) arrives with video and render (M5–M6).
 - `config`: typed environment configuration.
 
 ## 3. Runtime flow

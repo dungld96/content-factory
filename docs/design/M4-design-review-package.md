@@ -298,10 +298,46 @@ New error codes: `STORYBOARD_NOT_APPROVED` (409), `UNKNOWN_COST_NOT_ACCEPTED` (4
 
 ## 11. Implementation plan (each slice tested before the next)
 
-| Slice | Scope                                                                                                                                                                                             |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M4a   | SeaweedFS in local/CI/staging compose; `packages/storage`; compatibility test; upload + content endpoints; validation; ADR-0006 amendment                                                         |
-| M4b   | `ImageProvider` interface, OpenRouter image adapter, mock provider, fixture contract tests; registry price metrics/variants; `import-images` CLI; smoke script                                    |
-| M4c   | Migration `m4_images` (job kind, scene link, asset lineage, keyframes, triggers); worker image processor; R1 stage descriptors; worker tests                                                      |
-| M4d   | API: estimate, generate, images view, approve/reject, keyframe; status transitions; permission matrix                                                                                             |
-| M4e   | Web UI (masters, references, scene images); Playwright E2E with the mock provider; docs (API_SPEC, DATABASE, CONTENT_PIPELINE, AI_PROVIDER_STRATEGY, COST_STRATEGY); benchmark run with the owner |
+| Slice | Scope                                                                                                                                                                      | Status                                              |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| M4a   | SeaweedFS in local/CI/staging compose; `packages/storage`; compatibility test; upload + content endpoints; validation; ADR-0006 amendment                                  | Done (`ca6f388`)                                    |
+| M4b   | `ImageProvider` interface, OpenRouter image adapter, mock provider, fixture contract tests; registry price metrics/variants; `import-openrouter-images` CLI; `smoke-image` | Done (`a7f6161`)                                    |
+| M4c   | Migration `m4_images` (job kind, scene link, asset lineage, keyframes, triggers); worker image processor; R1 stage descriptors; worker tests                               | Done (`955b3cd`)                                    |
+| M4d   | API: estimate, generate, images view, approve/reject, keyframe; status transitions; permission matrix                                                                      | Done (`bc5b1d6`)                                    |
+| M4e   | Web UI (masters, references, scene images); Playwright E2E with the mock provider; docs; ADR-0016                                                                          | Done; the paid benchmark waits for an API key (§12) |
+
+## 12. Implementation notes (deviations decided during M4a–M4e)
+
+- **Storage.** SeaweedFS's simple S3 identities cannot deny delete to a key that can write, so
+  immutability is enforced by the application: `ObjectStore` has no delete, and every write is
+  conditional (`If-None-Match: *`, verified `412`). Each bucket grows 7 sparse volumes; the server
+  runs with an explicit `-volume.max=200` (the automatic limit ran out at the fourth bucket).
+  Storage settings are optional as a group: without them, uploads and image generation answer
+  `503 STORAGE_NOT_CONFIGURED` instead of the process refusing to start.
+- **Prices.** Per-megapixel prices are stored per pixel (`output_pixels`) so usage quantities stay
+  integers; image token prices use `output_image_tokens`/`input_image_tokens`. Only metrics a model
+  is priced on are billed.
+- **Adapter routing.** The registry has no per-endpoint dimension, so requests do not pin
+  `provider.only`; they send `data_collection: "deny"` (and `zdr` per route) and let OpenRouter
+  serve the same model from any compliant host, as the M2 text adapter does. The endpoint whose
+  prices and limits were imported is recorded in the model's `data_policy_notes`.
+- **Queues.** Image jobs run on their own queue `generation-images` (concurrency
+  `WORKER_IMAGE_CONCURRENCY`, lock 300 s); the reconciler and the API's enqueue route by job kind.
+- **Zero data retention per route** needed a column: migration `m4_route_policy`
+  (`ai_task_routes.zero_data_retention`, `route set … --zdr`).
+- **Keyframe reuse** happens when images are generated for a newer storyboard version (the plan
+  marks the scene `reuse_keyframe`), not when the storyboard is approved: approval stays an M3
+  operation, and reuse needs an editor action anyway.
+- **Asset review** added `assets.reviewed_by_id/reviewed_at`; a rejected candidate can be approved
+  later. A keyframe cannot be rejected or archived (`AC015`, `AC008`).
+- **Web.** There are no character/environment pages yet, so reference upload is a project-level
+  panel; making an upload a character's primary asset is still an API step (M1 character
+  version endpoints). The Next.js proxy buffers request bodies; `proxyClientMaxBodySize` is set to
+  26 MB so 25 MB uploads are not truncated. The web UI can now create content (and its master)
+  and variants.
+- **Seed.** With storage configured, the demo reference image is a real (placeholder) PNG in
+  storage, so the seeded character's reference can be sent to an image model.
+- **Benchmark (G2).** Not run: this environment has no OpenRouter API key. Ready to run with
+  `ACF_PAID_SMOKE=1 pnpm ai:registry smoke-image <modelKey> --project <slug> --max-cost-usd 1
+--count 10 --resolution 2K` for each of the three seeded candidates (enable OpenRouter with
+  `provider set-status openrouter enabled`; the models stay disabled until the owner chooses).

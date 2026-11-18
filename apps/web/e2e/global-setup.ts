@@ -3,8 +3,16 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { recreateDatabaseFromMigrations } from '@acf/database/admin';
+import { ensureBucket, storageAdminSettingsFromEnv } from '@acf/storage/admin';
 
-import { E2E_READY_FILE, e2eDatabaseUrls, loadRootEnv, repoRoot } from './env';
+import {
+  E2E_BUCKET,
+  E2E_READY_FILE,
+  e2eDatabaseUrls,
+  e2eStorageEnv,
+  loadRootEnv,
+  repoRoot,
+} from './env';
 
 /**
  * Builds the disposable E2E database from the committed migrations and seeds the demo
@@ -15,11 +23,19 @@ export default async function globalSetup(): Promise<void> {
   loadRootEnv();
   const urls = e2eDatabaseUrls();
   await recreateDatabaseFromMigrations(urls);
+  if (process.env['S3_ENDPOINT']) {
+    await ensureBucket(storageAdminSettingsFromEnv(process.env), E2E_BUCKET);
+  }
   const output = execFileSync(
     process.execPath,
     [path.join(repoRoot, 'apps/api/dist/cli/seed.js')],
     {
-      env: { ...process.env, NODE_ENV: 'test', DATABASE_MIGRATION_URL: urls.migratorUrl },
+      env: {
+        ...process.env,
+        ...e2eStorageEnv(),
+        NODE_ENV: 'test',
+        DATABASE_MIGRATION_URL: urls.migratorUrl,
+      },
       encoding: 'utf8',
     },
   );

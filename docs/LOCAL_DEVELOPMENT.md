@@ -123,7 +123,7 @@ curl -s localhost:4000/api/v1/health/ready
 | `pnpm typecheck`                    | Builds shared packages, then `tsc --noEmit` in every workspace         |
 | `pnpm test`                         | Unit and HTTP tests with mocked dependencies (no Docker, no network)   |
 | `pnpm test:integration`             | Integration tests against real PostgreSQL and Redis (requires `pnpm infra:up` and `pnpm db:setup`) |
-| `pnpm test:e2e`                     | Playwright in Chromium against the built API, worker and web (requires `pnpm build`, PostgreSQL, Redis) |
+| `pnpm test:e2e`                     | Playwright in Chromium against the built API, worker and web (requires `pnpm build`, PostgreSQL, Redis, SeaweedFS) |
 | `pnpm test:coverage`                | Unit tests with V8 coverage                                            |
 | `pnpm build`                        | Builds all packages and apps (`next build`, `nest build`)              |
 | `pnpm check`                        | format:check + lint + typecheck + test + build (run before pushing)    |

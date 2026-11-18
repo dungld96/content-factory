@@ -116,6 +116,22 @@ Acceptance:
 - Output stored in object storage.
 - Asset links to prompt, model, inputs, and job.
 
+Delivery: `docs/design/M4-design-review-package.md` (revision 1, approved), ADR-0016,
+ADR-0006 (amended), slices M4a–M4e. Owner decisions G1–G9: OpenRouter Image API with a capped
+benchmark before routing a real model; SeaweedFS 4.54 for local/CI/staging storage; bytes through
+the API.
+
+M4 acceptance evidence: an image provider generates images through the `ImageProvider` interface
+(contract tests against the documented OpenRouter Image API; mock provider in CI; the paid,
+capped `pnpm ai:registry smoke-image` for a real model once a key is set); the worker stores each
+image in object storage and the test reads it back with a matching checksum
+(`apps/worker/test/image-processor.integration.test.ts`, real SeaweedFS); every generated asset
+links its job (prompt snapshot, model, input), its scene and its reference inputs (`asset_inputs`),
+and its job's invocations carry the cost (`apps/api/test/generation/images.integration.test.ts`,
+`packages/database/test/images.integration.test.ts`); end to end in the browser:
+`apps/web/e2e/pipeline.spec.ts` (generate → approve → keyframes → gate 3) and
+`apps/web/e2e/masters.spec.ts` (content masters, variants, reference upload).
+
 ### M5 — Video and audio generation
 Deliverables:
 - Video provider adapter.

@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 
 import { Test } from '@nestjs/testing';
 
+import { MockImageProvider } from '@acf/ai-core/testing';
 import { loadApiEnv } from '@acf/config';
 import { createFixtureLlmProvider } from '@acf/content-domain/testing';
 
@@ -19,12 +20,15 @@ const dist = (file: string) =>
   pathToFileURL(path.resolve(import.meta.dirname, '../../dist', file)).href;
 const { AppModule } = (await import(dist('app.module.js'))) as typeof AppModuleFile;
 const { configureApp, createLogger } = (await import(dist('app.factory.js'))) as typeof Factory;
-const { LLM_PROVIDERS } = (await import(dist('ai/ai.tokens.js'))) as typeof Tokens;
+const { IMAGE_PROVIDERS, LLM_PROVIDERS } = (await import(dist('ai/ai.tokens.js'))) as typeof Tokens;
 
 const env = loadApiEnv(process.env);
 const moduleRef = await Test.createTestingModule({ imports: [AppModule.register(env)] })
   .overrideProvider(LLM_PROVIDERS)
   .useValue(new Map([['mock', createFixtureLlmProvider('mock')]]))
+  // M4: the mock image adapter, so image routing accepts the seeded `mock/solid-image` model.
+  .overrideProvider(IMAGE_PROVIDERS)
+  .useValue(new Map([['mock', new MockImageProvider({ providerKey: 'mock' })]]))
   .compile();
 const app = moduleRef.createNestApplication({ logger: false });
 configureApp(app, env, createLogger(env));

@@ -118,6 +118,19 @@ record gates through these pointers and do not change the content status.
 - User approves one candidate.
 - Store source lineage.
 
+M4 implementation (ADR-0016): for the **approved** storyboard only (gate 2), one
+`image_generation` job per scene (1–4 candidates) on the `generation-images` queue. The prompt
+`image.v1` is built from the scene (image prompt, visual description, shot, camera angle, negative
+prompt) without an LLM call; references are the character master's and environment master's
+primary assets and the scene's reference assets. The worker validates every image (magic bytes,
+declared type, dimensions), stores it write-once in object storage and records a `generated` asset
+linked to its job and scene, plus `asset_inputs` lineage. Candidates are approved or rejected; each
+scene's keyframe is an approved candidate (`scene_keyframes`). **Gate 3** = every scene has a
+keyframe; video generation (M5) starts from keyframes. Unchanged scenes of a newer storyboard
+version reuse their earlier keyframe. Status: `storyboard_review`/`asset_review` →
+`generating_assets` → `asset_review` once the item's last image job ends with a candidate.
+Vision evaluation is not implemented yet.
+
 ### Stage 7 — Video generation
 - Use approved image/keyframe and video prompt.
 - Submit async job.

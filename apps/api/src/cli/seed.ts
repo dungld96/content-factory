@@ -8,7 +8,12 @@ import 'reflect-metadata';
 
 import { randomBytes } from 'node:crypto';
 
+import { z } from 'zod';
+
+import { storageEnvShape, storageSettings } from '@acf/config';
 import { createPrismaClient, type PrismaClient } from '@acf/database';
+import { assetObjectKey, S3ObjectStore, sha256Hex, uuidv7, type ObjectStore } from '@acf/storage';
+import { solidPng } from '@acf/storage/testing';
 
 import { PasswordHasher } from '../auth/password-hasher.js';
 import { UserAdminService } from '../users/user-admin.service.js';
@@ -24,8 +29,16 @@ const PEOPLE = [
 const password = () => randomBytes(18).toString('base64url');
 const checksum = (seed: string) => Buffer.from(seed.padEnd(32, '0').slice(0, 32)).toString('hex');
 
+/** The demo reference image's file, stored when object storage is configured (M4). */
+interface DemoReference {
+  readonly id: string;
+  readonly storageKey: string;
+  readonly bytes: Uint8Array;
+}
+
 export async function seedDemoWorkspace(
   prisma: PrismaClient,
+  store: ObjectStore | null = null,
 ): Promise<
   { created: false } | { created: true; credentials: { email: string; password: string }[] }
 > {
@@ -44,9 +57,27 @@ export async function seedDemoWorkspace(
   }
   const ownerId = ids['owner'] ?? '';
 
+  const projectId = uuidv7();
+  let reference: DemoReference | null = null;
+  if (store) {
+    const bytes = solidPng(270, 480, 11);
+    const id = uuidv7();
+    const storageKey = assetObjectKey({
+      projectId,
+      assetId: id,
+      sha256Hex: sha256Hex(bytes),
+      mimeType: 'image/png',
+    });
+    await store.putIfAbsent(storageKey, bytes, {
+      contentType: 'image/png',
+      sha256Hex: sha256Hex(bytes),
+    });
+    reference = { id, storageKey, bytes };
+  }
   await prisma.$transaction(async (tx) => {
     const project = await tx.project.create({
       data: {
+        id: projectId,
         name: 'Demo Studio',
         slug: 'demo-studio',
         description: 'Seeded demo workspace (development only).',
@@ -104,21 +135,39 @@ export async function seedDemoWorkspace(
         createdById: ownerId,
       },
     });
+    // M4: with object storage, the demo reference is a real (generated) image, so image jobs can
+    // send it; without storage it stays metadata-only, as in M1.
     const asset = await tx.asset.create({
-      data: {
-        projectId: project.id,
-        assetType: 'reference',
-        sourceType: 'upload',
-        storageKey: `projects/${project.id}/references/host-front.png`,
-        mimeType: 'image/png',
-        sizeBytes: 245_760n,
-        checksumSha256: checksum('demo-host-front'),
-        width: 1080,
-        height: 1920,
-        originalFilename: 'host-front.png',
-        label: 'Host, front view',
-        createdById: ownerId,
-      },
+      data: reference
+        ? {
+            id: reference.id,
+            projectId: project.id,
+            assetType: 'reference',
+            sourceType: 'upload',
+            storageKey: reference.storageKey,
+            mimeType: 'image/png',
+            sizeBytes: BigInt(reference.bytes.byteLength),
+            checksumSha256: sha256Hex(reference.bytes),
+            width: 270,
+            height: 480,
+            originalFilename: 'host-front.png',
+            label: 'Host, front view (placeholder)',
+            createdById: ownerId,
+          }
+        : {
+            projectId: project.id,
+            assetType: 'reference',
+            sourceType: 'upload',
+            storageKey: `projects/${project.id}/references/host-front.png`,
+            mimeType: 'image/png',
+            sizeBytes: 245_760n,
+            checksumSha256: checksum('demo-host-front'),
+            width: 1080,
+            height: 1920,
+            originalFilename: 'host-front.png',
+            label: 'Host, front view',
+            createdById: ownerId,
+          },
     });
 
     const character = await tx.character.create({
@@ -185,7 +234,11 @@ async function main(): Promise<number> {
   }
   const prisma = createPrismaClient({ databaseUrl, maxConnections: 1 });
   try {
-    const result = await seedDemoWorkspace(prisma);
+    // M4: store the demo reference image when object storage is configured (S3_* in .env).
+    const storageEnv = z.object(storageEnvShape).safeParse(process.env);
+    const settings = storageEnv.success ? storageSettings(storageEnv.data) : null;
+    const store: ObjectStore | null = settings ? new S3ObjectStore(settings) : null;
+    const result = await seedDemoWorkspace(prisma, store);
     if (!result.created) {
       console.info(`✔ demo workspace already exists (users @${DEMO_DOMAIN}); nothing to do.`);
     } else {

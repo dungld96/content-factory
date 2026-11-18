@@ -15,7 +15,7 @@ export interface MutationResult<T> {
  * token (ADR-0009). Never throws: network errors become `{ ok: false, status: 0 }`.
  */
 export async function mutate<T>(
-  method: 'POST' | 'PATCH',
+  method: 'POST' | 'PATCH' | 'PUT',
   path: string,
   body?: unknown,
 ): Promise<MutationResult<T>> {
@@ -50,3 +50,38 @@ export async function fetchJson<T>(path: string): Promise<T | null> {
     return null;
   }
 }
+
+/** Raw-body image upload (M4a): the file itself is the request body, never JSON. */
+export async function uploadImage<T>(
+  projectId: string,
+  file: File,
+  options: { assetType: 'reference' | 'image'; label?: string; contentItemId?: string },
+): Promise<MutationResult<T>> {
+  try {
+    const token = await csrfToken();
+    const query = new URLSearchParams({ assetType: options.assetType, filename: file.name });
+    if (options.label) query.set('label', options.label);
+    if (options.contentItemId) query.set('contentItemId', options.contentItemId);
+    const res = await fetch(`/api/v1/projects/${projectId}/assets/upload?${query.toString()}`, {
+      method: 'POST',
+      headers: {
+        'content-type': file.type || 'application/octet-stream',
+        ...(token ? { 'x-csrf-token': token } : {}),
+      },
+      body: file,
+    });
+    const json = (await res.json().catch(() => null)) as unknown;
+    const error = (json as { error?: { message?: unknown } } | null)?.error;
+    return {
+      ok: res.ok,
+      status: res.status,
+      data: res.ok ? (json as T) : null,
+      message: !res.ok && typeof error?.message === 'string' ? error.message : null,
+    };
+  } catch {
+    return { ok: false, status: 0, data: null, message: 'The server could not be reached.' };
+  }
+}
+
+/** Same-origin URL of an asset's bytes (streamed by the API; storage is never exposed). */
+export const assetContentUrl = (assetId: string) => `/api/v1/assets/${assetId}/content`;

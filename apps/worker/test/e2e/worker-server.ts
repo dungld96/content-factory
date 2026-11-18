@@ -4,6 +4,7 @@ import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { MockImageProvider } from '@acf/ai-core/testing';
 import { loadWorkerEnv } from '@acf/config';
 import { createFixtureLlmProvider } from '@acf/content-domain/testing';
 
@@ -28,6 +29,7 @@ if (readyFile) {
 const running = await startWorker(
   loadWorkerEnv(process.env),
   new Map([['mock', createFixtureLlmProvider('mock')]]),
+  new Map([['mock', new MockImageProvider({ providerKey: 'mock' })]]),
 );
 const stop = () => {
   running.stop().then(

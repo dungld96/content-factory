@@ -4,8 +4,10 @@ import { notFound, redirect } from 'next/navigation';
 
 import type {
   ContentItemDto,
+  ContentMasterDto,
   Page,
   ProjectDto,
+  StoryboardImagesDto,
   ScriptVersionDto,
   StoryboardVersionDetailDto,
   StoryboardVersionDto,
@@ -22,6 +24,7 @@ import {
   SceneEditor,
   ScriptEditor,
 } from './pipeline-controls';
+import { ResyncBriefButton, SceneImagesPanel } from './scene-images';
 
 export const metadata: Metadata = { title: 'Content · AI Content Factory' };
 export const dynamic = 'force-dynamic';
@@ -58,10 +61,14 @@ export default async function ContentPage({
     );
   }
   const content = item.data;
-  const [project, scripts, storyboards] = await Promise.all([
+  const [project, scripts, storyboards, master, images] = await Promise.all([
     apiGet<ProjectDto>(`/projects/${content.projectId}`),
     apiGet<Page<ScriptVersionDto>>(`/content/${contentId}/scripts?limit=20`),
     apiGet<Page<StoryboardVersionDto>>(`/content/${contentId}/storyboards?limit=20`),
+    apiGet<ContentMasterDto>(`/content-masters/${content.contentMasterId}`),
+    content.approvedStoryboardVersionId
+      ? apiGet<StoryboardImagesDto>(`/storyboards/${content.approvedStoryboardVersionId}/images`)
+      : Promise.resolve(null),
   ]);
   const canEdit =
     project.kind === 'ok' && project.data.role !== 'viewer' && content.archivedAt === null;
@@ -73,7 +80,10 @@ export default async function ContentPage({
   const storyboard = latestStoryboardId
     ? await apiGet<StoryboardVersionDetailDto>(`/storyboards/${latestStoryboardId}`)
     : null;
-  const generating = content.status === 'scripting' || content.status === 'storyboarding';
+  const generating =
+    content.status === 'scripting' ||
+    content.status === 'storyboarding' ||
+    content.status === 'generating_assets';
 
   return (
     <>
@@ -99,6 +109,17 @@ export default async function ContentPage({
           {content.targetDurationSeconds} s · {content.aspectRatio} · {content.language}
           {content.brief.audience ? ` · for ${content.brief.audience}` : ''}
         </p>
+        <p className="muted" aria-label="Content master">
+          Variant of{' '}
+          <Link href={`/masters/${content.contentMasterId}`}>
+            {master.kind === 'ok' ? master.data.title : 'its content master'}
+          </Link>
+          {content.targetPlatform ? ` · for ${content.targetPlatform}` : ''}{' '}
+          {content.masterBriefStale && (
+            <span className="badge badge-warn">Master brief changed</span>
+          )}
+        </p>
+        {canEdit && content.masterBriefStale && <ResyncBriefButton contentId={content.id} />}
         <BriefCheck contentId={content.id} />
       </section>
 
@@ -229,6 +250,18 @@ export default async function ContentPage({
             {canEdit &&
               storyboard.data.scenes.map((scene) => <SceneEditor key={scene.id} scene={scene} />)}
           </article>
+        )}
+      </section>
+
+      <section className="card" aria-labelledby="images">
+        <h2 id="images">Scene images</h2>
+        {content.status === 'generating_assets' && <p role="status">Generating images…</p>}
+        {!images ? (
+          <p className="muted">Approve a storyboard first (gate 2).</p>
+        ) : images.kind !== 'ok' ? (
+          <p role="alert">The scene images could not be loaded.</p>
+        ) : (
+          <SceneImagesPanel images={images.data} canEdit={canEdit} />
         )}
       </section>
     </>

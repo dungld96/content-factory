@@ -6,13 +6,14 @@ import {
   E2E_QUEUE_PREFIX,
   E2E_READY_FILE,
   e2eDatabaseUrls,
+  e2eStorageEnv,
   loadRootEnv,
   repoRoot,
   WEB_URL,
 } from './e2e/env';
 
-// Requires `pnpm build` (API, worker and web production builds), PostgreSQL, Redis and the
-// database roles (`pnpm db:setup`). Run with `pnpm test:e2e`. The API and worker run their
+// Requires `pnpm build` (API, worker and web production builds), PostgreSQL, Redis, SeaweedFS
+// (`pnpm infra:up`) and the database roles (`pnpm db:setup`). Run with `pnpm test:e2e`. The API and worker run their
 // production builds through E2E entries that register a fixture LLM (no network, no cost).
 loadRootEnv();
 const urls = e2eDatabaseUrls();
@@ -51,6 +52,7 @@ export default defineConfig({
         TRUST_PROXY: 'loopback',
         WEB_ORIGINS: WEB_URL,
         QUEUE_PREFIX: E2E_QUEUE_PREFIX,
+        ...e2eStorageEnv(),
       },
     },
     {
@@ -69,6 +71,7 @@ export default defineConfig({
         QUEUE_PREFIX: E2E_QUEUE_PREFIX,
         WORKER_RECONCILE_INTERVAL_MS: '5000',
         E2E_READY_FILE,
+        ...e2eStorageEnv(),
       },
     },
     {
