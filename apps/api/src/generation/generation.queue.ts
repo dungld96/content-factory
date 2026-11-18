@@ -3,11 +3,7 @@ import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 
 import type { ApiEnv } from '@acf/config';
-import {
-  GENERATION_QUEUE,
-  generationJobOptions,
-  type GenerationJobPayload,
-} from '@acf/content-domain';
+import { generationJobOptions, queueForKind, type GenerationJobPayload } from '@acf/content-domain';
 
 import { API_ENV } from '../config/api-config.module.js';
 
@@ -23,14 +19,15 @@ const ENQUEUE_TIMEOUT_MS = 3_000;
 export class GenerationQueue implements OnModuleDestroy {
   private readonly logger = new Logger(GenerationQueue.name);
   private connection: Redis | undefined;
-  private queue: Queue<GenerationJobPayload> | undefined;
+  /** One queue per kind group: text (`generation`) and images (`generation-images`, M4). */
+  private readonly queues = new Map<string, Queue<GenerationJobPayload>>();
 
   constructor(@Inject(API_ENV) private readonly env: ApiEnv) {}
 
   /** Returns true when the job reached Redis. */
-  async enqueue(jobId: string): Promise<boolean> {
+  async enqueue(jobId: string, kind = 'script_generation'): Promise<boolean> {
     try {
-      const queue = this.getQueue();
+      const queue = this.getQueue(queueForKind(kind));
       await Promise.race([
         queue.add('generate', { jobId }, generationJobOptions(jobId)),
         new Promise((_, reject) =>
@@ -50,8 +47,8 @@ export class GenerationQueue implements OnModuleDestroy {
     }
   }
 
-  private getQueue(): Queue<GenerationJobPayload> {
-    if (!this.queue) {
+  private getQueue(name: string): Queue<GenerationJobPayload> {
+    if (!this.connection) {
       this.connection = new Redis(this.env.REDIS_URL, {
         maxRetriesPerRequest: 1,
         enableOfflineQueue: true,
@@ -59,17 +56,21 @@ export class GenerationQueue implements OnModuleDestroy {
         retryStrategy: (attempt) => Math.min(attempt * 500, 5_000),
       });
       this.connection.on('error', () => undefined);
-      this.queue = new Queue<GenerationJobPayload>(GENERATION_QUEUE, {
+    }
+    let queue = this.queues.get(name);
+    if (!queue) {
+      queue = new Queue<GenerationJobPayload>(name, {
         connection: this.connection,
         prefix: this.env.QUEUE_PREFIX,
       });
-      this.queue.on('error', () => undefined);
+      queue.on('error', () => undefined);
+      this.queues.set(name, queue);
     }
-    return this.queue;
+    return queue;
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.queue?.close().catch(() => undefined);
+    for (const queue of this.queues.values()) await queue.close().catch(() => undefined);
     this.connection?.disconnect();
   }
 }

@@ -6,11 +6,13 @@ import { ArtifactsService } from './artifacts.service.js';
 import { GenerationController } from './generation.controller.js';
 import { GenerationQueue } from './generation.queue.js';
 import { GenerationService } from './generation.service.js';
+import { ImagesController } from './images.controller.js';
+import { ImagesService } from './images.service.js';
 
-/** Script and storyboard pipeline (M3 design package §10). The worker runs the jobs. */
+/** Script, storyboard (M3) and scene image (M4) pipeline. The worker runs the jobs. */
 @Module({
   imports: [ProjectsModule, AiModule],
-  controllers: [GenerationController],
-  providers: [GenerationService, ArtifactsService, GenerationQueue],
+  controllers: [GenerationController, ImagesController],
+  providers: [GenerationService, ArtifactsService, GenerationQueue, ImagesService],
 })
 export class GenerationModule {}

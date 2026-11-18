@@ -8,7 +8,7 @@
 //                              [--effective-from <ISO>] [--min-prompt-tokens <n>] [--provider openrouter]
 //   pnpm ai:registry route list
 //   pnpm ai:registry model import-openrouter-images <modelKey>... [--tier <tier>] [--endpoint <slug>] [--apply]
-//   pnpm ai:registry route set <script_generation|storyboard_generation|image_generation> <modelKey> [--provider openrouter]
+//   pnpm ai:registry route set <script_generation|storyboard_generation|image_generation> <modelKey> [--provider openrouter] [--zdr]
 //   pnpm ai:registry invocations mark-abandoned
 //   ACF_PAID_SMOKE=1 pnpm ai:registry smoke <modelKey> --project <slug> --max-cost-usd <usd>
 //   ACF_PAID_SMOKE=1 pnpm ai:registry smoke-image <modelKey> --project <slug> --max-cost-usd <usd>
@@ -129,6 +129,7 @@ function parseCliArgs(args: readonly string[]) {
       count: { type: 'string' },
       resolution: { type: 'string' },
       out: { type: 'string' },
+      zdr: { type: 'boolean', default: false },
     },
   });
 }
@@ -333,7 +334,9 @@ export async function runAiRegistryCli(
         include: { model: { include: { provider: true } } },
         orderBy: { task: 'asc' },
       })) {
-        io.out(`${r.task}\t${r.model.provider.key}/${r.model.modelKey}\t${r.model.status}`);
+        io.out(
+          `${r.task}\t${r.model.provider.key}/${r.model.modelKey}\t${r.model.status}${r.zeroDataRetention ? '\tzdr' : ''}`,
+        );
       }
       return 0;
     }
@@ -349,8 +352,10 @@ export async function runAiRegistryCli(
           'route set <script_generation|storyboard_generation|image_generation> <modelKey> [--provider <key>]',
         );
       }
-      const { enabled } = await admin.setRoute(task, values.provider, modelKey);
-      io.out(`✔ ${task} → ${values.provider}/${modelKey}`);
+      const { enabled } = await admin.setRoute(task, values.provider, modelKey, values.zdr);
+      io.out(
+        `✔ ${task} → ${values.provider}/${modelKey}${values.zdr ? ' (zero data retention)' : ''}`,
+      );
       if (!enabled)
         io.out('  ! the model or provider is not enabled: generation refuses until it is');
       return 0;

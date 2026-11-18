@@ -268,10 +268,38 @@ export class GenerationService {
             detail: { type: 'canceled', by: actor.userId },
           },
         });
-        await transitionContent(tx, job.contentItemId, {
-          type: 'job_ended_without_result',
-          previous: job.previousContentStatus,
+        if (job.kind !== 'image_generation') {
+          await transitionContent(tx, job.contentItemId, {
+            type: 'job_ended_without_result',
+            previous: job.previousContentStatus,
+          });
+        }
+      }
+      // Image jobs (M4): the item leaves generating_assets once none of its image jobs is active.
+      const imageJob = active.find((j) => j.kind === 'image_generation');
+      if (imageJob) {
+        const stillActive = await tx.generationJob.count({
+          where: {
+            contentItemId: run.contentItemId,
+            kind: 'image_generation',
+            status: { in: ['queued', 'running'] },
+          },
         });
+        if (stillActive === 0) {
+          const candidates = await tx.asset.count({
+            where: {
+              contentItemId: run.contentItemId,
+              sourceType: 'generated',
+              assetType: 'image',
+              archivedAt: null,
+            },
+          });
+          await transitionContent(tx, run.contentItemId, {
+            type: 'image_jobs_settled',
+            hasCandidates: candidates > 0,
+            previous: imageJob.previousContentStatus,
+          });
+        }
       }
       if (count > 0) {
         await tx.productionRun.updateMany({

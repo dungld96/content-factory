@@ -63,6 +63,10 @@ export function toAssetDto(a: Asset): AssetDto {
     label: a.label,
     metadata: a.metadata as Record<string, unknown>,
     approvalStatus: a.approvalStatus,
+    reviewedById: a.reviewedById,
+    reviewedAt: a.reviewedAt?.toISOString() ?? null,
+    generationJobId: a.generationJobId,
+    storyboardSceneId: a.storyboardSceneId,
     archivedAt: a.archivedAt?.toISOString() ?? null,
     createdAt: a.createdAt.toISOString(),
     updatedAt: a.updatedAt.toISOString(),
@@ -89,6 +93,10 @@ interface AssetRow {
   label: string | null;
   metadata: Prisma.JsonValue;
   approval_status: Asset['approvalStatus'];
+  reviewed_by_id: string | null;
+  reviewed_at: Date | null;
+  generation_job_id: string | null;
+  storyboard_scene_id: string | null;
   created_by_id: string;
   archived_at: Date | null;
   created_at: Date;
@@ -115,6 +123,10 @@ const fromRow = (r: AssetRow): Asset => ({
   label: r.label,
   metadata: r.metadata,
   approvalStatus: r.approval_status,
+  reviewedById: r.reviewed_by_id,
+  reviewedAt: r.reviewed_at,
+  generationJobId: r.generation_job_id,
+  storyboardSceneId: r.storyboard_scene_id,
   createdById: r.created_by_id,
   archivedAt: r.archived_at,
   createdAt: r.created_at,
@@ -124,7 +136,8 @@ const fromRow = (r: AssetRow): Asset => ({
 const ASSET_COLUMNS = sql`a.id, a.project_id, a.content_item_id, a.asset_type::text AS asset_type,
   a.source_type::text AS source_type, a.source_asset_id, a.source_note, a.storage_key, a.mime_type,
   a.size_bytes, a.checksum_sha256, a.width, a.height, a.duration_ms, a.original_filename, a.label,
-  a.metadata, a.approval_status::text AS approval_status, a.created_by_id, a.archived_at,
+  a.metadata, a.approval_status::text AS approval_status, a.reviewed_by_id, a.reviewed_at,
+  a.generation_job_id, a.storyboard_scene_id, a.created_by_id, a.archived_at,
   a.created_at, a.updated_at`;
 
 const lineageCursorSchema = z.strictObject({ d: z.number().int().min(1), i: z.uuid() });

@@ -1115,10 +1115,12 @@ model StoryboardSceneAsset {
 
 /// Model per generation task (M3 Q4), set by the operator CLI.
 model AiTaskRoute {
-  task        GenerationJobKind @id
-  modelId     String            @map("model_id") @db.Uuid
-  updatedById String?           @map("updated_by_id") @db.Uuid
-  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  task              GenerationJobKind @id
+  modelId           String            @map("model_id") @db.Uuid
+  /// Route only to zero-data-retention endpoints (M4 decision G9; set by the operator).
+  zeroDataRetention Boolean           @default(false) @map("zero_data_retention")
+  updatedById       String?           @map("updated_by_id") @db.Uuid
+  updatedAt         DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   model     AiModel @relation(fields: [modelId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   updatedBy User?   @relation(fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)

@@ -66,6 +66,8 @@ export class RegistryAdminService {
     task: GenerationJobKind,
     providerKey: string,
     modelKey: string,
+    /** Route only to zero-data-retention endpoints (M4 decision G9). */
+    zeroDataRetention = false,
   ): Promise<{ enabled: boolean }> {
     const model = await this.prisma.aiModel.findFirst({
       where: { modelKey, provider: { key: providerKey } },
@@ -78,8 +80,8 @@ export class RegistryAdminService {
     }
     await this.prisma.aiTaskRoute.upsert({
       where: { task },
-      create: { task, modelId: model.id },
-      update: { modelId: model.id },
+      create: { task, modelId: model.id, zeroDataRetention },
+      update: { modelId: model.id, zeroDataRetention },
     });
     return { enabled: model.status === 'enabled' && model.provider.status === 'enabled' };
   }

@@ -4,3 +4,6 @@
  * and the `LlmProvider` interface (ADR-0004, design package §3.2).
  */
 export const LLM_PROVIDERS = Symbol('LLM_PROVIDERS');
+
+/** DI token for the image adapters (`ReadonlyMap<string, ImageProvider>`, M4). */
+export const IMAGE_PROVIDERS = Symbol('IMAGE_PROVIDERS');

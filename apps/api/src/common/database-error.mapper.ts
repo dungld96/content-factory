@@ -81,6 +81,11 @@ const SQLSTATE_MAP: Readonly<Record<string, Mapping>> = {
     code: ApiErrorCode.ContentMasterImmutable,
     message: 'A content item cannot move to another content master.',
   },
+  [IntegritySqlState.KEYFRAME_INVALID]: {
+    status: CONFLICT,
+    code: ApiErrorCode.KeyframeInvalid,
+    message: "A keyframe must be an approved, active image of the scene's content item.",
+  },
   [IntegritySqlState.LEDGER_ROW_IMMUTABLE]: {
     status: CONFLICT,
     code: ApiErrorCode.LedgerImmutable,

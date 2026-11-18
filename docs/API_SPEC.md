@@ -331,17 +331,54 @@ Script/storyboard generation must return schema-validated structured JSON, not u
 
 ## 6. Media generation
 
-### `POST /scenes/:sceneId/image-generations`
-Request:
+### Scene images (implemented in M4)
+
+Design: `docs/design/M4-design-review-package.md` §5–§7. Schemas: `packages/contracts/src/images.ts`.
+The original per-scene sketch was replaced by storyboard-level endpoints: one request plans every
+scene (or the listed ones), creates **one job per scene**, and reuses earlier results.
+
+| Endpoint | Viewer | Editor/Owner | Notes |
+|---|:-:|:-:|---|
+| `POST /storyboards/:storyboardVersionId/images/estimate` | ✓ | ✓ | Body as below; returns the per-scene plan and price. No cost, nothing written |
+| `POST /storyboards/:storyboardVersionId/images/generate` | 403 | 202 | Queues the scenes whose plan is `generate`; reuses keyframes of identical scenes |
+| `GET /storyboards/:storyboardVersionId/images` | ✓ | ✓ | Per scene: keyframe, candidates (incl. identical earlier scenes), active and last job; `keyframesComplete` = gate 3 |
+| `PUT /scenes/:sceneId/keyframe` | 403 | ✓ | `{ assetId }`: an approved, active image of the scene's content item (`409 KEYFRAME_INVALID` otherwise) |
+| `POST /assets/:assetId/approve`, `/reject` | 403 | ✓ | Images and reference images only (`422 ASSET_NOT_REVIEWABLE`); a keyframe cannot be rejected (`409 KEYFRAME_INVALID`) |
+
+Request body (estimate and generate):
+
 ```json
 {
-  "providerPreference": ["provider-a", "provider-b"],
-  "qualityTier": "balanced",
-  "referenceAssetIds": ["uuid"],
-  "promptOverride": null,
-  "idempotencyKey": "unique-key"
+  "sceneIds": ["uuid"],
+  "count": 1,
+  "resolution": "2K",
+  "modelKey": "bytedance-seed/seedream-5-0-flash",
+  "seed": 7,
+  "regenerate": false,
+  "acceptUnknownCost": false
 }
 ```
+
+All fields are optional. Defaults: every scene without a keyframe, 1 candidate (at most 4), 2K
+when the model supports it, the model routed to `image_generation` (`pnpm ai:registry route set
+image_generation <modelKey> [--zdr]`). Per scene the plan says `generate`, `reuse_keyframe`
+(an identical scene of an earlier storyboard version already has a keyframe), `skip_has_keyframe`,
+`skip_existing_result` (identical inputs already produced candidates; `regenerate: true` overrides)
+or `skip_in_progress`. A scene listed explicitly in `sceneIds` is generated even when it has a
+keyframe. References sent with each scene: the character master's primary asset, the environment
+master's primary asset, then the scene's reference assets; each must have a stored file.
+
+Errors: `409 STORYBOARD_NOT_APPROVED` (gate 2), `409 INVALID_PIPELINE_STATE`, `409
+GENERATION_IN_PROGRESS`, `422 NO_MODEL_ROUTE`, `422 MODEL_LIMITS` (resolution, aspect ratio or
+seed not supported), `422 REFERENCES_EXCEED_MODEL_LIMIT`, `422 REFERENCE_FILE_MISSING`, `422
+UNKNOWN_COST_NOT_ACCEPTED` (the plan is in `error.current`; resend with `acceptUnknownCost: true`),
+`503 STORAGE_NOT_CONFIGURED`.
+
+Content status: `storyboard_review`/`asset_review` → `generating_assets` when jobs are queued →
+`asset_review` once the item's last image job ends with at least one candidate (otherwise back to
+the starting status). Canceling the run (`POST /production-runs/:runId/cancel`) settles the same
+way. Image jobs appear in `GET /generation-jobs/:jobId` and `GET /production-runs/:runId` with
+`kind: image_generation`.
 
 ### `POST /scenes/:sceneId/video-generations`
 Request:
@@ -514,6 +551,7 @@ pre-check every rule, so these are a backstop for races and direct SQL:
 | `AC012` | `409 ARTIFACT_IMMUTABLE` (M3: a reviewed version cannot change; edits create new versions) |
 | `AC013` | `409 STALE_STORYBOARD` (M3: pointer/staleness rules) |
 | `AC014` | `409 CONTENT_MASTER_IMMUTABLE` (R0: a content item never moves to another master) |
+| `AC015` | `409 KEYFRAME_INVALID` (M4: keyframe rules) |
 | `AC011` | `409 LEDGER_IMMUTABLE` (M2: price/usage rows append-only; an invocation's outcome is recorded once) |
 | `40001` / `40P01` | `409 CONCURRENT_MODIFICATION`, `retryable: true` (a `40001` is first retried once internally; a `40P01` is never retried, see below) |
 

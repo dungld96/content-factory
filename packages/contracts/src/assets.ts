@@ -132,6 +132,13 @@ export const assetSchema = z
     label: z.string().nullable(),
     metadata: z.record(z.string(), z.unknown()),
     approvalStatus: approvalStatusSchema,
+    /** Who reviewed the asset and when (M4 candidate review). */
+    reviewedById: z.uuid().nullable(),
+    reviewedAt: isoDateTimeSchema.nullable(),
+    /** The generation job that produced it (generated assets, M4). */
+    generationJobId: z.uuid().nullable(),
+    /** The storyboard scene a generated candidate was made for (M4). */
+    storyboardSceneId: z.uuid().nullable(),
     archivedAt: isoDateTimeSchema.nullable(),
     createdAt: isoDateTimeSchema,
     updatedAt: isoDateTimeSchema,

@@ -18,9 +18,9 @@ import { inject } from 'vitest';
 import { loadApiEnv, type ApiEnv } from '@acf/config';
 import { createPrismaClient, type PrismaClient } from '@acf/database';
 
-import type { LlmProvider } from '@acf/ai-core';
+import type { ImageProvider, LlmProvider } from '@acf/ai-core';
 
-import { LLM_PROVIDERS } from '../../src/ai/ai.tokens.js';
+import { IMAGE_PROVIDERS, LLM_PROVIDERS } from '../../src/ai/ai.tokens.js';
 import { configureApp, createLogger } from '../../src/app.factory.js';
 import { AppModule } from '../../src/app.module.js';
 import { Public } from '../../src/auth/public.decorator.js';
@@ -126,6 +126,8 @@ export function authTestEnv(overrides: Record<string, string> = {}): ApiEnv {
 export interface StartAuthAppOptions {
   /** Replaces the configured LLM adapters (e.g. with MockLlmProvider). */
   readonly llmProviders?: ReadonlyMap<string, LlmProvider>;
+  /** Replaces the configured image adapters (e.g. with MockImageProvider, M4). */
+  readonly imageProviders?: ReadonlyMap<string, ImageProvider>;
 }
 
 export async function startAuthApp(
@@ -148,6 +150,9 @@ export async function startAuthApp(
           onEvent: (event) => events.push(event),
         }),
     });
+  if (options.imageProviders) {
+    builder = builder.overrideProvider(IMAGE_PROVIDERS).useValue(options.imageProviders);
+  }
   if (options.llmProviders) {
     builder = builder.overrideProvider(LLM_PROVIDERS).useValue(options.llmProviders);
   }

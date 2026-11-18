@@ -86,6 +86,20 @@ export const ApiErrorCode = {
   MediaTypeMismatch: 'MEDIA_TYPE_MISMATCH',
   /** The asset is registered but its bytes are not in storage (e.g. M1 metadata-only assets). */
   AssetContentMissing: 'ASSET_CONTENT_MISSING',
+  /** Images are generated only for the approved storyboard (gate 2). */
+  StoryboardNotApproved: 'STORYBOARD_NOT_APPROVED',
+  /** The cost cannot be estimated; resend with `acceptUnknownCost: true` to proceed. */
+  UnknownCostNotAccepted: 'UNKNOWN_COST_NOT_ACCEPTED',
+  /** The scene needs more reference images than the model accepts. */
+  ReferencesExceedModelLimit: 'REFERENCES_EXCEED_MODEL_LIMIT',
+  /** The model does not support the requested resolution, aspect ratio or seed. */
+  ModelLimits: 'MODEL_LIMITS',
+  /** A reference image is registered but its file is not stored. */
+  ReferenceFileMissing: 'REFERENCE_FILE_MISSING',
+  /** A keyframe must be an approved, active image of the scene's content item (AC015). */
+  KeyframeInvalid: 'KEYFRAME_INVALID',
+  /** Only images and references can be reviewed. */
+  AssetNotReviewable: 'ASSET_NOT_REVIEWABLE',
 
   // --- R0: content masters and variants (ADR-0015) ---
   /** The format cannot be published on the target platform. */

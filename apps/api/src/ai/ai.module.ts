@@ -1,12 +1,19 @@
 import { Module } from '@nestjs/common';
 
-import type { LlmProvider } from '@acf/ai-core';
-import { createLlmProviders, LlmService, ModelCatalog } from '@acf/ai-runtime';
+import type { ImageProvider, LlmProvider } from '@acf/ai-core';
+import {
+  createImageProviders,
+  createLlmProviders,
+  ImageService,
+  LlmService,
+  ModelCatalog,
+} from '@acf/ai-runtime';
+import { inspectImage } from '@acf/storage';
 import type { ApiEnv } from '@acf/config';
 
 import { API_ENV } from '../config/api-config.module.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
-import { LLM_PROVIDERS } from './ai.tokens.js';
+import { IMAGE_PROVIDERS, LLM_PROVIDERS } from './ai.tokens.js';
 import { RegistryController } from './registry/registry.controller.js';
 import { RegistryService } from './registry/registry.service.js';
 
@@ -23,10 +30,38 @@ import { RegistryService } from './registry/registry.service.js';
       useFactory: (env: ApiEnv) => createLlmProviders(env),
     },
     {
+      provide: IMAGE_PROVIDERS,
+      inject: [API_ENV],
+      useFactory: (env: ApiEnv) => createImageProviders(env),
+    },
+    {
       provide: ModelCatalog,
-      inject: [PrismaService, LLM_PROVIDERS],
-      useFactory: (prisma: PrismaService, providers: ReadonlyMap<string, LlmProvider>) =>
-        new ModelCatalog(prisma.client, providers),
+      inject: [PrismaService, LLM_PROVIDERS, IMAGE_PROVIDERS],
+      useFactory: (
+        prisma: PrismaService,
+        providers: ReadonlyMap<string, LlmProvider>,
+        imageProviders: ReadonlyMap<string, ImageProvider>,
+      ) => new ModelCatalog(prisma.client, providers, imageProviders),
+    },
+    {
+      // Routing and estimates in the API; the worker makes the calls (M4 design §5).
+      provide: ImageService,
+      inject: [PrismaService, ModelCatalog, IMAGE_PROVIDERS],
+      useFactory: (
+        prisma: PrismaService,
+        catalog: ModelCatalog,
+        providers: ReadonlyMap<string, ImageProvider>,
+      ) =>
+        new ImageService(prisma.client, catalog, providers, {
+          pixelsOf: (bytes) => {
+            try {
+              const image = inspectImage(bytes);
+              return image.width * image.height;
+            } catch {
+              return null;
+            }
+          },
+        }),
     },
     {
       provide: LlmService,
@@ -43,6 +78,6 @@ import { RegistryService } from './registry/registry.service.js';
     },
     RegistryService,
   ],
-  exports: [LlmService, ModelCatalog, RegistryService],
+  exports: [LlmService, ModelCatalog, ImageService, RegistryService],
 })
 export class AiModule {}

@@ -16,7 +16,7 @@ import {
   userAdmin,
   type AuthTestApp,
 } from '../support/auth-app.js';
-import { MockLlmProvider } from '@acf/ai-core/testing';
+import { MockImageProvider, MockLlmProvider } from '@acf/ai-core/testing';
 import { solidPng } from '@acf/storage/testing';
 
 import { seedAiRegistry } from '../../src/cli/seed-ai.js';
@@ -253,6 +253,42 @@ const ROWS: Record<string, Row> = {
     path: (f) => `/content/${f.contentId}/archive`,
     expect: [401, 404, 403, 200, 200],
   },
+  // Scene images (M4d). The fixture storyboard is pending (not approved), so estimate and
+  // generate answer 409 STORYBOARD_NOT_APPROVED once authorized; the fixture reference asset is
+  // not an approved image of the content item, so selecting it as keyframe is 409 (AC015).
+  'POST /storyboards/:storyboardVersionId/images/estimate': {
+    method: 'POST',
+    path: (f) => `/storyboards/${f.storyboardId}/images/estimate`,
+    body: () => ({}),
+    expect: [401, 404, 409, 409, 409],
+  },
+  'POST /storyboards/:storyboardVersionId/images/generate': {
+    method: 'POST',
+    path: (f) => `/storyboards/${f.storyboardId}/images/generate`,
+    body: () => ({}),
+    expect: [401, 404, 403, 409, 409],
+  },
+  'GET /storyboards/:storyboardVersionId/images': {
+    method: 'GET',
+    path: (f) => `/storyboards/${f.storyboardId}/images`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'PUT /scenes/:sceneId/keyframe': {
+    method: 'PUT',
+    path: (f) => `/scenes/${f.sceneId}/keyframe`,
+    body: (f) => ({ assetId: f.spareAssetId }),
+    expect: [401, 404, 403, 409, 409],
+  },
+  'POST /assets/:assetId/approve': {
+    method: 'POST',
+    path: (f) => `/assets/${f.spareAssetId}/approve`,
+    expect: [401, 404, 403, 200, 200],
+  },
+  'POST /assets/:assetId/reject': {
+    method: 'POST',
+    path: (f) => `/assets/${f.spareAssetId}/reject`,
+    expect: [401, 404, 403, 200, 200],
+  },
   // Object storage (M4a). Upload needs editor; any member reads bytes. The fixture asset is
   // metadata-only, so reading it is 404 ASSET_CONTENT_MISSING once authorized.
   'POST /projects/:projectId/assets/upload': {
@@ -456,7 +492,10 @@ beforeAll(async () => {
       REDIS_URL: process.env['REDIS_URL'] ?? 'redis://localhost:6379',
       QUEUE_PREFIX: `acf-matrix-${randomUUID().slice(0, 8)}`,
     },
-    { llmProviders: new Map([['mock', new MockLlmProvider({ providerKey: 'mock' })]]) },
+    {
+      llmProviders: new Map([['mock', new MockLlmProvider({ providerKey: 'mock' })]]),
+      imageProviders: new Map([['mock', new MockImageProvider({ providerKey: 'mock' })]]),
+    },
   );
   as = actAs(api.baseUrl, await signInAll(api.baseUrl, ids));
 });
