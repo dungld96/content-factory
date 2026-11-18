@@ -104,9 +104,81 @@ export class JobStore {
         errorCode,
         ...detail,
       });
-      await this.endRun(tx, current.productionRunId, 'failed');
-      await this.restoreContent(tx, current);
+      if (current.kind === 'image_generation') {
+        await this.settleImageWork(tx, current);
+      } else {
+        await this.endRun(tx, current.productionRunId, 'failed');
+        await this.restoreContent(tx, current);
+      }
       return true;
+    });
+  }
+
+  /**
+   * An image job succeeds inside the caller's transaction (which inserted its assets). Returns
+   * false when the job is no longer running (canceled meanwhile): the caller rolls back.
+   */
+  async succeedImageIn(
+    tx: TransactionClient,
+    job: GenerationJob,
+    assetIds: readonly string[],
+  ): Promise<boolean> {
+    const { count } = await tx.generationJob.updateMany({
+      where: { id: job.id, status: 'running', attempt: job.attempt },
+      data: {
+        status: 'succeeded',
+        activeKey: null,
+        completedAt: new Date(),
+        errorCode: null,
+        errorMessage: null,
+      },
+    });
+    if (count !== 1) return false;
+    await this.event(tx, job, 'running', 'succeeded', job.attempt, {
+      type: 'succeeded',
+      assetIds: [...assetIds],
+    });
+    await this.settleImageWork(tx, job);
+    return true;
+  }
+
+  /**
+   * After an image job ended (M4 design §5.5): its run ends once none of the run's jobs is
+   * active (succeeded if any job succeeded), and the content item leaves `generating_assets`
+   * once none of its image jobs is active. The content item is locked first, so two scene jobs
+   * ending together serialize here and the second one sees the first one's committed outcome.
+   */
+  async settleImageWork(tx: TransactionClient, job: GenerationJob): Promise<void> {
+    await tx.$queryRaw`SELECT 1 FROM content_items WHERE id = ${job.contentItemId}::uuid FOR NO KEY UPDATE`;
+    const runActive = await tx.generationJob.count({
+      where: { productionRunId: job.productionRunId, status: { in: ['queued', 'running'] } },
+    });
+    if (runActive === 0) {
+      const anySucceeded = await tx.generationJob.count({
+        where: { productionRunId: job.productionRunId, status: 'succeeded' },
+      });
+      await this.endRun(tx, job.productionRunId, anySucceeded > 0 ? 'succeeded' : 'failed');
+    }
+    const itemActive = await tx.generationJob.count({
+      where: {
+        contentItemId: job.contentItemId,
+        kind: 'image_generation',
+        status: { in: ['queued', 'running'] },
+      },
+    });
+    if (itemActive > 0) return;
+    const candidates = await tx.asset.count({
+      where: {
+        contentItemId: job.contentItemId,
+        sourceType: 'generated',
+        assetType: 'image',
+        archivedAt: null,
+      },
+    });
+    await this.transitionContent(tx, job.contentItemId, {
+      type: 'image_jobs_settled',
+      hasCandidates: candidates > 0,
+      previous: job.previousContentStatus,
     });
   }
 

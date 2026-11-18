@@ -205,6 +205,9 @@ importers:
       '@acf/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@acf/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       bullmq:
         specifier: 6.7.7
         version: 6.7.7(ioredis@6.0.0)(pg@8.23.1)

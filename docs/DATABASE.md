@@ -66,6 +66,22 @@ Migration `m35_content_masters` (design: `docs/design/M3.5-multiformat-architect
 
 Backfill: one master per pre-existing content item (title, brief, language, author, archive and timestamps copied; UUIDv7 from the item's `created_at`). Locking: creating a variant takes the master `FOR KEY SHARE`, archiving it `FOR UPDATE` (refused while a variant is active); verified by `packages/database/test/content-masters.integration.test.ts`.
 
+## 0.4 Implemented schema (M4: images)
+
+Migrations `m4_image_registry` and `m4_images` (design: `docs/design/M4-design-review-package.md` §4.4, §5, §6):
+
+| Table / column | Purpose |
+|---|---|
+| `ai_price_metric` += `output_images`, `input_images`, `output_pixels`, `input_pixels`, `output_image_tokens`, `input_image_tokens` | Image prices: per image, per pixel (per-megapixel prices stored per pixel) or per image token. |
+| `ai_model_prices.variant` | Resolution tier a price applies to (`2k`, …); `''` = any request. Part of the unique key. |
+| `ai_models.image_constraints` | Image model limits from the provider's endpoint record: `maxImages`, `maxReferences`, `aspectRatios`, `resolutions`, `seed`. |
+| `generation_job_kind` += `image_generation`; `generation_jobs.storyboard_scene_id` | Image jobs are scene-scoped: one active image job per scene (`active_key = {sceneId}:image_generation`); a succeeded image job links its results through `assets.generation_job_id`. |
+| `assets.generation_job_id`, `assets.storyboard_scene_id`, `assets.reviewed_by_id`, `assets.reviewed_at` | Generated images link their job (required iff `source_type = generated`) and the scene they were made for; candidate review. Both links are immutable (`AC005`). |
+| `asset_inputs` | Append-only lineage: the reference images sent with a generation (`character`, `environment`, `scene_reference`). |
+| `scene_keyframes`, `scene_keyframe_events` | The selected image of each storyboard scene (gate 3 input) and its append-only selection history (`selected`/`reused`). |
+
+Enforced by the database: `AC015` (a keyframe is an approved, active image of the scene's own content item; never deleted; the asset cannot lose its approval while it is a keyframe), `AC008` extended (a keyframe asset cannot be archived), CHECKs for the job/scene and asset/job pairing. The keyframe trigger reads the asset `FOR SHARE`, so it serializes with an asset update that would archive it or revoke its approval.
+
 ## 1. Entity groups
 
 ### Identity and workspace

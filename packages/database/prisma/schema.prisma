@@ -170,6 +170,10 @@ model User {
   reviewedStoryboards StoryboardVersion[] @relation("StoryboardReviewedBy")
   updatedTaskRoutes   AiTaskRoute[]
 
+  reviewedAssets    Asset[]              @relation("AssetReviewedBy")
+  selectedKeyframes SceneKeyframe[]
+  keyframeEvents    SceneKeyframeEvent[]
+
   @@map("users")
 }
 
@@ -436,38 +440,52 @@ model EnvironmentVersionAsset {
 // ----------------------------------------------------------------------------- assets
 
 model Asset {
-  id               String          @id @default(uuid(7)) @db.Uuid
-  projectId        String          @map("project_id") @db.Uuid
-  contentItemId    String?         @map("content_item_id") @db.Uuid
-  assetType        AssetType       @map("asset_type")
-  sourceType       AssetSourceType @map("source_type")
+  id                String          @id @default(uuid(7)) @db.Uuid
+  projectId         String          @map("project_id") @db.Uuid
+  contentItemId     String?         @map("content_item_id") @db.Uuid
+  assetType         AssetType       @map("asset_type")
+  sourceType        AssetSourceType @map("source_type")
   /// Lineage parent (same project via composite FK). Immutable; set at insert.
-  sourceAssetId    String?         @map("source_asset_id") @db.Uuid
+  sourceAssetId     String?         @map("source_asset_id") @db.Uuid
   /// Free-text provenance for upload/import (e.g. "photographer X, licensed 2026-11").
-  sourceNote       String?         @map("source_note") @db.VarChar(1000)
+  sourceNote        String?         @map("source_note") @db.VarChar(1000)
   // --- file identity: immutable after insert (trigger) ---
-  storageKey       String          @unique @map("storage_key") @db.VarChar(1024)
-  mimeType         String          @map("mime_type") @db.VarChar(255)
-  sizeBytes        BigInt          @map("size_bytes")
-  checksumSha256   String          @map("checksum_sha256") @db.Char(64)
-  width            Int?
-  height           Int?
-  durationMs       Int?            @map("duration_ms")
-  originalFilename String?         @map("original_filename") @db.VarChar(255)
+  storageKey        String          @unique @map("storage_key") @db.VarChar(1024)
+  mimeType          String          @map("mime_type") @db.VarChar(255)
+  sizeBytes         BigInt          @map("size_bytes")
+  checksumSha256    String          @map("checksum_sha256") @db.Char(64)
+  width             Int?
+  height            Int?
+  durationMs        Int?            @map("duration_ms")
+  originalFilename  String?         @map("original_filename") @db.VarChar(255)
   // --- mutable descriptive fields ---
-  label            String?         @db.VarChar(200)
-  metadata         Json            @default("{}") @db.JsonB
-  approvalStatus   ApprovalStatus  @default(pending) @map("approval_status")
-  createdById      String          @map("created_by_id") @db.Uuid
-  archivedAt       DateTime?       @map("archived_at") @db.Timestamptz(3)
-  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  label             String?         @db.VarChar(200)
+  metadata          Json            @default("{}") @db.JsonB
+  approvalStatus    ApprovalStatus  @default(pending) @map("approval_status")
+  /// Who reviewed the asset and when (M4: image candidates and uploads).
+  reviewedById      String?         @map("reviewed_by_id") @db.Uuid
+  reviewedAt        DateTime?       @map("reviewed_at") @db.Timestamptz(3)
+  /// The generation job that produced the asset; required iff source_type = generated (M4).
+  generationJobId   String?         @map("generation_job_id") @db.Uuid
+  /// The storyboard scene a generated candidate was made for (M4).
+  storyboardSceneId String?         @map("storyboard_scene_id") @db.Uuid
+  createdById       String          @map("created_by_id") @db.Uuid
+  archivedAt        DateTime?       @map("archived_at") @db.Timestamptz(3)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  project     Project      @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  contentItem ContentItem? @relation(fields: [projectId, contentItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  sourceAsset Asset?       @relation("AssetLineage", fields: [projectId, sourceAssetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  derived     Asset[]      @relation("AssetLineage")
-  createdBy   User         @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  project         Project              @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contentItem     ContentItem?         @relation(fields: [projectId, contentItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  sourceAsset     Asset?               @relation("AssetLineage", fields: [projectId, sourceAssetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  derived         Asset[]              @relation("AssetLineage")
+  createdBy       User                 @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reviewedBy      User?                @relation("AssetReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  generationJob   GenerationJob?       @relation("JobAssets", fields: [projectId, generationJobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  storyboardScene StoryboardScene?     @relation("SceneCandidates", fields: [projectId, storyboardSceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  inputs          AssetInput[]         @relation("AssetInputsOf")
+  usedAsInput     AssetInput[]         @relation("AssetInputsUsed")
+  keyframeOf      SceneKeyframe[]
+  keyframeEvents  SceneKeyframeEvent[]
 
   characterVersionPrimary   CharacterVersion[]        @relation("CharacterVersionPrimaryAsset")
   characterVersionLinks     CharacterVersionAsset[]   @relation("CharacterVersionAssets")
@@ -482,6 +500,9 @@ model Asset {
   @@index([contentItemId])
   @@index([sourceAssetId]) // forward lineage traversal (children of an asset)
   @@index([createdById])
+  @@index([generationJobId])
+  @@index([storyboardSceneId])
+  @@index([reviewedById])
   @@map("assets")
 }
 
@@ -911,6 +932,8 @@ model GenerationJob {
   modelId                   String              @map("model_id") @db.Uuid
   attempt                   Int                 @default(0)
   maxAttempts               Int                 @default(3) @map("max_attempts")
+  /// The scene an image job generates for (M4); required iff kind = image_generation.
+  storyboardSceneId         String?             @map("storyboard_scene_id") @db.Uuid
   resultScriptVersionId     String?             @map("result_script_version_id") @db.Uuid
   resultStoryboardVersionId String?             @map("result_storyboard_version_id") @db.Uuid
   errorCode                 String?             @map("error_code") @db.VarChar(64)
@@ -928,6 +951,8 @@ model GenerationJob {
   requestedBy      User                @relation(fields: [requestedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   resultScript     ScriptVersion?      @relation("JobResultScript", fields: [projectId, resultScriptVersionId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   resultStoryboard StoryboardVersion?  @relation("JobResultStoryboard", fields: [projectId, resultStoryboardVersionId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  storyboardScene  StoryboardScene?    @relation("SceneImageJobs", fields: [projectId, storyboardSceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  assets           Asset[]             @relation("JobAssets")
   events           JobEvent[]
   invocations      AiInvocation[]
   scripts          ScriptVersion[]     @relation("ScriptGeneratedBy")
@@ -936,6 +961,7 @@ model GenerationJob {
   @@unique([projectId, id]) // composite-FK target
   @@index([contentItemId, kind, executionKey])
   @@index([productionRunId])
+  @@index([storyboardSceneId])
   @@index([status, queuedAt])
   @@index([modelId])
   @@index([requestedById])
@@ -1062,6 +1088,10 @@ model StoryboardScene {
   characterVersion   CharacterVersion?      @relation(fields: [projectId, characterVersionId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   environmentVersion EnvironmentVersion?    @relation(fields: [projectId, environmentVersionId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   referenceAssets    StoryboardSceneAsset[]
+  imageJobs          GenerationJob[]        @relation("SceneImageJobs")
+  candidates         Asset[]                @relation("SceneCandidates")
+  keyframe           SceneKeyframe?
+  keyframeEvents     SceneKeyframeEvent[]
 
   @@unique([storyboardVersionId, sceneNumber])
   @@unique([projectId, id]) // composite-FK target
@@ -1095,4 +1125,64 @@ model AiTaskRoute {
 
   @@index([modelId])
   @@map("ai_task_routes")
+}
+
+// ----------------------------------------------------------------------------- images (M4)
+// Design: docs/design/M4-design-review-package.md §4.4, §5.4. Lineage rows are append-only;
+// a scene's keyframe is a pointer to an approved image of the same content item (AC015).
+
+/// Reference images sent with a generation (append-only lineage, M4 design §4.4).
+model AssetInput {
+  projectId    String   @map("project_id") @db.Uuid
+  assetId      String   @map("asset_id") @db.Uuid
+  inputAssetId String   @map("input_asset_id") @db.Uuid
+  /// character | environment | scene_reference (CHECK).
+  role         String   @db.VarChar(32)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  asset      Asset @relation("AssetInputsOf", fields: [projectId, assetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  inputAsset Asset @relation("AssetInputsUsed", fields: [projectId, inputAssetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([assetId, inputAssetId])
+  @@index([inputAssetId])
+  @@map("asset_inputs")
+}
+
+/// The selected (approved) image of a storyboard scene: gate 3 input (M4 design §5.4).
+model SceneKeyframe {
+  storyboardSceneId String   @id @map("storyboard_scene_id") @db.Uuid
+  projectId         String   @map("project_id") @db.Uuid
+  assetId           String   @map("asset_id") @db.Uuid
+  selectedById      String   @map("selected_by_id") @db.Uuid
+  selectedAt        DateTime @map("selected_at") @db.Timestamptz(3)
+
+  scene      StoryboardScene @relation(fields: [projectId, storyboardSceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  asset      Asset           @relation(fields: [projectId, assetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  selectedBy User            @relation(fields: [selectedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([projectId, storyboardSceneId]) // one-to-one through the composite FK
+  @@index([assetId])
+  @@index([selectedById])
+  @@map("scene_keyframes")
+}
+
+/// Append-only history of keyframe selections (who chose which image, when).
+model SceneKeyframeEvent {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  projectId         String   @map("project_id") @db.Uuid
+  storyboardSceneId String   @map("storyboard_scene_id") @db.Uuid
+  assetId           String   @map("asset_id") @db.Uuid
+  selectedById      String   @map("selected_by_id") @db.Uuid
+  /// `selected` by an editor, or `reused` from an identical scene of an older storyboard version.
+  reason            String   @db.VarChar(16)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  scene      StoryboardScene @relation(fields: [projectId, storyboardSceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  asset      Asset           @relation(fields: [projectId, assetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  selectedBy User            @relation(fields: [selectedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([storyboardSceneId, createdAt])
+  @@index([assetId])
+  @@index([selectedById])
+  @@map("scene_keyframe_events")
 }

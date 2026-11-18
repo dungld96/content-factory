@@ -22,6 +22,8 @@ export const IntegritySqlState = {
   ARTIFACT_POINTER_INVALID: 'AC013',
   /** R0 (ADR-0015): a content item (variant) never moves to another content master. */
   CONTENT_MASTER_LINK_IMMUTABLE: 'AC014',
+  /** M4: a scene keyframe is an approved, active image of the scene's content item. */
+  KEYFRAME_INVALID: 'AC015',
 } as const;
 export type IntegritySqlState = (typeof IntegritySqlState)[keyof typeof IntegritySqlState];
 

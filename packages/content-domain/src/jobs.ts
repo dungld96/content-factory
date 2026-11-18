@@ -6,6 +6,17 @@ import { z } from 'zod';
  */
 export const GENERATION_QUEUE = 'generation';
 export const GENERATION_DLQ = 'generation-dlq';
+/**
+ * Image jobs have their own queue (M4 design S4): separate concurrency, and a longer lock
+ * because one synchronous image call can take minutes.
+ */
+export const IMAGE_GENERATION_QUEUE = 'generation-images';
+/** BullMQ lock for image jobs: above the 240 s provider timeout (M4 design §3.2). */
+export const IMAGE_JOB_LOCK_MS = 300_000;
+
+/** The queue a job of `kind` is delivered on. */
+export const queueForKind = (kind: string): string =>
+  kind === 'image_generation' ? IMAGE_GENERATION_QUEUE : GENERATION_QUEUE;
 
 /** The BullMQ payload carries only the job id; PostgreSQL holds everything else. */
 export const generationJobPayloadSchema = z.strictObject({ jobId: z.uuid() });

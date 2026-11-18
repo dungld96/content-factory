@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { TestProject } from 'vitest/node';
 
 import { recreateDatabaseFromMigrations, withDatabase } from '@acf/database/admin';
+import { ensureBucket, storageAdminSettingsFromEnv } from '@acf/storage/admin';
 
 export const WORKER_TEST_DATABASE = 'acf_test_worker';
 
@@ -38,5 +39,9 @@ export default async function setup(project: TestProject): Promise<void> {
     appUrl: withDatabase(required('DATABASE_URL'), WORKER_TEST_DATABASE),
   };
   await recreateDatabaseFromMigrations(urls);
+  // Asset bytes (M4): the worker test bucket, created with the storage admin key.
+  if (process.env['S3_ENDPOINT']) {
+    await ensureBucket(storageAdminSettingsFromEnv(process.env), 'acf-test-worker');
+  }
   project.provide('workerDatabaseUrls', urls);
 }

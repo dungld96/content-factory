@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@acf/database';
 
 import type { Logger } from './logger.js';
-import { generationJobOptions, type Queues } from './queues.js';
+import { generationJobOptions, queueOf, type Queues } from './queues.js';
 
 export interface ReconcileResult {
   readonly enqueued: number;
@@ -44,14 +44,15 @@ export class Reconciler {
 
     const queued = await this.prisma.generationJob.findMany({
       where: { status: 'queued', updatedAt: { lt: new Date(now.getTime() - this.queuedGraceMs) } },
-      select: { id: true },
+      select: { id: true, kind: true },
       take: 500,
     });
-    for (const { id } of queued) {
-      const state = await this.state(id);
+    for (const { id, kind } of queued) {
+      const queue = queueOf(this.queues, kind);
+      const state = await this.state(id, kind);
       if (state === 'missing' || state === 'completed' || state === 'failed') {
-        if (state !== 'missing') await this.queues.generation.remove(id);
-        await this.queues.generation.add('generate', { jobId: id }, generationJobOptions(id));
+        if (state !== 'missing') await queue.remove(id);
+        await queue.add('generate', { jobId: id }, generationJobOptions(id));
         enqueued += 1;
       }
     }
@@ -64,7 +65,8 @@ export class Reconciler {
       take: 500,
     });
     for (const job of running) {
-      const state = await this.state(job.id);
+      const queue = queueOf(this.queues, job.kind);
+      const state = await this.state(job.id, job.kind);
       if (
         state === 'active' ||
         state === 'waiting' ||
@@ -93,23 +95,15 @@ export class Reconciler {
           return count === 1;
         });
         if (moved) {
-          if (state !== 'missing') await this.queues.generation.remove(job.id);
-          await this.queues.generation.add(
-            'generate',
-            { jobId: job.id },
-            generationJobOptions(job.id),
-          );
+          if (state !== 'missing') await queue.remove(job.id);
+          await queue.add('generate', { jobId: job.id }, generationJobOptions(job.id));
           requeued += 1;
         }
       } else {
         // The processor's final-failure path also restores the content status and copies to the
         // DLQ; reuse it by delivering the job once more: startAttempt refuses, process() fails it.
-        if (state !== 'missing') await this.queues.generation.remove(job.id);
-        await this.queues.generation.add(
-          'generate',
-          { jobId: job.id },
-          generationJobOptions(job.id),
-        );
+        if (state !== 'missing') await queue.remove(job.id);
+        await queue.add('generate', { jobId: job.id }, generationJobOptions(job.id));
         failed += 1;
       }
     }
@@ -119,8 +113,8 @@ export class Reconciler {
     return { enqueued, requeued, failed };
   }
 
-  private async state(jobId: string): Promise<string> {
-    const job = await this.queues.generation.getJob(jobId);
+  private async state(jobId: string, kind: string): Promise<string> {
+    const job = await queueOf(this.queues, kind).getJob(jobId);
     if (!job) return 'missing';
     return job.getState();
   }

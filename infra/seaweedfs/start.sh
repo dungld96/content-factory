@@ -24,5 +24,7 @@ cat > /tmp/s3.json <<JSON
   ]
 }
 JSON
-exec weed server -dir=/data -volume.max=0 -master.volumeSizeLimitMB=1024 \
+# Each bucket is a collection that grows 7 volumes; volume files are sparse, so an explicit cap
+# (instead of 0 = derived from free disk, which ran out at the 4th bucket) costs no disk space.
+exec weed server -dir=/data -volume.max=200 -master.volumeSizeLimitMB=1024 \
   -s3 -s3.port=8333 -s3.config=/tmp/s3.json

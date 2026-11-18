@@ -6,6 +6,7 @@ import {
   GENERATION_DLQ,
   GENERATION_QUEUE,
   generationJobOptions,
+  IMAGE_GENERATION_QUEUE,
   generationJobPayloadSchema,
   RETRY_POLICY,
   type DeadLetterPayload,
@@ -24,15 +25,22 @@ export function redisConnection(url: string): Redis {
 
 export interface Queues {
   readonly generation: Queue<GenerationJobPayload>;
+  /** Image jobs (M4): own concurrency and lock duration. */
+  readonly images: Queue<GenerationJobPayload>;
   readonly deadLetter: Queue<DeadLetterPayload>;
 }
 
 export function createQueues(connection: Redis, prefix: string): Queues {
   return {
     generation: new Queue<GenerationJobPayload>(GENERATION_QUEUE, { connection, prefix }),
+    images: new Queue<GenerationJobPayload>(IMAGE_GENERATION_QUEUE, { connection, prefix }),
     deadLetter: new Queue<DeadLetterPayload>(GENERATION_DLQ, { connection, prefix }),
   };
 }
+
+/** The queue a job of `kind` lives on. */
+export const queueOf = (queues: Queues, kind: string): Queue<GenerationJobPayload> =>
+  kind === 'image_generation' ? queues.images : queues.generation;
 
 /** Thrown to BullMQ to schedule the next attempt; carries the delay the processor decided. */
 export class RetryLaterError extends Error {
@@ -63,6 +71,8 @@ export interface WorkerOptions {
   /** Lock duration; a worker that stops renewing it is considered stalled. */
   readonly lockDurationMs?: number;
   readonly stalledIntervalMs?: number;
+  /** Default: the text queue (`generation`). */
+  readonly queueName?: string;
 }
 
 /**
@@ -72,7 +82,7 @@ export interface WorkerOptions {
  */
 export function startGenerationWorker(options: WorkerOptions): Worker<GenerationJobPayload> {
   const worker = new Worker<GenerationJobPayload>(
-    GENERATION_QUEUE,
+    options.queueName ?? GENERATION_QUEUE,
     async (job: Job<GenerationJobPayload>) => {
       const payload = generationJobPayloadSchema.safeParse(job.data);
       if (!payload.success) throw new UnrecoverableError('invalid payload');

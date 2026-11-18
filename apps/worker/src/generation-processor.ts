@@ -1,10 +1,25 @@
 import {
   isProviderError,
   type GenerationContext,
+  type ImageReference,
   type LlmMessage,
   type LlmResult,
 } from '@acf/ai-core';
-import { RoutingError, type LlmService } from '@acf/ai-runtime';
+import {
+  ImageConstraintError,
+  RoutingError,
+  type ImageService,
+  type LlmService,
+} from '@acf/ai-runtime';
+import {
+  assetObjectKey,
+  ImageValidationError,
+  inspectImage,
+  StorageError,
+  uuidv7,
+  type InspectedImage,
+  type ObjectStore,
+} from '@acf/storage';
 import {
   durationTolerance,
   formatIssues,
@@ -24,6 +39,9 @@ import {
   storyboardJobInputSchema,
   storyboardRuleIssues,
   storyboardV1,
+  buildImagePrompt,
+  imageJobInputSchema,
+  IMAGE_PROMPT_TEMPLATE_ID,
   toResponseJsonSchema,
   totalDuration,
   type DeadLetterPayload,
@@ -48,6 +66,10 @@ export interface ProcessorDeps {
   readonly prisma: PrismaClient;
   readonly jobs: JobStore;
   readonly llm: LlmService;
+  /** Image generation (M4); absent → image jobs fail with NO_ELIGIBLE_MODEL. */
+  readonly images?: ImageService;
+  /** Object storage for references and results (M4); null → STORAGE_NOT_CONFIGURED. */
+  readonly store?: ObjectStore | null;
   /** Copies a finally failed job to the dead-letter queue (M3 Q8). */
   readonly deadLetter: (payload: DeadLetterPayload) => Promise<void>;
   readonly logger: Logger;
@@ -64,6 +86,20 @@ class OutputInvalidError extends Error {
 }
 /** The job was canceled while its LLM call ran: discard the result (M3 design §8.5). */
 class DiscardedError extends Error {}
+/** A job that cannot succeed as configured (no storage, missing reference file): never retried. */
+class PermanentJobError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+/** The provider returned bytes that are not a valid image of the declared type (retryable). */
+class ImageOutputError extends Error {}
+
+/** Largest reference image loaded into memory for a call (M4 design §3.1). */
+const MAX_REFERENCE_BYTES = 20 * 1024 * 1024;
 
 interface Structured<T> {
   readonly name: string;
@@ -92,9 +128,11 @@ export class GenerationProcessor {
     logger.log('info', 'job_attempt_started', { jobId, kind: job.kind, attempt: job.attempt });
     try {
       const versionId =
-        job.kind === 'script_generation'
-          ? await this.runScript(job)
-          : await this.runStoryboard(job);
+        job.kind === 'image_generation'
+          ? await this.runImages(job)
+          : job.kind === 'script_generation'
+            ? await this.runScript(job)
+            : await this.runStoryboard(job);
       logger.log('info', 'job_succeeded', { jobId, attempt: job.attempt, versionId });
       return { type: 'succeeded', versionId };
     } catch (error) {
@@ -383,6 +421,154 @@ export class GenerationProcessor {
     };
   }
 
+  // ------------------------------------------------------------------- images (M4)
+
+  /**
+   * One image job = one scene (M4 design §5.3): load references from storage, call the image
+   * model (split into calls of the model's `n` maximum), validate every image, store it
+   * write-once, then insert the assets and their lineage and succeed in one transaction.
+   * Returns the first new asset id.
+   */
+  private async runImages(job: GenerationJob): Promise<string> {
+    const { prisma, jobs } = this.deps;
+    const input = imageJobInputSchema.parse(job.input);
+    const store = this.deps.store;
+    if (!store) {
+      throw new PermanentJobError('STORAGE_NOT_CONFIGURED', 'object storage is not configured');
+    }
+    if (!this.deps.images) {
+      throw new PermanentJobError('NO_ELIGIBLE_MODEL', 'no image providers are configured');
+    }
+    const prompt = buildImagePrompt({
+      scene: input.scene,
+      characterName: input.characterName,
+      environmentName: input.environmentName,
+      aspectRatio: input.aspectRatio,
+      hasReferences: input.references.length > 0,
+    });
+    await jobs.recordPrompt(job.id, `### ${IMAGE_PROMPT_TEMPLATE_ID}\n${prompt}`);
+
+    const rows = await prisma.asset.findMany({
+      where: { projectId: job.projectId, id: { in: input.references.map((r) => r.assetId) } },
+      select: { id: true, storageKey: true, mimeType: true },
+    });
+    const references: ImageReference[] = [];
+    for (const ref of input.references) {
+      const row = rows.find((r) => r.id === ref.assetId);
+      const bytes = row ? await store.getBytes(row.storageKey, MAX_REFERENCE_BYTES) : null;
+      if (!row || !bytes) {
+        throw new PermanentJobError(
+          'REFERENCE_MISSING',
+          `reference asset ${ref.assetId} has no stored file`,
+        );
+      }
+      references.push({ mimeType: row.mimeType as ImageReference['mimeType'], bytes });
+    }
+
+    const model = await prisma.aiModel.findUniqueOrThrow({
+      where: { id: job.modelId },
+      select: { modelKey: true, imageConstraints: true },
+    });
+    const perCall = Math.max(1, maxImagesOf(model.imageConstraints));
+    const context: GenerationContext = {
+      projectId: job.projectId,
+      contentItemId: job.contentItemId,
+      generationJobId: job.id,
+      correlationId: job.id,
+      qualityTier: input.qualityTier,
+    };
+    const images: InspectedImage[] = [];
+    const bytesOf = new Map<InspectedImage, Uint8Array>();
+    for (let call = 0, remaining = input.count; remaining > 0; call++) {
+      const count = Math.min(perCall, remaining);
+      remaining -= count;
+      const { result } = await this.deps.images.generate(
+        context,
+        {
+          modelKey: model.modelKey,
+          prompt,
+          aspectRatio: input.aspectRatio,
+          ...(input.resolution ? { resolution: input.resolution } : {}),
+          count,
+          ...(input.seed === null ? {} : { seed: input.seed + call }),
+          references,
+          ...(input.zeroDataRetention ? { dataPolicy: { zeroDataRetention: true } } : {}),
+        },
+        { idempotencyKey: `${job.id}:${String(job.attempt)}:${String(call)}` },
+      );
+      for (const image of result.images) {
+        let inspected: InspectedImage;
+        try {
+          inspected = inspectImage(image.bytes, image.declaredType);
+        } catch (error) {
+          if (error instanceof ImageValidationError) throw new ImageOutputError(error.code);
+          throw error;
+        }
+        images.push(inspected);
+        bytesOf.set(inspected, image.bytes);
+      }
+    }
+    if (images.length === 0) throw new ImageOutputError('no images returned');
+
+    // Bytes first (write-once, content-addressed), rows second: a failed transaction leaves only
+    // private orphan objects (M4 design §4.2).
+    const planned = images.map((image) => ({ image, id: uuidv7() }));
+    for (const { image, id } of planned) {
+      await store.putIfAbsent(
+        assetObjectKey({
+          projectId: job.projectId,
+          assetId: id,
+          sha256Hex: image.sha256Hex,
+          mimeType: image.mimeType,
+        }),
+        bytesOf.get(image) ?? new Uint8Array(),
+        { contentType: image.mimeType, sha256Hex: image.sha256Hex },
+      );
+    }
+    return prisma.$transaction(async (tx) => {
+      for (const { image, id } of planned) {
+        await tx.asset.create({
+          data: {
+            id,
+            projectId: job.projectId,
+            contentItemId: job.contentItemId,
+            assetType: 'image',
+            sourceType: 'generated',
+            generationJobId: job.id,
+            storyboardSceneId: input.sceneId,
+            storageKey: assetObjectKey({
+              projectId: job.projectId,
+              assetId: id,
+              sha256Hex: image.sha256Hex,
+              mimeType: image.mimeType,
+            }),
+            mimeType: image.mimeType,
+            sizeBytes: BigInt(image.sizeBytes),
+            checksumSha256: image.sha256Hex,
+            width: image.width,
+            height: image.height,
+            label: `Scene ${String(input.scene.sceneNumber)}`,
+            metadata: { sceneHash: input.sceneHash, model: model.modelKey },
+            createdById: job.requestedById,
+          },
+        });
+        if (input.references.length > 0) {
+          await tx.assetInput.createMany({
+            data: input.references.map((r) => ({
+              projectId: job.projectId,
+              assetId: id,
+              inputAssetId: r.assetId,
+              role: r.role,
+            })),
+          });
+        }
+      }
+      const ids = planned.map((p) => p.id);
+      if (!(await jobs.succeedImageIn(tx, job, ids))) throw new DiscardedError();
+      return ids[0] ?? '';
+    });
+  }
+
   // ------------------------------------------------------------------- errors
 
   private async handleError(job: GenerationJob, error: unknown): Promise<ProcessOutcome> {
@@ -404,6 +590,24 @@ export class GenerationProcessor {
     }
     if (error instanceof RoutingError) {
       return this.failFinal(job, 'NO_ELIGIBLE_MODEL', error.message);
+    }
+    if (error instanceof ImageConstraintError) {
+      return this.failFinal(job, 'MODEL_LIMITS', error.message);
+    }
+    if (error instanceof PermanentJobError) {
+      return this.failFinal(job, error.code, error.message);
+    }
+    if (error instanceof ImageOutputError) {
+      // A broken image may not repeat: retry within the attempt budget (cost per attempt).
+      if (job.attempt < job.maxAttempts) return this.retry(job, 'OUTPUT_INVALID', undefined);
+      return this.failFinal(
+        job,
+        'OUTPUT_INVALID',
+        `invalid image from the provider (${error.message})`,
+      );
+    }
+    if (error instanceof StorageError && error.code !== 'STORAGE_UNAVAILABLE') {
+      return this.failFinal(job, error.code, error.message);
     }
     if (error instanceof ZodError || error instanceof PromptVariablesError) {
       return this.failFinal(job, 'INVALID_JOB_INPUT', 'the job input does not match its schema');
@@ -485,4 +689,13 @@ async function nextVersion(
           { max: number | null }[]
         >`SELECT max(version)::int AS max FROM storyboard_versions WHERE content_item_id = ${contentItemId}::uuid`;
   return (rows[0]?.max ?? 0) + 1;
+}
+
+/** `ai_models.image_constraints.maxImages`, or 1 when not recorded. */
+function maxImagesOf(constraints: unknown): number {
+  if (typeof constraints === 'object' && constraints !== null && 'maxImages' in constraints) {
+    const value = constraints.maxImages;
+    if (typeof value === 'number' && Number.isInteger(value) && value > 0) return value;
+  }
+  return 1;
 }

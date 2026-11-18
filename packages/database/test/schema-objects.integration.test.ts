@@ -30,6 +30,7 @@ const EXPECTED_TRIGGERS: readonly (readonly [string, string, boolean])[] = [
   ['ai_invocations', 'ai_invocations_guard', false],
   ['ai_model_prices', 'ai_model_prices_append_only', false],
   ['ai_usage_records', 'ai_usage_records_append_only', false],
+  ['asset_inputs', 'asset_inputs_append_only', false],
   ['assets', 'assets_guard', false],
   ['assets', 'assets_no_delete', false],
   ['channels', 'channels_no_delete', false],
@@ -53,6 +54,8 @@ const EXPECTED_TRIGGERS: readonly (readonly [string, string, boolean])[] = [
   ['project_members', 'project_members_keep_owner', true],
   ['projects', 'projects_created_with_owner', true],
   ['projects', 'projects_no_delete', false],
+  ['scene_keyframe_events', 'scene_keyframe_events_append_only', false],
+  ['scene_keyframes', 'scene_keyframes_guard', false],
   ['script_versions', 'script_versions_guard', false],
   ['storyboard_scene_assets', 'storyboard_scene_assets_guard', false],
   ['storyboard_scenes', 'storyboard_scenes_guard', false],
@@ -85,11 +88,16 @@ const EXPECTED_CHECKS = [
   'ai_usage_records.ai_usage_records_price_needs_unit_price',
   'ai_usage_records.ai_usage_records_quantity_nonnegative',
   'ai_usage_records.ai_usage_records_unit_price_nonnegative',
+  'asset_inputs.asset_inputs_not_self',
+  'asset_inputs.asset_inputs_role_known',
   'assets.assets_checksum_format',
   'assets.assets_derived_has_source',
   'assets.assets_dimensions_positive',
   'assets.assets_duration_nonnegative',
+  'assets.assets_generated_has_job',
   'assets.assets_not_own_source',
+  'assets.assets_review_consistent',
+  'assets.assets_scene_only_generated',
   'assets.assets_size_nonnegative',
   'assets.assets_storage_key_nonempty',
   'character_versions.character_versions_approval_consistent',
@@ -109,9 +117,11 @@ const EXPECTED_CHECKS = [
   'generation_jobs.generation_jobs_execution_key_format',
   'generation_jobs.generation_jobs_input_object',
   'generation_jobs.generation_jobs_result_consistent',
+  'generation_jobs.generation_jobs_scene_consistent',
   'job_events.job_events_attempt_nonnegative',
   'job_events.job_events_detail_object',
   'production_runs.production_runs_completion_consistent',
+  'scene_keyframe_events.scene_keyframe_events_reason_known',
   'script_versions.script_versions_content_object',
   'script_versions.script_versions_not_based_on_self',
   'script_versions.script_versions_review_consistent',
@@ -237,7 +247,7 @@ describe('role separation (U3)', () => {
       `SELECT tablename, has_table_privilege(current_user, 'public.' || tablename, 'SELECT, INSERT, UPDATE, DELETE') AS ok
        FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`,
     );
-    expect(rows.length).toBe(28); // M1–M3: 27; R0 adds content_masters
+    expect(rows.length).toBe(31); // M1–M3: 27; R0: content_masters; M4: 3 image tables
     expect(rows.filter((r) => !r.ok)).toEqual([]);
   });
 });

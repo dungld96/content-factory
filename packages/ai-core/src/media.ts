@@ -67,6 +67,7 @@ export const imageRequestSchema = z
   })
   .strict();
 export type ImageRequest = z.infer<typeof imageRequestSchema>;
+export type ImageReference = ImageRequest['references'][number];
 
 /** @throws {ProviderError} `INVALID_REQUEST`, outcome `not_sent`. */
 export function parseImageRequest(input: unknown): ImageRequest {

@@ -24,7 +24,18 @@ export type PipelineEvent =
   | { readonly type: 'storyboard_job_queued' }
   | { readonly type: 'storyboard_created' }
   /** A job failed or was canceled: restore the status it started from. */
-  | { readonly type: 'job_ended_without_result'; readonly previous: ContentStatus };
+  | { readonly type: 'job_ended_without_result'; readonly previous: ContentStatus }
+  /** M4: image jobs were queued for scenes of the approved storyboard. */
+  | { readonly type: 'image_jobs_queued' }
+  /**
+   * M4: the content item's last active image job ended. With at least one candidate image the
+   * item is ready for review; otherwise it returns to the status the jobs started from.
+   */
+  | {
+      readonly type: 'image_jobs_settled';
+      readonly hasCandidates: boolean;
+      readonly previous: ContentStatus;
+    };
 
 export class InvalidTransitionError extends Error {
   override readonly name = 'InvalidTransitionError';
@@ -41,10 +52,18 @@ const SCRIPT_START: ReadonlySet<ContentStatus> = new Set([
   'needs_input',
   'script_review',
   'storyboard_review',
+  'asset_review', // M4: rework upstream after reviewing images
 ]);
 const STORYBOARD_START: ReadonlySet<ContentStatus> = new Set([
   'script_review',
   'storyboard_review',
+  'asset_review',
+]);
+/** M4: image generation starts once the storyboard is approved (gate 2, checked separately). */
+const IMAGES_START: ReadonlySet<ContentStatus> = new Set([
+  'storyboard_review',
+  'asset_review',
+  'generating_assets', // more scenes while others are still generating
 ]);
 /** Statuses M3 owns; later stages (M4+) are not touched by M3 events. */
 const M3_STATUSES: ReadonlySet<ContentStatus> = new Set([
@@ -80,6 +99,15 @@ export function nextContentStatus(from: ContentStatus, event: PipelineEvent): Co
       break;
     case 'job_ended_without_result':
       if (from === 'scripting' || from === 'storyboarding') return event.previous;
+      break;
+    case 'image_jobs_queued':
+      if (IMAGES_START.has(from)) return 'generating_assets';
+      break;
+    case 'image_jobs_settled':
+      if (from === 'generating_assets') {
+        if (event.hasCandidates) return 'asset_review';
+        return event.previous === 'generating_assets' ? 'storyboard_review' : event.previous;
+      }
       break;
   }
   throw new InvalidTransitionError(from, event.type);

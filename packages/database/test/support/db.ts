@@ -43,6 +43,9 @@ export const ALL_TABLES = [
   'storyboard_scenes',
   'storyboard_scene_assets',
   'ai_task_routes',
+  'asset_inputs',
+  'scene_keyframes',
+  'scene_keyframe_events',
 ] as const;
 
 /** Empties every table. Must run as the migrator (the app role has no TRUNCATE). */

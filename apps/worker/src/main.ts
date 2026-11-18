@@ -1,9 +1,23 @@
 // Worker process (M3 design §8, ADR-0013): `pnpm start:worker`. Consumes the `generation` queue,
 // reconciles PostgreSQL with Redis, and sweeps abandoned LLM invocations at start-up.
-import { createLlmProviders, LlmService, ModelCatalog } from '@acf/ai-runtime';
-import { EnvValidationError, loadWorkerEnv, redactUrl, type WorkerEnv } from '@acf/config';
+import {
+  createImageProviders,
+  createLlmProviders,
+  ImageService,
+  LlmService,
+  ModelCatalog,
+} from '@acf/ai-runtime';
+import {
+  EnvValidationError,
+  loadWorkerEnv,
+  redactUrl,
+  storageSettings,
+  type WorkerEnv,
+} from '@acf/config';
+import { IMAGE_GENERATION_QUEUE, IMAGE_JOB_LOCK_MS } from '@acf/content-domain';
 import { createPrismaClient } from '@acf/database';
-import type { LlmProvider } from '@acf/ai-core';
+import type { ImageProvider, LlmProvider } from '@acf/ai-core';
+import { inspectImage, S3ObjectStore, type ObjectStore } from '@acf/storage';
 
 import { GenerationProcessor } from './generation-processor.js';
 import { JobStore } from './job-store.js';
@@ -24,13 +38,25 @@ export interface RunningWorker {
   stop(): Promise<void>;
 }
 
+/** Output pixels of an image, for per-megapixel prices (null if the header is unreadable). */
+const pixelsOf = (bytes: Uint8Array): number | null => {
+  try {
+    const image = inspectImage(bytes);
+    return image.width * image.height;
+  } catch {
+    return null;
+  }
+};
+
 /**
  * Starts a worker. `providers` defaults to the adapters configured in the environment; the E2E
- * harness passes a fixture provider instead (apps/worker/test).
+ * harness passes fixture providers instead (apps/worker/test).
  */
 export async function startWorker(
   env: WorkerEnv,
   providers: ReadonlyMap<string, LlmProvider> = createLlmProviders(env),
+  imageProviders: ReadonlyMap<string, ImageProvider> = createImageProviders(env),
+  storeOverride?: ObjectStore,
 ): Promise<RunningWorker> {
   const logger = createLogger(LEVELS[env.LOG_LEVEL] ?? 'info', env.LOG_JSON);
   const prisma = createPrismaClient({
@@ -39,9 +65,14 @@ export async function startWorker(
   });
   const connection = redisConnection(env.REDIS_URL);
   const queues = createQueues(connection, env.QUEUE_PREFIX);
-  const llm = new LlmService(prisma, new ModelCatalog(prisma, providers), providers, {
-    providerTimeoutMs: env.OPENROUTER_TIMEOUT_MS,
+  const catalog = new ModelCatalog(prisma, providers, imageProviders);
+  const llm = new LlmService(prisma, catalog, providers, {
+    providerTimeoutMs: Math.max(env.OPENROUTER_TIMEOUT_MS, env.OPENROUTER_IMAGE_TIMEOUT_MS),
   });
+  const images = new ImageService(prisma, catalog, imageProviders, { pixelsOf });
+  const settings = storageSettings(env);
+  const store: ObjectStore | null =
+    storeOverride ?? (settings ? new S3ObjectStore(settings) : null);
 
   // Best effort: a database that is briefly unavailable must not stop the worker from starting.
   try {
@@ -57,6 +88,8 @@ export async function startWorker(
     prisma,
     jobs: new JobStore(prisma),
     llm,
+    images,
+    store,
     deadLetter: (payload) => addDeadLetter(queues, payload),
     logger,
   });
@@ -66,6 +99,16 @@ export async function startWorker(
     concurrency: env.WORKER_CONCURRENCY,
     processor,
     logger,
+  });
+  // Image jobs (M4): own queue, concurrency and a lock longer than the provider timeout.
+  const imageWorker = startGenerationWorker({
+    connection,
+    prefix: env.QUEUE_PREFIX,
+    concurrency: env.WORKER_IMAGE_CONCURRENCY,
+    processor,
+    logger,
+    queueName: IMAGE_GENERATION_QUEUE,
+    lockDurationMs: IMAGE_JOB_LOCK_MS,
   });
   const reconciler = new Reconciler(prisma, queues, logger);
   const reconcile = () => {
@@ -82,13 +125,17 @@ export async function startWorker(
     database: redactUrl(env.DATABASE_URL),
     redis: redactUrl(env.REDIS_URL),
     providers: [...providers.keys()].join(',') || '(none configured)',
+    imageProviders: [...imageProviders.keys()].join(',') || '(none configured)',
+    storage: store ? 'configured' : 'not configured',
   });
 
   return {
     async stop() {
       clearInterval(timer);
       await worker.close();
+      await imageWorker.close();
       await queues.generation.close();
+      await queues.images.close();
       await queues.deadLetter.close();
       connection.disconnect();
       await prisma.$disconnect();
