@@ -41,7 +41,9 @@ Redis was unavailable. The remaining items arrive with M4–M6.
 - `ai-core`: provider interfaces, model registry, routing, metering.
 - `ai-runtime`: LLM service, model catalog and provider wiring shared by the API and the worker
   (M3, design Q1).
-- `content-domain`: content, script, storyboard, approval rules.
+- `content-domain`: content, script, storyboard, approval rules; since R0 also the format and
+  platform registries, format × platform compatibility and content master/variant rules
+  (ADR-0015).
 - `media`: file validation, FFmpeg commands, metadata extraction.
 - `config`: typed environment configuration.
 

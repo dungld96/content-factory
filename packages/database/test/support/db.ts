@@ -13,7 +13,7 @@ export async function connect(role: Role): Promise<pg.Client> {
   return client;
 }
 
-/** Every table of the M1–M3 schema. TRUNCATE bypasses row triggers by design (ADR-0011). */
+/** Every table of the M1–M3 and R0 schema. TRUNCATE bypasses row triggers by design (ADR-0011). */
 export const ALL_TABLES = [
   'users',
   'sessions',
@@ -27,6 +27,7 @@ export const ALL_TABLES = [
   'environment_versions',
   'environment_version_assets',
   'assets',
+  'content_masters',
   'content_items',
   'ai_providers',
   'ai_models',

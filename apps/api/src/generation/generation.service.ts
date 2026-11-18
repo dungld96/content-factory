@@ -469,8 +469,19 @@ export class GenerationService {
     };
     const character = await master('character', brief.characterId);
     const environment = await master('environment', brief.environmentId);
+    // R0: the effective target platform adds advisory warnings only (never errors, never part
+    // of the normalized brief or the execution key).
+    const platform = item.channelId
+      ? ((
+          await this.prisma.client.channel.findUnique({
+            where: { id: item.channelId },
+            select: { platform: true },
+          })
+        )?.platform ?? null)
+      : item.targetPlatform;
     const validation = validateBrief({
       ...brief,
+      platform,
       format: 'short_video',
       targetDurationSeconds: item.targetDurationSeconds,
       language: item.language,

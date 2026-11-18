@@ -29,7 +29,8 @@ export class ContentController {
 
   @Post('projects/:projectId/content')
   @Endpoint({
-    summary: 'Create a content item from a brief (editor); status starts as draft',
+    summary:
+      'Create a content item (and its content master) from a brief (editor); status starts as draft',
     tags: ['content'],
     params: projectIdParamsSchema,
     body: createContentRequestSchema,
@@ -92,6 +93,24 @@ export class ContentController {
     @IfMatch() expected: Date | undefined,
   ): Promise<ContentItemDto> {
     return this.content.update(actor, params.contentId, body, expected);
+  }
+
+  @Post('content/:contentId/brief/resync')
+  @HttpCode(200)
+  @Endpoint({
+    summary: "Copy the content master's current brief into this content item (editor)",
+    tags: ['content'],
+    params: contentIdParamsSchema,
+    headers: ['If-Match'],
+    responses: { 200: { description: 'Resynced', schema: contentItemSchema } },
+    errors: [400, 401, 403, 404, 409, 412, 428],
+  })
+  resyncBrief(
+    @CurrentActor() actor: Actor,
+    @ValidParams() params: ContentParams,
+    @IfMatch() expected: Date | undefined,
+  ): Promise<ContentItemDto> {
+    return this.content.resyncBrief(actor, params.contentId, expected);
   }
 
   @Post('content/:contentId/archive')

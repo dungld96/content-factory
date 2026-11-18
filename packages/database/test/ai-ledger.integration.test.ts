@@ -72,10 +72,14 @@ beforeAll(async () => {
      INSERT INTO project_members (project_id, user_id, role, updated_at) VALUES
        ('${P1}', '${U1}', 'owner', now()), ('${P1}', '${U2}', 'owner', now()), ('${P2}', '${U1}', 'owner', now())`,
   );
-  await app.query(`INSERT INTO content_items (id, project_id, title, format, target_duration_seconds,
-      aspect_ratio, language, brief, created_by_id, updated_at) VALUES
-    ('${CI1}', '${P1}', 'C1', 'short_video', 30, '9:16', 'vi', '{}', '${U1}', now()),
-    ('${CI9}', '${P2}', 'C9', 'short_video', 30, '9:16', 'vi', '{}', '${U1}', now())`);
+  await app.query(`INSERT INTO content_masters (id, project_id, title, brief, language, created_by_id,
+      updated_at) VALUES
+    ('${CI1}', '${P1}', 'C1', '{}', 'vi', '${U1}', now()),
+    ('${CI9}', '${P2}', 'C9', '{}', 'vi', '${U1}', now())`);
+  await app.query(`INSERT INTO content_items (id, project_id, content_master_id, title, format,
+      target_duration_seconds, aspect_ratio, language, brief, created_by_id, updated_at) VALUES
+    ('${CI1}', '${P1}', '${CI1}', 'C1', 'short_video', 30, '9:16', 'vi', '{}', '${U1}', now()),
+    ('${CI9}', '${P2}', '${CI9}', 'C9', 'short_video', 30, '9:16', 'vi', '{}', '${U1}', now())`);
   await app.query(`INSERT INTO ai_providers (id, key, name, kind, status, updated_at) VALUES
     ('${PROV}', 'openrouter', 'OpenRouter', 'gateway', 'enabled', now()),
     ('${PROV2}', 'other', 'Other', 'direct', 'disabled', now())`);

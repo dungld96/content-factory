@@ -6,6 +6,7 @@ export * from './common.js';
 export * from './projects.js';
 export * from './channels.js';
 export * from './content.js';
+export * from './content-masters.js';
 export * from './assets.js';
 export * from './brand.js';
 export * from './ai.js';

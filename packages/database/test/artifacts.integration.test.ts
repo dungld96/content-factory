@@ -96,11 +96,16 @@ beforeAll(async () => {
      INSERT INTO project_members (project_id, user_id, role, updated_at) VALUES
        ('${P}', '${U}', 'owner', now()), ('${P2}', '${U}', 'owner', now())`,
   );
-  await app.query(`INSERT INTO content_items (id, project_id, title, format, target_duration_seconds, aspect_ratio,
-      language, brief, created_by_id, updated_at) VALUES
-    ('${CI}', '${P}', 'C', 'short_video', 30, '9:16', 'vi', '{}', '${U}', now()),
-    ('${CI2}', '${P}', 'C2', 'short_video', 30, '9:16', 'vi', '{}', '${U}', now()),
-    ('${CI9}', '${P2}', 'C9', 'short_video', 30, '9:16', 'vi', '{}', '${U}', now())`);
+  await app.query(`INSERT INTO content_masters (id, project_id, title, brief, language, created_by_id,
+      updated_at) VALUES
+    ('${CI}', '${P}', 'C', '{}', 'vi', '${U}', now()),
+    ('${CI2}', '${P}', 'C2', '{}', 'vi', '${U}', now()),
+    ('${CI9}', '${P2}', 'C9', '{}', 'vi', '${U}', now())`);
+  await app.query(`INSERT INTO content_items (id, project_id, content_master_id, title, format,
+      target_duration_seconds, aspect_ratio, language, brief, created_by_id, updated_at) VALUES
+    ('${CI}', '${P}', '${CI}', 'C', 'short_video', 30, '9:16', 'vi', '{}', '${U}', now()),
+    ('${CI2}', '${P}', '${CI2}', 'C2', 'short_video', 30, '9:16', 'vi', '{}', '${U}', now()),
+    ('${CI9}', '${P2}', '${CI9}', 'C9', 'short_video', 30, '9:16', 'vi', '{}', '${U}', now())`);
   await app.query(`INSERT INTO assets (id, project_id, asset_type, source_type, storage_key, mime_type, size_bytes,
       checksum_sha256, created_by_id, updated_at) VALUES
     ('${A1}', '${P}', 'reference', 'upload', 'p/a1', 'image/png', 1, repeat('a', 64), '${U}', now()),

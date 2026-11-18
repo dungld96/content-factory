@@ -36,9 +36,12 @@ async function seed(): Promise<void> {
        VALUES ('${P}', 'P', 'p', 'vi', 'UTC', '${U}', now());
      INSERT INTO project_members (project_id, user_id, role, updated_at) VALUES ('${P}', '${U}', 'owner', now())`,
   );
-  await app.query(`INSERT INTO content_items (id, project_id, title, format, target_duration_seconds, aspect_ratio,
-      language, brief, created_by_id, updated_at)
-    VALUES ('${CI}', '${P}', 'C', 'short_video', 30, '9:16', 'vi', '{}', '${U}', now())`);
+  await app.query(`INSERT INTO content_masters (id, project_id, title, brief, language, created_by_id,
+      updated_at)
+    VALUES ('${CI}', '${P}', 'C', '{}', 'vi', '${U}', now())`);
+  await app.query(`INSERT INTO content_items (id, project_id, content_master_id, title, format,
+      target_duration_seconds, aspect_ratio, language, brief, created_by_id, updated_at)
+    VALUES ('${CI}', '${P}', '${CI}', 'C', 'short_video', 30, '9:16', 'vi', '{}', '${U}', now())`);
   await app.query(
     `INSERT INTO ai_providers (id, key, name, kind, updated_at) VALUES ('${PROV}', 'mock', 'M', 'mock', now())`,
   );

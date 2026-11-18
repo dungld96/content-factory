@@ -76,6 +76,11 @@ const SQLSTATE_MAP: Readonly<Record<string, Mapping>> = {
     code: ApiErrorCode.StaleStoryboard,
     message: "The storyboard's script is no longer the approved script.",
   },
+  [IntegritySqlState.CONTENT_MASTER_LINK_IMMUTABLE]: {
+    status: CONFLICT,
+    code: ApiErrorCode.ContentMasterImmutable,
+    message: 'A content item cannot move to another content master.',
+  },
   [IntegritySqlState.LEDGER_ROW_IMMUTABLE]: {
     status: CONFLICT,
     code: ApiErrorCode.LedgerImmutable,

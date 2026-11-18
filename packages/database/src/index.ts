@@ -19,6 +19,7 @@ export type {
   EnvironmentVersionAsset,
   Asset,
   ContentItem,
+  ContentMaster,
   AiProvider,
   AiModel,
   AiModelCapability,

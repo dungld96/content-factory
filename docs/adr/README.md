@@ -19,6 +19,7 @@ numbered sequentially. Never rewrite an accepted ADR — supersede it with a new
 | [0012](0012-ai-registry-usage-ledger-and-money.md) | AI registry, usage ledger and money precision | Accepted (M2 package, rev. 1) |
 | [0013](0013-generation-jobs-queue-and-worker.md) | Generation jobs, queue and worker process | Accepted (M3 package, rev. 1) |
 | [0014](0014-single-vm-staging-deployment.md) | Single-VM staging deployment on Google Cloud | Accepted (owner, option A) |
+| [0015](0015-content-masters-and-format-registries.md) | Content masters, variants and format/platform registries | Accepted (M3.5 review, R0) |
 
 ## Template
 

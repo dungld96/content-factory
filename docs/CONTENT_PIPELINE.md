@@ -33,6 +33,13 @@ Output:
 - Missing information warnings.
 - Content safety/commercial claim flags.
 
+R0 (ADR-0015): the brief lives on a **content master** and is copied into each variant (content
+item) when the variant is created; the pipeline always runs on the variant's own copy. The
+variant's effective platform (its channel's, or its own `targetPlatform`) adds advisory warnings
+from the verified limits in `PLATFORM_PROFILES`; it never blocks generation and is not part of
+the normalized brief or the execution key. The format (`FORMAT_DEFINITIONS`) chooses the
+pipeline; only `short_video` exists.
+
 ### Stage 2 — Research
 Output JSON:
 - Key findings.

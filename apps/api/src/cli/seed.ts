@@ -73,22 +73,34 @@ export async function seedDemoWorkspace(
         createdById: ownerId,
       },
     });
+    const brief = {
+      topic: 'Useful technology products for office workers',
+      audience: 'Vietnamese office workers',
+      objective: 'education_and_affiliate',
+      tone: 'modern, friendly',
+      callToAction: 'Follow for more useful tech',
+    };
+    // R0: every content item is a variant of a content master (ADR-0015).
+    const master = await tx.contentMaster.create({
+      data: {
+        projectId: project.id,
+        title: '5 useful desk gadgets',
+        brief,
+        language: 'vi',
+        createdById: ownerId,
+      },
+    });
     await tx.contentItem.create({
       data: {
         projectId: project.id,
+        contentMasterId: master.id,
         channelId: channel.id,
         title: '5 useful desk gadgets',
         format: 'short_video',
         targetDurationSeconds: 30,
         aspectRatio: 'ratio_9_16',
         language: 'vi',
-        brief: {
-          topic: 'Useful technology products for office workers',
-          audience: 'Vietnamese office workers',
-          objective: 'education_and_affiliate',
-          tone: 'modern, friendly',
-          callToAction: 'Follow for more useful tech',
-        },
+        brief,
         createdById: ownerId,
       },
     });

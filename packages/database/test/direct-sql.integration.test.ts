@@ -19,6 +19,10 @@ const A9 = '20000000-0000-7000-8000-000000000009'; // belongs to P2
 const C1 = '30000000-0000-7000-8000-000000000001';
 const V1 = '31000000-0000-7000-8000-000000000001';
 const V2 = '31000000-0000-7000-8000-000000000002';
+const MASTER1 = '58000000-0000-7000-8000-000000000001';
+const insertMaster = (id: string) =>
+  `INSERT INTO content_masters (id, project_id, title, brief, language, created_by_id, updated_at)
+     VALUES ('${id}', '${P1}', 'M', '{}', 'vi', '${U1}', now());`;
 
 let migrator: pg.Client;
 let app: pg.Client;
@@ -403,15 +407,18 @@ describe('archive-only tables', () => {
       table === 'channels'
         ? `INSERT INTO channels (id, project_id, name, slug, platform, created_by_id, updated_at)
            VALUES ('${id}', '${P1}', 'Main', 'main', 'tiktok', '${U1}', now())`
-        : `INSERT INTO content_items (id, project_id, title, format, target_duration_seconds, aspect_ratio, language, brief, created_by_id, updated_at)
-           VALUES ('${id}', '${P1}', 'T', 'short_video', 30, '9:16', 'vi', '{}', '${U1}', now())`;
+        : `INSERT INTO content_masters (id, project_id, title, brief, language, created_by_id, updated_at)
+             VALUES ('${id}', '${P1}', 'T', '{}', 'vi', '${U1}', now());
+           INSERT INTO content_items (id, project_id, content_master_id, title, format, target_duration_seconds, aspect_ratio, language, brief, created_by_id, updated_at)
+           VALUES ('${id}', '${P1}', '${id}', 'T', 'short_video', 30, '9:16', 'vi', '{}', '${U1}', now())`;
     expect(await fails(`${insert}; DELETE FROM ${table} WHERE id = '${id}'`)).toBe('AC006');
   });
 
   it('rejects a content item outside the 1..600 s duration range (CHECK)', async () => {
     expect(
-      await fails(`INSERT INTO content_items (id, project_id, title, format, target_duration_seconds, aspect_ratio, language, brief, created_by_id, updated_at)
-        VALUES (gen_random_uuid(), '${P1}', 'T', 'short_video', 601, '9:16', 'vi', '{}', '${U1}', now())`),
+      await fails(`${insertMaster(MASTER1)}
+        INSERT INTO content_items (id, project_id, content_master_id, title, format, target_duration_seconds, aspect_ratio, language, brief, created_by_id, updated_at)
+        VALUES (gen_random_uuid(), '${P1}', '${MASTER1}', 'T', 'short_video', 601, '9:16', 'vi', '{}', '${U1}', now())`),
     ).toBe('23514');
   });
 
@@ -420,8 +427,9 @@ describe('archive-only tables', () => {
     expect(
       await fails(`INSERT INTO channels (id, project_id, name, slug, platform, created_by_id, updated_at)
           VALUES ('${ch}', '${P2}', 'Other', 'other', 'tiktok', '${U1}', now());
-        INSERT INTO content_items (id, project_id, channel_id, title, format, target_duration_seconds, aspect_ratio, language, brief, created_by_id, updated_at)
-          VALUES (gen_random_uuid(), '${P1}', '${ch}', 'T', 'short_video', 30, '9:16', 'vi', '{}', '${U1}', now())`),
+        ${insertMaster(MASTER1)}
+        INSERT INTO content_items (id, project_id, content_master_id, channel_id, title, format, target_duration_seconds, aspect_ratio, language, brief, created_by_id, updated_at)
+          VALUES (gen_random_uuid(), '${P1}', '${MASTER1}', '${ch}', 'T', 'short_video', 30, '9:16', 'vi', '{}', '${U1}', now())`),
     ).toBe('23503');
   });
 });

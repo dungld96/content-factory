@@ -71,6 +71,16 @@ export const ApiErrorCode = {
   /** Only queued or running work can be canceled. */
   NotCancelable: 'NOT_CANCELABLE',
 
+  // --- R0: content masters and variants (ADR-0015) ---
+  /** The format cannot be published on the target platform. */
+  FormatPlatformIncompatible: 'FORMAT_PLATFORM_INCOMPATIBLE',
+  /** `targetPlatform` differs from the platform of the item's channel. */
+  PlatformChannelMismatch: 'PLATFORM_CHANNEL_MISMATCH',
+  /** A content master is archived only after all of its variants are archived. */
+  MasterHasActiveVariants: 'MASTER_HAS_ACTIVE_VARIANTS',
+  /** A content item never moves to another content master (AC014). */
+  ContentMasterImmutable: 'CONTENT_MASTER_IMMUTABLE',
+
   // --- M1: authentication (ADR-0009) ---
   /** Unknown email, wrong password or disabled account (deliberately indistinguishable). */
   InvalidCredentials: 'INVALID_CREDENTIALS',

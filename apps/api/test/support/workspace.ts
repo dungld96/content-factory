@@ -68,6 +68,8 @@ export interface Fixture {
   readonly projectId: string;
   readonly channelId: string;
   readonly contentId: string;
+  /** The content item's master (R0); same UUID as `contentId` in fixtures. */
+  readonly contentMasterId: string;
   /** Reference image used as the primary asset of both drafts. */
   readonly assetId: string;
   /** Unused asset (safe to link or archive). */
@@ -121,10 +123,13 @@ export async function createFixture(db: pg.Client, ids: Record<string, string>):
       ('${projectId}', '${ids['target']}', 'editor', now());
     INSERT INTO channels (id, project_id, name, slug, platform, created_by_id, updated_at)
       VALUES ('${channelId}', '${projectId}', 'Main', 'main', 'tiktok', '${ids['owner']}', now());
-    INSERT INTO content_items (id, project_id, channel_id, title, format, target_duration_seconds,
-        aspect_ratio, language, brief, created_by_id, updated_at)
-      VALUES ('${contentId}', '${projectId}', '${channelId}', 'Desk gadgets', 'short_video', 30, '9:16',
-        'vi', '{"topic":"Desk gadgets"}', '${ids['owner']}', now());
+    INSERT INTO content_masters (id, project_id, title, brief, language, created_by_id, updated_at)
+      VALUES ('${contentId}', '${projectId}', 'Desk gadgets', '{"topic":"Desk gadgets"}', 'vi',
+        '${ids['owner']}', now());
+    INSERT INTO content_items (id, project_id, content_master_id, channel_id, title, format,
+        target_duration_seconds, aspect_ratio, language, brief, created_by_id, updated_at)
+      VALUES ('${contentId}', '${projectId}', '${contentId}', '${channelId}', 'Desk gadgets', 'short_video',
+        30, '9:16', 'vi', '{"topic":"Desk gadgets"}', '${ids['owner']}', now());
     INSERT INTO assets (id, project_id, asset_type, source_type, storage_key, mime_type, size_bytes,
         checksum_sha256, created_by_id, updated_at)
       VALUES ${asset(assetId, 'front')}, ${asset(spareAssetId, 'spare')};
@@ -143,6 +148,7 @@ export async function createFixture(db: pg.Client, ids: Record<string, string>):
     projectId,
     channelId,
     contentId,
+    contentMasterId: contentId,
     assetId,
     spareAssetId,
     characterId,

@@ -38,8 +38,10 @@ const EXPECTED_TRIGGERS: readonly (readonly [string, string, boolean])[] = [
   ['character_versions', 'character_versions_guard', false],
   ['characters', 'characters_master_guard', false],
   ['characters', 'characters_no_delete', false],
+  ['content_items', 'content_items_master_link_guard', false],
   ['content_items', 'content_items_no_delete', false],
   ['content_items', 'content_items_pointer_guard', false],
+  ['content_masters', 'content_masters_no_delete', false],
   ['environment_version_assets', 'environment_version_assets_guard', false],
   ['environment_versions', 'environment_versions_approval_sets_master', true],
   ['environment_versions', 'environment_versions_guard', false],
@@ -92,6 +94,9 @@ const EXPECTED_CHECKS = [
   'character_versions.character_versions_not_based_on_self',
   'character_versions.character_versions_version_positive',
   'content_items.content_items_duration_range',
+  'content_items.content_items_master_brief_revision_positive',
+  'content_items.content_items_platform_xor_channel',
+  'content_masters.content_masters_brief_revision_positive',
   'environment_versions.environment_versions_approval_consistent',
   'environment_versions.environment_versions_not_based_on_self',
   'environment_versions.environment_versions_version_positive',
@@ -230,7 +235,7 @@ describe('role separation (U3)', () => {
       `SELECT tablename, has_table_privilege(current_user, 'public.' || tablename, 'SELECT, INSERT, UPDATE, DELETE') AS ok
        FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`,
     );
-    expect(rows.length).toBe(27);
+    expect(rows.length).toBe(28); // M1–M3: 27; R0 adds content_masters
     expect(rows.filter((r) => !r.ok)).toEqual([]);
   });
 });

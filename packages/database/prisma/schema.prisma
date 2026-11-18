@@ -146,20 +146,21 @@ model User {
   createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  sessions             Session[]
-  memberships          ProjectMember[]      @relation("MemberUser")
-  addedMemberships     ProjectMember[]      @relation("MemberAddedBy")
-  createdProjects      Project[]
-  createdChannels      Channel[]
-  createdCharacters    Character[]
-  createdCharVersions  CharacterVersion[]   @relation("CharacterVersionCreatedBy")
-  approvedCharVersions CharacterVersion[]   @relation("CharacterVersionApprovedBy")
-  createdEnvironments  Environment[]
-  createdEnvVersions   EnvironmentVersion[] @relation("EnvironmentVersionCreatedBy")
-  approvedEnvVersions  EnvironmentVersion[] @relation("EnvironmentVersionApprovedBy")
-  createdAssets        Asset[]
-  createdContentItems  ContentItem[]
-  createdAiPrices      AiModelPrice[]
+  sessions              Session[]
+  memberships           ProjectMember[]      @relation("MemberUser")
+  addedMemberships      ProjectMember[]      @relation("MemberAddedBy")
+  createdProjects       Project[]
+  createdChannels       Channel[]
+  createdCharacters     Character[]
+  createdCharVersions   CharacterVersion[]   @relation("CharacterVersionCreatedBy")
+  approvedCharVersions  CharacterVersion[]   @relation("CharacterVersionApprovedBy")
+  createdEnvironments   Environment[]
+  createdEnvVersions    EnvironmentVersion[] @relation("EnvironmentVersionCreatedBy")
+  approvedEnvVersions   EnvironmentVersion[] @relation("EnvironmentVersionApprovedBy")
+  createdAssets         Asset[]
+  createdContentItems   ContentItem[]
+  createdContentMasters ContentMaster[]
+  createdAiPrices       AiModelPrice[]
 
   requestedRuns       ProductionRun[]
   requestedJobs       GenerationJob[]
@@ -220,6 +221,7 @@ model Project {
   contentItems  ContentItem[]
   aiInvocations AiInvocation[]
 
+  contentMasters ContentMaster[]
   productionRuns ProductionRun[]
   generationJobs GenerationJob[]
 
@@ -485,6 +487,34 @@ model Asset {
 
 // ----------------------------------------------------------------------------- content
 
+/// The shared idea of one or more variants (R0; docs/design/M3.5-multiformat-architecture-review.md
+/// §3, ADR-0015): brief, sources, references. Format- and platform-free.
+model ContentMaster {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  projectId     String    @map("project_id") @db.Uuid
+  title         String    @db.VarChar(200)
+  /// Shared brief (contracts `contentBriefSchema`); copied into each variant at creation.
+  brief         Json      @db.JsonB
+  /// Grows by one with every change of `brief`; variants record the revision they copied.
+  briefRevision Int       @default(1) @map("brief_revision")
+  /// Default language (BCP 47) for new variants.
+  language      String    @db.VarChar(35)
+  createdById   String    @map("created_by_id") @db.Uuid
+  archivedAt    DateTime? @map("archived_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy User          @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  variants  ContentItem[]
+
+  @@unique([projectId, id]) // composite-FK target
+  @@index([projectId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([createdById])
+  @@map("content_masters")
+}
+
+/// A content variant (R0): one deliverable of a content master.
 model ContentItem {
   id                    String        @id @default(uuid(7)) @db.Uuid
   projectId             String        @map("project_id") @db.Uuid
@@ -503,7 +533,16 @@ model ContentItem {
   createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  /// The master this variant belongs to (R0). Same project; never changes (AC014).
+  contentMasterId     String           @map("content_master_id") @db.Uuid
+  /// Target platform when no channel is set; NULL when a channel is set, whose platform then
+  /// applies (CHECK `content_items_platform_xor_channel`).
+  targetPlatform      ChannelPlatform? @map("target_platform")
+  /// The master `brief_revision` this variant's brief was copied from (staleness).
+  masterBriefRevision Int              @default(1) @map("master_brief_revision")
+
   project       Project        @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contentMaster ContentMaster  @relation(fields: [projectId, contentMasterId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   channel       Channel?       @relation(fields: [projectId, channelId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   createdBy     User           @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   assets        Asset[]
@@ -524,6 +563,7 @@ model ContentItem {
   @@index([projectId, createdAt(sort: Desc), id(sort: Desc)])
   @@index([channelId])
   @@index([createdById])
+  @@index([contentMasterId])
   @@map("content_items")
 }
 

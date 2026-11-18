@@ -1,4 +1,6 @@
 import type { RuleIssue } from './issues.js';
+import { SHORT_VIDEO_SECONDS } from './formats.js';
+import { platformWarnings, type ChannelPlatform } from './platforms.js';
 
 /** Brief fields used by validation (the stored brief JSON plus content-item settings). */
 export interface BriefInput {
@@ -16,6 +18,8 @@ export interface BriefInput {
   /** Referenced character/environment and whether it has an approved master version. */
   readonly character?: { readonly id: string; readonly hasApprovedMaster: boolean } | undefined;
   readonly environment?: { readonly id: string; readonly hasApprovedMaster: boolean } | undefined;
+  /** The variant's effective target platform (R0); adds advisory warnings only. */
+  readonly platform?: ChannelPlatform | null | undefined;
 }
 
 export interface NormalizedBrief {
@@ -40,9 +44,6 @@ export interface BriefValidation {
   /** Commercial/sensitive claim terms found; the script must list claims requiring verification. */
   readonly flags: readonly string[];
 }
-
-/** Short-video duration range for generation (M3 design §5.1). */
-export const SHORT_VIDEO_SECONDS = { min: 5, max: 180 } as const;
 
 /**
  * Claim-like terms (English and Vietnamese, the pilot language). A heuristic: it only raises
@@ -146,6 +147,16 @@ export function validateBrief(input: BriefInput): BriefValidation {
       path: 'brief.sourceUrls',
       message: 'claim-like terms without sources: factual claims will be listed for verification',
     });
+  }
+  if (input.platform) {
+    warnings.push(
+      ...platformWarnings({
+        format: input.format,
+        platform: input.platform,
+        targetDurationSeconds: input.targetDurationSeconds,
+        aspectRatio: input.aspectRatio,
+      }),
+    );
   }
   return { normalized, errors, warnings, flags };
 }

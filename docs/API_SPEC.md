@@ -234,6 +234,31 @@ Archive the content item (editor).
 Update `title`, `channelId` (or `null`), `targetDurationSeconds`, `aspectRatio`, `language`,
 `brief` (editor). `format` and `status` are not writable. From M3, changes that invalidate
 generated outputs must create a new content revision or mark downstream outputs stale.
+R0: `targetPlatform` is also writable (see below).
+
+### Content masters and variants (implemented in R0)
+
+Design: `docs/design/M3.5-multiformat-architecture-review.md` §5, ADR-0015. Schemas:
+`packages/contracts/src/content-masters.ts`. A content item is one **variant** of a **content
+master** (the shared brief). Every M1–M3 `/content/:contentId` endpoint is unchanged.
+
+- `POST /projects/:projectId/content` (same body) creates the master **and** this item as its
+  first variant. Optional `targetPlatform` (`tiktok`, `instagram_reels`, `youtube_shorts`,
+  `other`): with a channel it must equal the channel's platform (`422 PLATFORM_CHANNEL_MISMATCH`);
+  a format the platform does not accept is `422 FORMAT_PLATFORM_INCOMPATIBLE`.
+- Content item responses gain `contentMasterId`, `targetPlatform` (effective: the channel's
+  platform when a channel is set), `masterBriefRevision` and `masterBriefStale`.
+- Brief validation adds advisory platform warnings (verified platform limits only).
+
+| Endpoint | Viewer | Editor/Owner | Notes |
+|---|:-:|:-:|---|
+| `POST /projects/:projectId/content-masters` | 403 | 201 | `{ title, brief, language }`; no variant |
+| `GET /projects/:projectId/content-masters` | ✓ | ✓ | Paginated, newest first; `activeVariantCount`; `includeArchived` |
+| `GET /content-masters/:masterId` | ✓ | ✓ | With all variants, newest first |
+| `PATCH /content-masters/:masterId` | 403 | ✓ | `title`, `brief`, `language`; `If-Match`; a brief change increments `briefRevision` and marks variants stale |
+| `POST /content-masters/:masterId/variants` | 403 | 201 | `{ format, targetDurationSeconds, aspectRatio, title?, language?, channelId?, targetPlatform? }`; copies the master brief; `409 ARCHIVED` for an archived master |
+| `POST /content/:contentId/brief/resync` | 403 | ✓ | Copies the master's current brief into the item; `If-Match` |
+| `POST /content-masters/:masterId/archive` | 403 | ✓ | `409 MASTER_HAS_ACTIVE_VARIANTS` until every variant is archived |
 
 ## 4. Production pipeline
 
@@ -473,6 +498,7 @@ pre-check every rule, so these are a backstop for races and direct SQL:
 | `AC010` | `409 ASSET_ARCHIVED` |
 | `AC012` | `409 ARTIFACT_IMMUTABLE` (M3: a reviewed version cannot change; edits create new versions) |
 | `AC013` | `409 STALE_STORYBOARD` (M3: pointer/staleness rules) |
+| `AC014` | `409 CONTENT_MASTER_IMMUTABLE` (R0: a content item never moves to another master) |
 | `AC011` | `409 LEDGER_IMMUTABLE` (M2: price/usage rows append-only; an invocation's outcome is recorded once) |
 | `40001` / `40P01` | `409 CONCURRENT_MODIFICATION`, `retryable: true` (a `40001` is first retried once internally; a `40P01` is never retried, see below) |
 

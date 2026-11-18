@@ -134,7 +134,7 @@ Do not build all milestones in one task. Implement one milestone at a time and w
 - **M1 — Domain, persistence, identity & access:** done and approved (design revision 4, slices M1a–M1e).
 - **M2 — AI core and model registry:** done and approved (design revision 1, slices M2a–M2d).
 - **M3 — Script and storyboard pipeline:** design package revision 1 approved (`docs/design/M3-design-review-package.md`, ADR-0013); delivered in slices M3a–M3e (package §13). All slices done; **M3 done and approved (2026-11-18)**.
-- **M3.5 — Multi-format architecture review:** approved (`docs/design/M3.5-multiformat-architecture-review.md`, §8). Next: slice R0 (content masters, platform profiles) before M4.
+- **M3.5 — Multi-format architecture review:** approved (`docs/design/M3.5-multiformat-architecture-review.md`, §8, ADR-0015). Slice R0 (content masters, variants, format/platform registries) **implemented, awaiting review**.
 - **M4 — Image and asset management:** design review package in preparation (`docs/design/M4-design-review-package.md`); no code until approved.
 - **M5–M8:** not started.
 

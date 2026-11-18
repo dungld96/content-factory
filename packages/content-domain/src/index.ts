@@ -9,3 +9,6 @@ export * from './prompts/templates.js';
 export * from './script.js';
 export * from './storyboard.js';
 export * from './jobs.js';
+export * from './formats.js';
+export * from './master.js';
+export * from './platforms.js';

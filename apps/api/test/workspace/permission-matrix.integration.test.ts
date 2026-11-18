@@ -250,6 +250,46 @@ const ROWS: Record<string, Row> = {
     path: (f) => `/content/${f.contentId}/archive`,
     expect: [401, 404, 403, 200, 200],
   },
+  // Content masters and variants (R0, ADR-0015). The fixture's content item is the only variant
+  // of a master whose id equals the content item's; archiving that master is refused (409).
+  'POST /content/:contentId/brief/resync': {
+    method: 'POST',
+    path: (f) => `/content/${f.contentId}/brief/resync`,
+    expect: [401, 404, 403, 200, 200],
+  },
+  'POST /projects/:projectId/content-masters': {
+    method: 'POST',
+    path: (f) => `/projects/${f.projectId}/content-masters`,
+    body: () => ({ title: 'M', brief: { topic: 'Desk gadgets' }, language: 'vi' }),
+    expect: [401, 404, 403, 201, 201],
+  },
+  'GET /projects/:projectId/content-masters': {
+    method: 'GET',
+    path: (f) => `/projects/${f.projectId}/content-masters`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'GET /content-masters/:masterId': {
+    method: 'GET',
+    path: (f) => `/content-masters/${f.contentMasterId}`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'PATCH /content-masters/:masterId': {
+    method: 'PATCH',
+    path: (f) => `/content-masters/${f.contentMasterId}`,
+    body: () => ({ title: 'Renamed' }),
+    expect: [401, 404, 403, 200, 200],
+  },
+  'POST /content-masters/:masterId/variants': {
+    method: 'POST',
+    path: (f) => `/content-masters/${f.contentMasterId}/variants`,
+    body: () => ({ format: 'short_video', targetDurationSeconds: 30, aspectRatio: '1:1' }),
+    expect: [401, 404, 403, 201, 201],
+  },
+  'POST /content-masters/:masterId/archive': {
+    method: 'POST',
+    path: (f) => `/content-masters/${f.contentMasterId}/archive`,
+    expect: [401, 404, 403, 409, 409],
+  },
   ...versionedRows('characters', 'characterId', 'character-versions', (f) => [
     f.characterId,
     f.characterVersionId,

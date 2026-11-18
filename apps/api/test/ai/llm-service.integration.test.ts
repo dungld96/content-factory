@@ -72,8 +72,10 @@ beforeAll(async () => {
       VALUES ('${projectId}', 'AI', 'ai-${projectId.slice(0, 8)}', 'vi', 'UTC', '${ids['owner'] ?? ''}', now());
     INSERT INTO project_members (project_id, user_id, role, updated_at)
       VALUES ('${projectId}', '${ids['owner'] ?? ''}', 'owner', now());
-    INSERT INTO content_items (id, project_id, title, format, target_duration_seconds, aspect_ratio, language, brief, created_by_id, updated_at)
-      VALUES ('${contentItemId}', '${projectId}', 'C', 'short_video', 30, '9:16', 'vi', '{}', '${ids['owner'] ?? ''}', now());
+    INSERT INTO content_masters (id, project_id, title, brief, language, created_by_id, updated_at)
+      VALUES ('${contentItemId}', '${projectId}', 'C', '{}', 'vi', '${ids['owner'] ?? ''}', now());
+    INSERT INTO content_items (id, project_id, content_master_id, title, format, target_duration_seconds, aspect_ratio, language, brief, created_by_id, updated_at)
+      VALUES ('${contentItemId}', '${projectId}', '${contentItemId}', 'C', 'short_video', 30, '9:16', 'vi', '{}', '${ids['owner'] ?? ''}', now());
     COMMIT`);
   await seedAiRegistry(prisma, { openrouterConfigured: false });
   // Enable the gateway and one priced model for routing tests.

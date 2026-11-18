@@ -53,6 +53,19 @@ Migration `m3_script_storyboard` (design: `docs/design/M3-design-review-package.
 
 Enforced by the database: `AC012` (versions, scenes and scene assets are immutable except one review; edits are new versions); `AC013` (pointers reference approved versions of the same item; the storyboard pointer's script is the approved script, so a stale storyboard cannot be approved); `AC011` (job events append-only; job and run identity immutable; terminal jobs never change); CHECKs for attempts, active key, completion, error and result consistency. Approvals lock the version, then the content item (ADR-0011 order); verified by `packages/database/test/artifact-concurrency.integration.test.ts` (0 × `40P01`).
 
+## 0.3 Implemented schema (R0: content masters and variants)
+
+Migration `m35_content_masters` (design: `docs/design/M3.5-multiformat-architecture-review.md` §3, ADR-0015). Additive only.
+
+| Table / column | Purpose |
+|---|---|
+| `content_masters` | The shared idea of one or more variants: title, brief, `brief_revision` (grows with every brief change), default language; archived, never deleted. |
+| `content_items.content_master_id` | Required; the master of this variant (composite FK, same project). Never changes (`AC014`). |
+| `content_items.target_platform` | Platform of a variant **without** a channel; NULL when a channel is set (its platform applies; CHECK `content_items_platform_xor_channel`). |
+| `content_items.master_brief_revision` | The master brief revision this variant's brief was copied from; lower than the master's means "master changed". |
+
+Backfill: one master per pre-existing content item (title, brief, language, author, archive and timestamps copied; UUIDv7 from the item's `created_at`). Locking: creating a variant takes the master `FOR KEY SHARE`, archiving it `FOR UPDATE` (refused while a variant is active); verified by `packages/database/test/content-masters.integration.test.ts`.
+
 ## 1. Entity groups
 
 ### Identity and workspace
@@ -118,9 +131,13 @@ Enforced by the database: `AC012` (versions, scenes and scene assets are immutab
 - `status`
 - `createdAt`, `updatedAt`
 
-### ContentItem
+### ContentMaster (R0)
+- `id`, `projectId`, `title`, `brief`, `briefRevision`, `language`, `createdById`, `archivedAt`, timestamps
+
+### ContentItem (a variant of a ContentMaster since R0)
 - `id`
 - `projectId`
+- `contentMasterId`, `targetPlatform` nullable, `masterBriefRevision`
 - `channelId` nullable
 - `title`
 - `status`

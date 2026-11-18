@@ -95,6 +95,14 @@ call, then fails with `OUTPUT_INVALID` (`apps/worker/test/processor.integration.
 edit creates a new immutable version and approved versions cannot change (`AC012`/`AC013`,
 `packages/database/test/artifacts.integration.test.ts`, API integration tests).
 
+### M3.5 / R0 — Multi-format foundation
+Design: `docs/design/M3.5-multiformat-architecture-review.md` (approved), ADR-0015.
+
+Delivered in slice R0: content masters (`content_masters`, 1:1 backfill), content items as
+variants (`content_master_id`, `target_platform`, `master_brief_revision`), format and platform
+registries with a compatibility check in `packages/content-domain`, master/variant endpoints.
+No change to M3 generation. Later steps (R1–R4) are in the review §7.
+
 ### M4 — Image and asset management
 Deliverables:
 - Image provider adapter.

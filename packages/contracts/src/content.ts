@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { channelPlatformSchema } from './channels.js';
 import { includeArchivedSchema, isoDateTimeSchema, languageTagSchema } from './common.js';
 
 /** Canonical list per docs/CONTENT_PIPELINE.md §1 (decision U1). M1 creates `draft` only. */
@@ -64,6 +65,11 @@ export const createContentRequestSchema = z
     aspectRatio: aspectRatioSchema,
     language: languageTagSchema,
     brief: contentBriefSchema,
+    /**
+     * Target platform for a variant without a channel (R0). With a channel, the channel's
+     * platform applies and this must be omitted, null or equal to it.
+     */
+    targetPlatform: channelPlatformSchema.nullable().optional(),
   })
   .meta({ id: 'CreateContentRequest' });
 export type CreateContentRequest = z.output<typeof createContentRequestSchema>;
@@ -88,6 +94,14 @@ export const contentItemSchema = z
     aspectRatio: aspectRatioSchema,
     language: z.string(),
     brief: contentBriefSchema,
+    /** The content master this item (a variant) belongs to (R0). */
+    contentMasterId: z.uuid(),
+    /** Effective target platform: the channel's when a channel is set, else the item's own. */
+    targetPlatform: channelPlatformSchema.nullable(),
+    /** The master brief revision this item's brief was copied from. */
+    masterBriefRevision: z.number().int().min(1),
+    /** True when the master's brief changed after this item copied it (resync to update). */
+    masterBriefStale: z.boolean(),
     /** Gate 1: the approved script in use (M3). */
     approvedScriptVersionId: z.uuid().nullable(),
     /** Gate 2: the approved storyboard (M3). */

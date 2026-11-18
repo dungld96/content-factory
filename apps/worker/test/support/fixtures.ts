@@ -55,9 +55,19 @@ export async function createWorld(prisma: PrismaClient): Promise<World> {
     await tx.projectMember.create({ data: { projectId: p.id, userId: user.id, role: 'owner' } });
     return p;
   });
+  const master = await prisma.contentMaster.create({
+    data: {
+      projectId: project.id,
+      title: 'Desk gadgets',
+      brief: { topic: 'Desk gadgets' },
+      language: 'vi',
+      createdById: user.id,
+    },
+  });
   const content = await prisma.contentItem.create({
     data: {
       projectId: project.id,
+      contentMasterId: master.id,
       title: 'Desk gadgets',
       format: 'short_video',
       targetDurationSeconds: 30,
