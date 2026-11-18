@@ -1,0 +1,15 @@
+# Build context for infra/deploy/Dockerfile: sources only, never secrets or local builds.
+**/node_modules
+**/dist
+**/.next
+**/*.tsbuildinfo
+**/coverage
+**/test-results
+**/playwright-report
+packages/database/src/generated
+.git
+.env
+.env.*
+!.env.example
+*.pem
+*.log

@@ -146,6 +146,9 @@ Local development:
 - `n8n` (optional)
 - `langfuse` (optional; can be deferred)
 
+Staging (implemented, ADR-0014): one Google Cloud VM with Docker Compose — Caddy (TLS) →
+web → API, plus worker, PostgreSQL and Redis on an internal network. See `docs/DEPLOYMENT.md`.
+
 Production pilot:
 - Web/API/worker containers.
 - Managed PostgreSQL.
