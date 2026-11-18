@@ -1,6 +1,6 @@
 # M3 Design Review Package — Script and Storyboard Pipeline
 
-- Status: **Revision 1, approved by the owner (2026-11-18).** Implemented in slices M3a–M3e (§13).
+- Status: **Revision 1, approved by the owner (2026-11-18).** Implemented in slices M3a–M3e (§13); **implementation approved by the owner (2026-11-18)**.
 - Date: 2026-11-18
 - Baseline: M2 accepted (`80060cc`)
 - Companion: ADR-0013 (accepted) — generation jobs, queue and worker process
