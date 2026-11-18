@@ -36,6 +36,23 @@ Money in these tables is exact decimal USD (`NUMERIC(38,18)`, ADR-0012); integer
 - Composite foreign keys: an invocation's content item belongs to its project and its model to its provider; a usage record belongs to its invocation's project.
 - Locking: the ledger takes part in no M1 lock order; invocation inserts take only `FOR KEY SHARE` on referenced rows and never wait on the owner-change protocol (verified in `packages/database/test/ai-ledger.integration.test.ts`).
 
+## 0.2 Implemented schema (M3: script and storyboard pipeline)
+
+Migration `m3_script_storyboard` (design: `docs/design/M3-design-review-package.md` §4, ADR-0013):
+
+| Table | Purpose |
+|---|---|
+| `production_runs` | Minimal run per generate request (M3 Q7): status, requester. |
+| `generation_jobs` | Job intent persisted before enqueueing: kind, status, `active_key` (one active job per content item and kind), idempotency key, execution key (sha256 of all inputs), input ids, previous content status, prompt template id and resolved prompt snapshot, model, attempts, result version, sanitized error. |
+| `job_events` | Append-only state transitions with sanitized details. |
+| `script_versions` | Immutable script versions (content plan included): version number, status (`pending_review` → `approved`/`rejected` once), source (`generated` with its job / `edited` with its base version and author), validated JSON. |
+| `storyboard_versions`, `storyboard_scenes`, `storyboard_scene_assets` | Immutable storyboard versions of a script version, their scenes (CONTENT_PIPELINE stage 5 fields; character/environment versions and reference assets of the same project). |
+| `ai_task_routes` | Model per generation task, set by the operator CLI (M3 Q4). |
+
+`content_items` gains `approved_script_version_id` and `approved_storyboard_version_id` (gates 1 and 2, ADR-0005); `ai_invocations.generation_job_id` now has its composite foreign key.
+
+Enforced by the database: `AC012` (versions, scenes and scene assets are immutable except one review; edits are new versions); `AC013` (pointers reference approved versions of the same item; the storyboard pointer's script is the approved script, so a stale storyboard cannot be approved); `AC011` (job events append-only; job and run identity immutable; terminal jobs never change); CHECKs for attempts, active key, completion, error and result consistency. Approvals lock the version, then the content item (ADR-0011 order); verified by `packages/database/test/artifact-concurrency.integration.test.ts` (0 × `40P01`).
+
 ## 1. Entity groups
 
 ### Identity and workspace
@@ -54,14 +71,14 @@ Money in these tables is exact decimal USD (`NUMERIC(38,18)`, ADR-0012); integer
 - `ContentItem`
 - `ContentBrief`
 - `ResearchReport`
-- `ScriptVersion`
-- `StoryboardVersion`
-- `Scene`
+- `ScriptVersion` (implemented as `script_versions`, M3)
+- `StoryboardVersion` (implemented, M3)
+- `Scene` (implemented as `storyboard_scenes`, M3)
 
 ### Production
-- `ProductionRun`
-- `GenerationJob`
-- `JobEvent`
+- `ProductionRun` (implemented, M3)
+- `GenerationJob` (implemented, M3)
+- `JobEvent` (implemented, M3)
 - `Provider` (implemented as `ai_providers`, M2)
 - `Model` (implemented as `ai_models`, `ai_model_capabilities`, `ai_model_prices`, M2)
 - `ProviderCredential` (store encrypted secret reference, never plaintext)

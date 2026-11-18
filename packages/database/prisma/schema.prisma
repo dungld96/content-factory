@@ -161,6 +161,14 @@ model User {
   createdContentItems  ContentItem[]
   createdAiPrices      AiModelPrice[]
 
+  requestedRuns       ProductionRun[]
+  requestedJobs       GenerationJob[]
+  createdScripts      ScriptVersion[]     @relation("ScriptCreatedBy")
+  reviewedScripts     ScriptVersion[]     @relation("ScriptReviewedBy")
+  createdStoryboards  StoryboardVersion[] @relation("StoryboardCreatedBy")
+  reviewedStoryboards StoryboardVersion[] @relation("StoryboardReviewedBy")
+  updatedTaskRoutes   AiTaskRoute[]
+
   @@map("users")
 }
 
@@ -211,6 +219,9 @@ model Project {
   assets        Asset[]
   contentItems  ContentItem[]
   aiInvocations AiInvocation[]
+
+  productionRuns ProductionRun[]
+  generationJobs GenerationJob[]
 
   @@index([createdById])
   @@map("projects")
@@ -314,6 +325,8 @@ model CharacterVersion {
   approvedBy    User?                   @relation("CharacterVersionApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   assets        CharacterVersionAsset[]
 
+  storyboardScenes StoryboardScene[]
+
   @@unique([characterId, version])
   @@unique([characterId, id]) // composite-FK target (master pointer, lineage)
   @@unique([projectId, id]) // composite-FK target (asset links)
@@ -391,6 +404,8 @@ model EnvironmentVersion {
   approvedBy    User?                     @relation("EnvironmentVersionApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   assets        EnvironmentVersionAsset[]
 
+  storyboardScenes StoryboardScene[]
+
   @@unique([environmentId, version])
   @@unique([environmentId, id])
   @@unique([projectId, id])
@@ -457,6 +472,8 @@ model Asset {
   environmentVersionPrimary EnvironmentVersion[]      @relation("EnvironmentVersionPrimaryAsset")
   environmentVersionLinks   EnvironmentVersionAsset[] @relation("EnvironmentVersionAssets")
 
+  sceneReferences StoryboardSceneAsset[]
+
   @@unique([projectId, id]) // composite-FK target
   @@index([projectId, createdAt(sort: Desc), id(sort: Desc)]) // list/pagination
   @@index([projectId, assetType])
@@ -491,6 +508,17 @@ model ContentItem {
   createdBy     User           @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   assets        Asset[]
   aiInvocations AiInvocation[]
+
+  /// Gate 1 (ADR-0005): the approved script in use. Moves on approval (M3 Q3).
+  approvedScriptVersionId     String?             @map("approved_script_version_id") @db.Uuid
+  /// Gate 2: the approved storyboard; its script is the approved script (AC013).
+  approvedStoryboardVersionId String?             @map("approved_storyboard_version_id") @db.Uuid
+  approvedScript              ScriptVersion?      @relation("ContentApprovedScript", fields: [id, approvedScriptVersionId], references: [contentItemId, id], onDelete: Restrict, onUpdate: Restrict)
+  approvedStoryboard          StoryboardVersion?  @relation("ContentApprovedStoryboard", fields: [id, approvedStoryboardVersionId], references: [contentItemId, id], onDelete: Restrict, onUpdate: Restrict)
+  scriptVersions              ScriptVersion[]     @relation("ContentScripts")
+  storyboardVersions          StoryboardVersion[] @relation("ContentStoryboards")
+  productionRuns              ProductionRun[]
+  generationJobs              GenerationJob[]
 
   @@unique([projectId, id]) // composite-FK target
   @@index([projectId, createdAt(sort: Desc), id(sort: Desc)])
@@ -628,6 +656,9 @@ model AiModel {
   prices       AiModelPrice[]
   invocations  AiInvocation[]
 
+  jobs       GenerationJob[]
+  taskRoutes AiTaskRoute[]
+
   @@unique([providerId, modelKey])
   @@unique([providerId, id]) // composite-FK target
   @@map("ai_models")
@@ -677,7 +708,7 @@ model AiInvocation {
   id                String             @id @default(uuid(7)) @db.Uuid
   projectId         String             @map("project_id") @db.Uuid
   contentItemId     String?            @map("content_item_id") @db.Uuid
-  /// GenerationJob link; foreign key added in M5 (decision E4).
+  /// GenerationJob link (composite FK since M3).
   generationJobId   String?            @map("generation_job_id") @db.Uuid
   correlationId     String             @map("correlation_id") @db.VarChar(128)
   idempotencyKey    String?            @unique @map("idempotency_key") @db.VarChar(200)
@@ -708,11 +739,15 @@ model AiInvocation {
   model        AiModel         @relation(fields: [providerId, modelId], references: [providerId, id], onDelete: Restrict, onUpdate: Restrict)
   usageRecords AiUsageRecord[]
 
+  /// Job link (M3; nullable for calls outside jobs, e.g. the operator smoke test).
+  generationJob GenerationJob? @relation(fields: [projectId, generationJobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+
   @@unique([projectId, id]) // composite-FK target
   @@index([projectId, startedAt])
   @@index([providerId, modelId, startedAt])
   @@index([status, startedAt])
   @@index([contentItemId])
+  @@index([generationJobId])
   @@map("ai_invocations")
 }
 
@@ -738,4 +773,272 @@ model AiUsageRecord {
   @@index([projectId, recordedAt])
   @@index([priceId])
   @@map("ai_usage_records")
+}
+
+// ----------------------------------------------------------------------------- generation (M3)
+// Design: docs/design/M3-design-review-package.md §4, ADR-0013. Job intent is persisted before
+// enqueueing; BullMQ carries only the job id. Versions are immutable after insert except their
+// one-time review (AC012); approval pointers live on content_items (AC013).
+
+enum GenerationJobKind {
+  script_generation
+  storyboard_generation
+
+  @@map("generation_job_kind")
+}
+
+enum GenerationJobStatus {
+  queued
+  running
+  succeeded
+  failed
+  canceled
+
+  @@map("generation_job_status")
+}
+
+enum ArtifactStatus {
+  pending_review
+  approved
+  rejected
+
+  @@map("artifact_status")
+}
+
+enum ArtifactSource {
+  generated
+  edited
+
+  @@map("artifact_source")
+}
+
+/// Minimal production run (M3 Q7): one per generate request.
+model ProductionRun {
+  id            String              @id @default(uuid(7)) @db.Uuid
+  projectId     String              @map("project_id") @db.Uuid
+  contentItemId String              @map("content_item_id") @db.Uuid
+  status        GenerationJobStatus @default(queued)
+  requestedById String              @map("requested_by_id") @db.Uuid
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  completedAt   DateTime?           @map("completed_at") @db.Timestamptz(3)
+
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contentItem ContentItem     @relation(fields: [projectId, contentItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  requestedBy User            @relation(fields: [requestedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  jobs        GenerationJob[]
+
+  @@unique([projectId, id]) // composite-FK target
+  @@index([contentItemId, createdAt])
+  @@index([requestedById])
+  @@map("production_runs")
+}
+
+model GenerationJob {
+  id                        String              @id @default(uuid(7)) @db.Uuid
+  projectId                 String              @map("project_id") @db.Uuid
+  contentItemId             String              @map("content_item_id") @db.Uuid
+  productionRunId           String              @map("production_run_id") @db.Uuid
+  kind                      GenerationJobKind
+  status                    GenerationJobStatus @default(queued)
+  /// "{content_item_id}:{kind}" while queued/running, else null: one active job per item and kind.
+  activeKey                 String?             @unique @map("active_key") @db.VarChar(80)
+  /// Client Idempotency-Key, or derived from the execution key.
+  idempotencyKey            String              @unique @map("idempotency_key") @db.VarChar(200)
+  /// sha256 of every input (content-domain executionKey).
+  executionKey              String              @map("execution_key") @db.Char(64)
+  /// Input ids and parameters; never secrets.
+  input                     Json                @db.JsonB
+  /// Content status the job started from, restored on failure/cancel.
+  previousContentStatus     ContentStatus       @map("previous_content_status")
+  promptTemplateId          String              @map("prompt_template_id") @db.VarChar(64)
+  /// Fully resolved prompt (CONTENT_PIPELINE §4); set when the worker renders it.
+  promptSnapshot            String?             @map("prompt_snapshot") @db.Text
+  modelId                   String              @map("model_id") @db.Uuid
+  attempt                   Int                 @default(0)
+  maxAttempts               Int                 @default(3) @map("max_attempts")
+  resultScriptVersionId     String?             @map("result_script_version_id") @db.Uuid
+  resultStoryboardVersionId String?             @map("result_storyboard_version_id") @db.Uuid
+  errorCode                 String?             @map("error_code") @db.VarChar(64)
+  errorMessage              String?             @map("error_message") @db.VarChar(500)
+  requestedById             String              @map("requested_by_id") @db.Uuid
+  queuedAt                  DateTime            @default(now()) @map("queued_at") @db.Timestamptz(3)
+  startedAt                 DateTime?           @map("started_at") @db.Timestamptz(3)
+  completedAt               DateTime?           @map("completed_at") @db.Timestamptz(3)
+  updatedAt                 DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  project          Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contentItem      ContentItem         @relation(fields: [projectId, contentItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  productionRun    ProductionRun       @relation(fields: [projectId, productionRunId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  model            AiModel             @relation(fields: [modelId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  requestedBy      User                @relation(fields: [requestedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  resultScript     ScriptVersion?      @relation("JobResultScript", fields: [projectId, resultScriptVersionId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  resultStoryboard StoryboardVersion?  @relation("JobResultStoryboard", fields: [projectId, resultStoryboardVersionId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  events           JobEvent[]
+  invocations      AiInvocation[]
+  scripts          ScriptVersion[]     @relation("ScriptGeneratedBy")
+  storyboards      StoryboardVersion[] @relation("StoryboardGeneratedBy")
+
+  @@unique([projectId, id]) // composite-FK target
+  @@index([contentItemId, kind, executionKey])
+  @@index([productionRunId])
+  @@index([status, queuedAt])
+  @@index([modelId])
+  @@index([requestedById])
+  @@map("generation_jobs")
+}
+
+/// Append-only job state transitions (CLAUDE.md §7).
+model JobEvent {
+  id         String               @id @default(uuid(7)) @db.Uuid
+  projectId  String               @map("project_id") @db.Uuid
+  jobId      String               @map("job_id") @db.Uuid
+  fromStatus GenerationJobStatus? @map("from_status")
+  toStatus   GenerationJobStatus  @map("to_status")
+  attempt    Int
+  /// Event type and sanitized details (validation paths, error codes); never content.
+  detail     Json                 @db.JsonB
+  createdAt  DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  job GenerationJob @relation(fields: [projectId, jobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([jobId, createdAt])
+  @@map("job_events")
+}
+
+model ScriptVersion {
+  id               String         @id @default(uuid(7)) @db.Uuid
+  projectId        String         @map("project_id") @db.Uuid
+  contentItemId    String         @map("content_item_id") @db.Uuid
+  version          Int
+  status           ArtifactStatus @default(pending_review)
+  source           ArtifactSource
+  basedOnVersionId String?        @map("based_on_version_id") @db.Uuid
+  generationJobId  String?        @map("generation_job_id") @db.Uuid
+  schemaVersion    Int            @map("schema_version")
+  /// Validated ScriptContent (content-domain).
+  content          Json           @db.JsonB
+  createdById      String?        @map("created_by_id") @db.Uuid
+  reviewedById     String?        @map("reviewed_by_id") @db.Uuid
+  reviewedAt       DateTime?      @map("reviewed_at") @db.Timestamptz(3)
+  reviewNote       String?        @map("review_note") @db.VarChar(2000)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  contentItem   ContentItem         @relation("ContentScripts", fields: [projectId, contentItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  basedOn       ScriptVersion?      @relation("ScriptBasedOn", fields: [contentItemId, basedOnVersionId], references: [contentItemId, id], onDelete: Restrict, onUpdate: Restrict)
+  derived       ScriptVersion[]     @relation("ScriptBasedOn")
+  generationJob GenerationJob?      @relation("ScriptGeneratedBy", fields: [projectId, generationJobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy     User?               @relation("ScriptCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reviewedBy    User?               @relation("ScriptReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  approvedFor   ContentItem[]       @relation("ContentApprovedScript")
+  storyboards   StoryboardVersion[]
+  jobResults    GenerationJob[]     @relation("JobResultScript")
+
+  @@unique([contentItemId, version])
+  @@unique([contentItemId, id]) // composite-FK target (pointer, based-on)
+  @@unique([projectId, id]) // composite-FK target
+  @@index([generationJobId])
+  @@index([createdById])
+  @@index([reviewedById])
+  @@map("script_versions")
+}
+
+model StoryboardVersion {
+  id                   String         @id @default(uuid(7)) @db.Uuid
+  projectId            String         @map("project_id") @db.Uuid
+  contentItemId        String         @map("content_item_id") @db.Uuid
+  /// The approved script it was generated from (for edits: the base version's script).
+  scriptVersionId      String         @map("script_version_id") @db.Uuid
+  version              Int
+  status               ArtifactStatus @default(pending_review)
+  source               ArtifactSource
+  basedOnVersionId     String?        @map("based_on_version_id") @db.Uuid
+  generationJobId      String?        @map("generation_job_id") @db.Uuid
+  schemaVersion        Int            @map("schema_version")
+  totalDurationSeconds Decimal        @map("total_duration_seconds") @db.Decimal(7, 2)
+  createdById          String?        @map("created_by_id") @db.Uuid
+  reviewedById         String?        @map("reviewed_by_id") @db.Uuid
+  reviewedAt           DateTime?      @map("reviewed_at") @db.Timestamptz(3)
+  reviewNote           String?        @map("review_note") @db.VarChar(2000)
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  contentItem   ContentItem         @relation("ContentStoryboards", fields: [projectId, contentItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  script        ScriptVersion       @relation(fields: [contentItemId, scriptVersionId], references: [contentItemId, id], onDelete: Restrict, onUpdate: Restrict)
+  basedOn       StoryboardVersion?  @relation("StoryboardBasedOn", fields: [contentItemId, basedOnVersionId], references: [contentItemId, id], onDelete: Restrict, onUpdate: Restrict)
+  derived       StoryboardVersion[] @relation("StoryboardBasedOn")
+  generationJob GenerationJob?      @relation("StoryboardGeneratedBy", fields: [projectId, generationJobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy     User?               @relation("StoryboardCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reviewedBy    User?               @relation("StoryboardReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  scenes        StoryboardScene[]
+  approvedFor   ContentItem[]       @relation("ContentApprovedStoryboard")
+  jobResults    GenerationJob[]     @relation("JobResultStoryboard")
+
+  @@unique([contentItemId, version])
+  @@unique([contentItemId, id]) // composite-FK target
+  @@unique([projectId, id]) // composite-FK target
+  @@index([scriptVersionId])
+  @@index([generationJobId])
+  @@index([createdById])
+  @@index([reviewedById])
+  @@map("storyboard_versions")
+}
+
+/// Immutable with its storyboard version (AC012).
+model StoryboardScene {
+  id                   String   @id @default(uuid(7)) @db.Uuid
+  projectId            String   @map("project_id") @db.Uuid
+  storyboardVersionId  String   @map("storyboard_version_id") @db.Uuid
+  sceneNumber          Int      @map("scene_number")
+  durationSeconds      Decimal  @map("duration_seconds") @db.Decimal(6, 2)
+  shotType             String   @map("shot_type") @db.VarChar(100)
+  cameraAngle          String   @map("camera_angle") @db.VarChar(100)
+  cameraMovement       String   @map("camera_movement") @db.VarChar(100)
+  characterAction      String   @map("character_action") @db.Text
+  characterVersionId   String?  @map("character_version_id") @db.Uuid
+  environmentVersionId String?  @map("environment_version_id") @db.Uuid
+  visualDescription    String   @map("visual_description") @db.Text
+  imagePrompt          String   @map("image_prompt") @db.Text
+  videoPrompt          String   @map("video_prompt") @db.Text
+  negativePrompt       String   @map("negative_prompt") @db.Text
+  voiceOverSegment     String   @map("voice_over_segment") @db.Text
+  onScreenText         String   @map("on_screen_text") @db.Text
+  acceptanceChecks     String[] @default([]) @map("acceptance_checks")
+
+  storyboardVersion  StoryboardVersion      @relation(fields: [projectId, storyboardVersionId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  characterVersion   CharacterVersion?      @relation(fields: [projectId, characterVersionId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  environmentVersion EnvironmentVersion?    @relation(fields: [projectId, environmentVersionId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  referenceAssets    StoryboardSceneAsset[]
+
+  @@unique([storyboardVersionId, sceneNumber])
+  @@unique([projectId, id]) // composite-FK target
+  @@index([characterVersionId])
+  @@index([environmentVersionId])
+  @@map("storyboard_scenes")
+}
+
+model StoryboardSceneAsset {
+  projectId String @map("project_id") @db.Uuid
+  sceneId   String @map("scene_id") @db.Uuid
+  assetId   String @map("asset_id") @db.Uuid
+
+  scene StoryboardScene @relation(fields: [projectId, sceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  asset Asset           @relation(fields: [projectId, assetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([sceneId, assetId])
+  @@index([assetId])
+  @@map("storyboard_scene_assets")
+}
+
+/// Model per generation task (M3 Q4), set by the operator CLI.
+model AiTaskRoute {
+  task        GenerationJobKind @id
+  modelId     String            @map("model_id") @db.Uuid
+  updatedById String?           @map("updated_by_id") @db.Uuid
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  model     AiModel @relation(fields: [modelId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  updatedBy User?   @relation(fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([modelId])
+  @@map("ai_task_routes")
 }

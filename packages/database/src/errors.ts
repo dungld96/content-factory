@@ -1,6 +1,6 @@
 /**
  * Stable SQLSTATEs raised by the integrity layer (migrations `init_m1`, ADR-0011 §4, and
- * `m2_ai_registry`, ADR-0012).
+ * `m2_ai_registry`, ADR-0012; `m3_script_storyboard`, ADR-0013).
  * The API maps these to error codes (design package §8.3). Messages are for operators only.
  */
 export const IntegritySqlState = {
@@ -16,6 +16,10 @@ export const IntegritySqlState = {
   APPROVAL_WITH_ARCHIVED_ASSET: 'AC010',
   /** M2 (ADR-0012): prices and usage are append-only; invocations get one outcome. */
   LEDGER_ROW_IMMUTABLE: 'AC011',
+  /** M3: script/storyboard versions, scenes and scene assets are immutable after review. */
+  ARTIFACT_IMMUTABLE: 'AC012',
+  /** M3: approval pointers reference approved versions; a stale storyboard cannot be approved. */
+  ARTIFACT_POINTER_INVALID: 'AC013',
 } as const;
 export type IntegritySqlState = (typeof IntegritySqlState)[keyof typeof IntegritySqlState];
 

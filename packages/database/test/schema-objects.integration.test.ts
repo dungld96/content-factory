@@ -39,14 +39,22 @@ const EXPECTED_TRIGGERS: readonly (readonly [string, string, boolean])[] = [
   ['characters', 'characters_master_guard', false],
   ['characters', 'characters_no_delete', false],
   ['content_items', 'content_items_no_delete', false],
+  ['content_items', 'content_items_pointer_guard', false],
   ['environment_version_assets', 'environment_version_assets_guard', false],
   ['environment_versions', 'environment_versions_approval_sets_master', true],
   ['environment_versions', 'environment_versions_guard', false],
   ['environments', 'environments_master_guard', false],
   ['environments', 'environments_no_delete', false],
+  ['generation_jobs', 'generation_jobs_guard', false],
+  ['job_events', 'job_events_append_only', false],
+  ['production_runs', 'production_runs_guard', false],
   ['project_members', 'project_members_keep_owner', true],
   ['projects', 'projects_created_with_owner', true],
   ['projects', 'projects_no_delete', false],
+  ['script_versions', 'script_versions_guard', false],
+  ['storyboard_scene_assets', 'storyboard_scene_assets_guard', false],
+  ['storyboard_scenes', 'storyboard_scenes_guard', false],
+  ['storyboard_versions', 'storyboard_versions_guard', false],
 ];
 
 const EXPECTED_CHECKS = [
@@ -87,8 +95,30 @@ const EXPECTED_CHECKS = [
   'environment_versions.environment_versions_approval_consistent',
   'environment_versions.environment_versions_not_based_on_self',
   'environment_versions.environment_versions_version_positive',
+  'generation_jobs.generation_jobs_active_key_consistent',
+  'generation_jobs.generation_jobs_attempts_bounded',
+  'generation_jobs.generation_jobs_completion_consistent',
+  'generation_jobs.generation_jobs_error_consistent',
+  'generation_jobs.generation_jobs_execution_key_format',
+  'generation_jobs.generation_jobs_input_object',
+  'generation_jobs.generation_jobs_result_consistent',
+  'job_events.job_events_attempt_nonnegative',
+  'job_events.job_events_detail_object',
+  'production_runs.production_runs_completion_consistent',
+  'script_versions.script_versions_content_object',
+  'script_versions.script_versions_not_based_on_self',
+  'script_versions.script_versions_review_consistent',
+  'script_versions.script_versions_source_consistent',
+  'script_versions.script_versions_version_positive',
   'sessions.sessions_expiry_order',
   'sessions.sessions_id_hash_len',
+  'storyboard_scenes.storyboard_scenes_duration_positive',
+  'storyboard_scenes.storyboard_scenes_number_positive',
+  'storyboard_versions.storyboard_versions_duration_positive',
+  'storyboard_versions.storyboard_versions_not_based_on_self',
+  'storyboard_versions.storyboard_versions_review_consistent',
+  'storyboard_versions.storyboard_versions_source_consistent',
+  'storyboard_versions.storyboard_versions_version_positive',
   'users.users_email_normalized',
 ];
 
@@ -200,7 +230,7 @@ describe('role separation (U3)', () => {
       `SELECT tablename, has_table_privilege(current_user, 'public.' || tablename, 'SELECT, INSERT, UPDATE, DELETE') AS ok
        FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`,
     );
-    expect(rows.length).toBe(19);
+    expect(rows.length).toBe(27);
     expect(rows.filter((r) => !r.ok)).toEqual([]);
   });
 });
