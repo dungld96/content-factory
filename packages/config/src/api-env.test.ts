@@ -210,3 +210,28 @@ describe('loadApiEnv', () => {
     });
   });
 });
+
+describe('storage variables (M4a)', () => {
+  const storage = {
+    S3_ENDPOINT: 'http://127.0.0.1:8333',
+    S3_BUCKET: 'acf-assets',
+    S3_ACCESS_KEY_ID: 'key',
+    S3_SECRET_ACCESS_KEY: 'secret',
+  };
+
+  it('treats storage as optional, as a group', () => {
+    expect(loadApiEnv(valid).S3_ENDPOINT).toBeUndefined();
+    expect(loadApiEnv({ ...valid, ...storage })).toMatchObject({
+      ...storage,
+      S3_REGION: 'us-east-1',
+      S3_FORCE_PATH_STYLE: true,
+      UPLOAD_MAX_IMAGE_BYTES: 25 * 1024 * 1024,
+    });
+  });
+
+  it('requires the whole group once one variable is set', () => {
+    expect(() => loadApiEnv({ ...valid, S3_ENDPOINT: storage.S3_ENDPOINT })).toThrow(
+      EnvValidationError,
+    );
+  });
+});

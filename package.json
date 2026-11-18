@@ -46,7 +46,8 @@
     "user:disable": "pnpm build:packages && pnpm --filter @acf/api build && pnpm --filter @acf/api user disable",
     "ai:registry": "pnpm build:packages && pnpm --filter @acf/api build && pnpm --filter @acf/api ai",
     "db:studio": "pnpm --filter @acf/database db:studio",
-    "env:check": "pnpm build:packages && node scripts/check-env.mjs"
+    "env:check": "pnpm build:packages && node scripts/check-env.mjs",
+    "storage:setup": "pnpm --filter @acf/storage build && pnpm --filter @acf/storage storage:setup"
   },
   "devDependencies": {
     "@acf/config": "workspace:*",

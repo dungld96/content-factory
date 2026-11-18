@@ -37,6 +37,18 @@ const jsonObject = (maxBytes: number) =>
 
 export const assetIdParamsSchema = z.strictObject({ assetId: z.uuid() });
 
+/** Image types accepted by `POST /projects/:projectId/assets/upload` (M4a; magic bytes decide). */
+export const UPLOADABLE_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+
+/** Query of the raw-body image upload (M4 design §4.2); the body is the image itself. */
+export const uploadAssetQuerySchema = z.strictObject({
+  assetType: z.enum(['reference', 'image']),
+  filename: z.string().trim().min(1).max(255).optional(),
+  label: z.string().trim().min(1).max(200).optional(),
+  contentItemId: z.uuid().optional(),
+});
+export type UploadAssetQuery = z.output<typeof uploadAssetQuerySchema>;
+
 /** Metadata-only registration (decision D8). */
 export const registerAssetRequestSchema = z
   .strictObject({

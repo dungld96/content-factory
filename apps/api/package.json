@@ -20,6 +20,7 @@
     "@acf/content-domain": "workspace:*",
     "@acf/contracts": "workspace:*",
     "@acf/database": "workspace:*",
+    "@acf/storage": "workspace:*",
     "@nestjs/common": "12.3.2",
     "@nestjs/core": "12.3.2",
     "@nestjs/platform-express": "12.3.2",

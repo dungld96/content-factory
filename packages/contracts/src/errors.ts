@@ -71,6 +71,22 @@ export const ApiErrorCode = {
   /** Only queued or running work can be canceled. */
   NotCancelable: 'NOT_CANCELABLE',
 
+  // --- M4: object storage and images (M4 design package §4, §7) ---
+  /** Object storage is not configured on this deployment (S3_* variables unset). */
+  StorageNotConfigured: 'STORAGE_NOT_CONFIGURED',
+  /** Object storage could not be reached; safe to retry. */
+  StorageUnavailable: 'STORAGE_UNAVAILABLE',
+  /** Only PNG, JPEG and WebP images are accepted (decided by the file's bytes). */
+  UnsupportedMedia: 'UNSUPPORTED_MEDIA',
+  /** The file or image dimensions exceed the limits. */
+  MediaTooLarge: 'MEDIA_TOO_LARGE',
+  /** The file is empty or its image header cannot be read. */
+  MediaInvalid: 'MEDIA_INVALID',
+  /** The declared Content-Type differs from the file's actual type. */
+  MediaTypeMismatch: 'MEDIA_TYPE_MISMATCH',
+  /** The asset is registered but its bytes are not in storage (e.g. M1 metadata-only assets). */
+  AssetContentMissing: 'ASSET_CONTENT_MISSING',
+
   // --- R0: content masters and variants (ADR-0015) ---
   /** The format cannot be published on the target platform. */
   FormatPlatformIncompatible: 'FORMAT_PLATFORM_INCOMPATIBLE',

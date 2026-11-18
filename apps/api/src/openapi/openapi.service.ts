@@ -30,6 +30,16 @@ function operationFor(route: RouteInfo, env: ApiEnv): ZodOpenApiOperationObject 
     responses[status as `${1 | 2 | 3 | 4 | 5}${string}`] = {
       description: response.description,
       ...(response.schema ? { content: { 'application/json': { schema: response.schema } } } : {}),
+      ...(response.binary
+        ? {
+            content: Object.fromEntries(
+              response.binary.map((type) => [
+                type,
+                { schema: z.string().meta({ format: 'binary' }) },
+              ]),
+            ),
+          }
+        : {}),
     };
   }
   for (const status of spec.errors ?? []) {
@@ -61,6 +71,19 @@ function operationFor(route: RouteInfo, env: ApiEnv): ZodOpenApiOperationObject 
       : {}),
     ...(spec.body
       ? { requestBody: { required: true, content: { 'application/json': { schema: spec.body } } } }
+      : {}),
+    ...(spec.binaryBody
+      ? {
+          requestBody: {
+            required: true,
+            content: Object.fromEntries(
+              spec.binaryBody.map((type) => [
+                type,
+                { schema: z.string().meta({ format: 'binary' }) },
+              ]),
+            ),
+          },
+        }
       : {}),
     responses,
   };

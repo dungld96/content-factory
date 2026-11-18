@@ -26,6 +26,11 @@ DATABASE_URL=postgresql://acf_app:$app@postgres:5432/acf?schema=public
 SESSION_SECRETS=$(rand)$(rand)
 CSRF_SECRET=$(rand)$(rand)
 LOG_LEVEL=log
+# Object storage (M4a): SeaweedFS keys. The admin key is used only by the storage-setup tool.
+S3_ACCESS_KEY_ID=acf_app_$(openssl rand -hex 6)
+S3_SECRET_ACCESS_KEY=$(rand)
+STORAGE_ADMIN_ACCESS_KEY_ID=acf_admin_$(openssl rand -hex 6)
+STORAGE_ADMIN_SECRET_ACCESS_KEY=$(rand)
 # Optional, paid: real LLM calls. Set it, then: ./acf.sh up -d api worker
 OPENROUTER_API_KEY=
 ENV

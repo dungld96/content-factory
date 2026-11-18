@@ -111,11 +111,17 @@ cd infra/deploy
 ```
 
 ```bash
-./acf.sh up -d postgres redis
+./acf.sh up -d postgres redis seaweedfs
 ```
 
 ```bash
 ./acf.sh run --rm migrate
+```
+
+Create the asset bucket in SeaweedFS (M4a; idempotent):
+
+```bash
+./acf.sh run --rm storage-setup
 ```
 
 Optional demo workspace (Demo Studio, three demo users; passwords are printed once — the web UI
@@ -176,6 +182,17 @@ Update to a newer commit:
 git pull && ./acf.sh build migrate && ./acf.sh run --rm migrate && ./acf.sh up -d
 ```
 
+Upgrading a deployment created before M4a: `.env.production` has no storage keys yet. Append them
+once (then run `./acf.sh up -d seaweedfs` and `./acf.sh run --rm storage-setup` before the full
+`up -d`):
+
+```bash
+printf 'S3_ACCESS_KEY_ID=acf_app_%s\nS3_SECRET_ACCESS_KEY=%s\nSTORAGE_ADMIN_ACCESS_KEY_ID=acf_admin_%s\nSTORAGE_ADMIN_SECRET_ACCESS_KEY=%s\n' "$(openssl rand -hex 6)" "$(openssl rand -hex 24)" "$(openssl rand -hex 6)" "$(openssl rand -hex 24)" >> .env.production
+```
+
+Asset files live in the `seaweedfs-data` volume on the VM's persistent disk; disk snapshots
+back them up together with the database volume.
+
 Back up the database (store the file privately; it contains user data and password hashes):
 
 ```bash
@@ -207,9 +224,11 @@ gcloud compute addresses delete acf-staging-ip --region=asia-southeast1
 
 ## Security notes
 
-- Only Caddy publishes ports (80/443). PostgreSQL, Redis and the API are internal.
+- Only Caddy publishes ports (80/443). PostgreSQL, Redis, SeaweedFS and the API are internal;
+  browsers read asset bytes only through the API (`GET /assets/:assetId/content`).
 - `NODE_ENV=production`: `Secure` `__Host-` cookies; `TRUST_PROXY` names only the web and Caddy
   containers; Caddy replaces client-sent `X-Forwarded-*` headers.
 - Each container receives only the variables it needs; the admin and migrator database URLs go
-  only to the one-off `migrate` tool. The OpenRouter key never reaches the browser.
+  only to the one-off `migrate` tool, and the storage admin key only to `storage-setup`. The
+  OpenRouter and storage keys never reach the browser.
 - SSH access is through `gcloud compute ssh` (Google identity); no password login.

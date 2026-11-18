@@ -17,6 +17,7 @@ import {
   type AuthTestApp,
 } from '../support/auth-app.js';
 import { MockLlmProvider } from '@acf/ai-core/testing';
+import { solidPng } from '@acf/storage/testing';
 
 import { seedAiRegistry } from '../../src/cli/seed-ai.js';
 import { OpenApiService } from '../../src/openapi/openapi.service.js';
@@ -42,6 +43,8 @@ interface Row {
   readonly method: string;
   readonly path: (f: MatrixFixture, ids: Record<string, string>) => string;
   readonly body?: (f: MatrixFixture) => unknown;
+  /** A raw image body (binary upload routes, M4a), sent as `image/png`. */
+  readonly rawBody?: () => Uint8Array;
   /** Expected status for: unauthenticated, non-member, viewer, editor, owner. */
   readonly expect: readonly [number, number, number, number, number];
 }
@@ -249,6 +252,19 @@ const ROWS: Record<string, Row> = {
     method: 'POST',
     path: (f) => `/content/${f.contentId}/archive`,
     expect: [401, 404, 403, 200, 200],
+  },
+  // Object storage (M4a). Upload needs editor; any member reads bytes. The fixture asset is
+  // metadata-only, so reading it is 404 ASSET_CONTENT_MISSING once authorized.
+  'POST /projects/:projectId/assets/upload': {
+    method: 'POST',
+    path: (f) => `/projects/${f.projectId}/assets/upload?assetType=reference`,
+    rawBody: () => solidPng(4, 4),
+    expect: [401, 404, 403, 201, 201],
+  },
+  'GET /assets/:assetId/content': {
+    method: 'GET',
+    path: (f) => `/assets/${f.assetId}/content`,
+    expect: [401, 404, 404, 404, 404],
   },
   // Content masters and variants (R0, ADR-0015). The fixture's content item is the only variant
   // of a master whose id equals the content item's; archiving that master is refused (409).
@@ -458,11 +474,16 @@ describe.each(Object.entries(ROWS))('%s', (_route, row) => {
       const base = await createFixture(db, ids);
       const fixture: MatrixFixture = { ...base, ...(await addGenerationFixture(db, ids, base)) };
       const body = row.body?.(fixture);
+      const raw = row.rawBody?.();
       const res = await as(
         caller === 'unauthenticated' ? null : caller,
         row.method,
         row.path(fixture, ids),
-        body === undefined ? {} : { body },
+        raw
+          ? { rawBody: raw, headers: { 'content-type': 'image/png' } }
+          : body === undefined
+            ? {}
+            : { body },
       );
       expect(res.status, JSON.stringify(res.json)).toBe(expected);
     },

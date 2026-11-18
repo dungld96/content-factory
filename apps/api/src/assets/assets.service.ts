@@ -1,4 +1,6 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import type { Readable } from 'node:stream';
+
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
 import {
@@ -10,7 +12,16 @@ import {
   type Page,
   type RegisterAssetRequest,
   type UpdateAssetRequest,
+  type UploadAssetQuery,
 } from '@acf/contracts';
+import type { ApiEnv } from '@acf/config';
+import {
+  assetObjectKey,
+  ImageValidationError,
+  inspectImage,
+  uuidv7,
+  type ObjectBody,
+} from '@acf/storage';
 import { Prisma, type Asset } from '@acf/database';
 
 import type { Actor } from '../auth/actor.js';
@@ -24,6 +35,8 @@ import {
 } from '../common/domain-errors.js';
 import { validationError } from '../common/http/endpoint.js';
 import { keysetAfter, NEWEST_FIRST, toPage } from '../common/http/pagination.js';
+import { API_ENV } from '../config/api-config.module.js';
+import { ObjectStoreService, storageFailure } from '../infrastructure/object-store.service.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
 import { TransactionRunner } from '../infrastructure/transaction-runner.js';
 import { ProjectAccess } from '../projects/project-access.service.js';
@@ -141,6 +154,8 @@ export class AssetsService {
     private readonly prisma: PrismaService,
     private readonly runner: TransactionRunner,
     private readonly access: ProjectAccess,
+    private readonly storage: ObjectStoreService,
+    @Inject(API_ENV) private readonly env: ApiEnv,
   ) {}
 
   private get db() {
@@ -192,6 +207,103 @@ export class AssetsService {
       },
     });
     return toAssetDto(asset);
+  }
+
+  /**
+   * Raw-body image upload (M4 design §4.2): validate the bytes (magic bytes decide the type),
+   * write them write-once under a content-addressed key, then insert the asset. A failed insert
+   * leaves a private orphan object (swept in M7).
+   */
+  async upload(
+    actor: Actor,
+    projectId: string,
+    query: UploadAssetQuery,
+    request: { readonly headers: Record<string, string | string[] | undefined> } & Readable,
+  ): Promise<AssetDto> {
+    await this.access.require(actor, projectId, 'editor', { mutation: true });
+    const store = this.storage.require();
+    if (query.contentItemId) {
+      const item = await this.db.contentItem.findFirst({
+        where: { id: query.contentItemId, projectId },
+        select: { archivedAt: true },
+      });
+      if (!item) throw referenceNotFound('content item');
+      if (item.archivedAt) throw archived('content item');
+    }
+    const limit = this.env.UPLOAD_MAX_IMAGE_BYTES;
+    const declaredLength = Number(request.headers['content-length']);
+    if (Number.isFinite(declaredLength) && declaredLength > limit)
+      throw mediaError('MEDIA_TOO_LARGE');
+    const bytes = await readBody(request, limit);
+    const contentType = request.headers['content-type'];
+    let image;
+    try {
+      image = inspectImage(bytes, typeof contentType === 'string' ? contentType : null, {
+        maxBytes: limit,
+      });
+    } catch (error) {
+      if (error instanceof ImageValidationError) throw mediaError(error.code, error.message);
+      throw error;
+    }
+    const id = uuidv7();
+    const storageKey = assetObjectKey({
+      projectId,
+      assetId: id,
+      sha256Hex: image.sha256Hex,
+      mimeType: image.mimeType,
+    });
+    try {
+      await store.putIfAbsent(storageKey, bytes, {
+        contentType: image.mimeType,
+        sha256Hex: image.sha256Hex,
+      });
+    } catch (error) {
+      storageFailure(error);
+    }
+    const asset = await this.db.asset.create({
+      data: {
+        id,
+        projectId,
+        assetType: query.assetType,
+        sourceType: 'upload',
+        storageKey,
+        mimeType: image.mimeType,
+        sizeBytes: BigInt(image.sizeBytes),
+        checksumSha256: image.sha256Hex,
+        width: image.width,
+        height: image.height,
+        originalFilename: query.filename ?? null,
+        contentItemId: query.contentItemId ?? null,
+        label: query.label ?? null,
+        metadata: {},
+        createdById: actor.userId,
+      },
+    });
+    return toAssetDto(asset);
+  }
+
+  /** The asset's bytes, for streaming (viewer+). `null` range = whole object. */
+  async content(
+    actor: Actor,
+    assetId: string,
+  ): Promise<{ readonly asset: Asset; readonly body: ObjectBody }> {
+    const asset = await this.load(assetId);
+    await this.access.require(actor, asset.projectId, 'viewer');
+    const store = this.storage.require();
+    let body: ObjectBody | null;
+    try {
+      body = await store.get(asset.storageKey);
+    } catch (error) {
+      storageFailure(error);
+    }
+    if (!body) {
+      throw new ApiError({
+        status: HttpStatus.NOT_FOUND,
+        code: ApiErrorCode.AssetContentMissing,
+        message: 'The asset is registered, but its file is not in storage.',
+      });
+    }
+    return { asset, body };
   }
 
   async list(
@@ -379,4 +491,50 @@ export class AssetsService {
     if (!asset) throw notFound('asset');
     return asset;
   }
+}
+
+const MEDIA_ERRORS = {
+  UNSUPPORTED_MEDIA: {
+    status: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+    code: ApiErrorCode.UnsupportedMedia,
+  },
+  MEDIA_TOO_LARGE: { status: HttpStatus.PAYLOAD_TOO_LARGE, code: ApiErrorCode.MediaTooLarge },
+  MEDIA_INVALID: { status: HttpStatus.UNPROCESSABLE_ENTITY, code: ApiErrorCode.MediaInvalid },
+  MEDIA_TYPE_MISMATCH: {
+    status: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+    code: ApiErrorCode.MediaTypeMismatch,
+  },
+} as const;
+
+function mediaError(code: keyof typeof MEDIA_ERRORS, detail?: string): ApiError {
+  const { status, code: apiCode } = MEDIA_ERRORS[code];
+  const message =
+    code === 'MEDIA_TOO_LARGE'
+      ? 'The image is too large.'
+      : code === 'UNSUPPORTED_MEDIA'
+        ? 'Only PNG, JPEG and WebP images are accepted.'
+        : code === 'MEDIA_TYPE_MISMATCH'
+          ? 'The Content-Type does not match the file.'
+          : 'The image cannot be read.';
+  return new ApiError({
+    status,
+    code: apiCode,
+    message: detail ? `${message} (${detail})` : message,
+  });
+}
+
+/** Reads the raw request body, failing with 413 as soon as it exceeds `limit` bytes. */
+async function readBody(stream: Readable, limit: number): Promise<Uint8Array> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of stream) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
+    total += buf.length;
+    if (total > limit) {
+      stream.resume(); // drain without keeping the bytes
+      throw mediaError('MEDIA_TOO_LARGE');
+    }
+    chunks.push(buf);
+  }
+  return new Uint8Array(Buffer.concat(chunks));
 }

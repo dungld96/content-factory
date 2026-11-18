@@ -47,6 +47,13 @@ jobs:
       # CI-only values (no real secrets): required by the API environment schema.
       SESSION_SECRETS: ci-session-secret-not-for-production-0001
       CSRF_SECRET: ci-csrf-secret-not-for-production-00000001
+      # Object storage (M4a): SeaweedFS started below with these CI-only keys.
+      S3_ENDPOINT: http://127.0.0.1:8333
+      S3_BUCKET: acf-assets
+      S3_ACCESS_KEY_ID: acf_app_ci
+      S3_SECRET_ACCESS_KEY: acf_app_ci_only
+      STORAGE_ADMIN_ACCESS_KEY_ID: acf_storage_admin_ci
+      STORAGE_ADMIN_SECRET_ACCESS_KEY: acf_storage_admin_ci_only
     steps:
       # Third-party actions are pinned to full commit SHAs (tag in the trailing comment).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,6 +71,19 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm db:setup
+      # Service containers cannot take a command, so SeaweedFS runs here with the repo's script.
+      - name: Start object storage (SeaweedFS 4.54)
+        run: |
+          docker run -d --name seaweedfs -p 127.0.0.1:8333:8333 \
+            -e STORAGE_ADMIN_ACCESS_KEY_ID -e STORAGE_ADMIN_SECRET_ACCESS_KEY \
+            -e S3_ACCESS_KEY_ID -e S3_SECRET_ACCESS_KEY \
+            -v "$PWD/infra/seaweedfs/start.sh:/opt/acf/start.sh:ro" \
+            --entrypoint /bin/sh chrislusf/seaweedfs:4.54 /opt/acf/start.sh
+          for i in $(seq 1 60); do
+            docker exec seaweedfs wget -q -O /dev/null http://127.0.0.1:9333/cluster/status && break
+            sleep 1
+          done
+      - run: pnpm storage:setup
       - run: pnpm test:integration
       - run: pnpm build
       - name: Install the Playwright browser

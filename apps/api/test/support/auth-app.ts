@@ -117,6 +117,7 @@ export function authTestEnv(overrides: Record<string, string> = {}): ApiEnv {
     SESSION_SECRETS: 'test-session-secret-0123456789abcdef',
     CSRF_SECRET: 'test-csrf-secret-0123456789abcdef!!',
     LOGIN_RATE_LIMIT_PER_MINUTE: '1000',
+    ...testStorageEnv(),
     ...overrides,
   });
 }
@@ -189,3 +190,19 @@ export function userAdmin(): { users: UserAdminService; prisma: PrismaClient } {
 }
 
 export const PASSWORD = 'correct horse battery staple';
+
+/** Object storage for API tests: the local/CI server with the dedicated `acf-test-api` bucket. */
+export const API_TEST_BUCKET = 'acf-test-api';
+
+function testStorageEnv(): Record<string, string> {
+  const endpoint = process.env['S3_ENDPOINT'];
+  const key = process.env['S3_ACCESS_KEY_ID'];
+  const secret = process.env['S3_SECRET_ACCESS_KEY'];
+  if (!endpoint || !key || !secret) return {};
+  return {
+    S3_ENDPOINT: endpoint,
+    S3_BUCKET: API_TEST_BUCKET,
+    S3_ACCESS_KEY_ID: key,
+    S3_SECRET_ACCESS_KEY: secret,
+  };
+}

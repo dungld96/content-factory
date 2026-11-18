@@ -37,10 +37,14 @@ export interface CallResult {
   readonly json: unknown;
   readonly setCookie: string[];
   readonly headers: Headers;
+  /** The raw response body (binary endpoints, M4a). */
+  readonly bytes: Uint8Array;
 }
 
 export interface CallOptions {
   readonly body?: unknown;
+  /** A raw (binary) request body, sent as-is; set `content-type` in `headers` (M4a). */
+  readonly rawBody?: Uint8Array;
   readonly headers?: Record<string, string>;
   /** Do not record Set-Cookie into the jar (simulates a request whose response is ignored). */
   readonly noStore?: boolean;
@@ -69,9 +73,11 @@ export function client(baseUrl: string) {
       redirect: 'manual',
       headers,
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+      ...(options.rawBody === undefined ? {} : { body: Buffer.from(options.rawBody) }),
     });
     if (!options.noStore) jar?.store(res);
-    const text = await res.text();
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const text = new TextDecoder().decode(bytes);
     let json: unknown;
     try {
       json = text ? (JSON.parse(text) as unknown) : null;
@@ -83,6 +89,7 @@ export function client(baseUrl: string) {
       json,
       setCookie: res.headers.getSetCookie(),
       headers: res.headers,
+      bytes,
     };
   };
 }

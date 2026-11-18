@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { aiProviderEnvShape, checkAiProviderEnv } from './ai-provider-env.js';
+import { checkStorageEnv, storageEnvShape } from './storage-env.js';
 import { EnvValidationError, toEnvIssues } from './errors.js';
 import {
   booleanStringSchema,
@@ -106,6 +107,15 @@ export const apiEnvSchema = z.object({
     .default('acf'),
   // --- AI providers (M2 design package §8.3), shared with the worker ---
   ...aiProviderEnvShape,
+  // --- Object storage (M4a, ADR-0006), shared with the worker ---
+  ...storageEnvShape,
+  /** Largest accepted image upload, in bytes (M4 design §4.2: 25 MB). */
+  UPLOAD_MAX_IMAGE_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1024)
+    .max(100 * 1024 * 1024)
+    .default(25 * 1024 * 1024),
 });
 
 /** The validated environment, with environment-dependent defaults resolved. */
@@ -135,6 +145,7 @@ const resolvedApiEnvSchema = apiEnvSchema
       });
     }
     checkAiProviderEnv(env, ctx);
+    checkStorageEnv(env, ctx);
     if (env.NODE_ENV === 'production') {
       if (!env.SESSION_COOKIE_SECURE) {
         ctx.addIssue({

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { aiProviderEnvShape, checkAiProviderEnv } from './ai-provider-env.js';
+import { checkStorageEnv, storageEnvShape } from './storage-env.js';
 import { EnvValidationError, toEnvIssues } from './errors.js';
 import {
   booleanStringSchema,
@@ -31,9 +32,13 @@ export const workerEnvSchema = z
       .regex(/^[a-z0-9:_-]{1,32}$/)
       .default('acf'),
     ...aiProviderEnvShape,
+    ...storageEnvShape,
+    /** Image generation jobs processed in parallel (separate from text jobs; M4 design S4). */
+    WORKER_IMAGE_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
   })
   .superRefine((env, ctx) => {
     checkAiProviderEnv(env, ctx);
+    checkStorageEnv(env, ctx);
   });
 
 export type WorkerEnv = z.output<typeof workerEnvSchema>;

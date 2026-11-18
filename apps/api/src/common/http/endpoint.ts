@@ -28,8 +28,18 @@ export interface EndpointSpec {
   readonly params?: z.ZodObject;
   /** Success responses by status code; `schema` omitted for empty bodies (e.g. 204). */
   readonly responses: Readonly<
-    Record<number, { readonly description: string; readonly schema?: z.ZodType }>
+    Record<
+      number,
+      {
+        readonly description: string;
+        readonly schema?: z.ZodType;
+        /** Binary body media types (documented only), e.g. `image/png`. */
+        readonly binary?: readonly string[];
+      }
+    >
   >;
+  /** A raw binary request body (documented only; the handler reads the stream), M4a. */
+  readonly binaryBody?: readonly string[];
   /** Documented error statuses (the envelope schema is added automatically). */
   readonly errors?: readonly number[];
   /** Request headers the endpoint reads (documented only). */

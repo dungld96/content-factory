@@ -24,8 +24,9 @@ pnpm install
 pnpm infra:up
 ```
 
-`pnpm infra:up` starts PostgreSQL 17 and Redis 7.4 (`infra/compose/docker-compose.yml`) and waits
-until both are healthy. The ports are bound to `127.0.0.1` only.
+`pnpm infra:up` starts PostgreSQL 17, Redis 7.4 and SeaweedFS 4.54 (S3-compatible object storage
+for asset files, M4a) from `infra/compose/docker-compose.yml` and waits until all are healthy. The
+ports are bound to `127.0.0.1` only (SeaweedFS S3: 8333).
 
 ```bash
 pnpm db:setup
@@ -35,6 +36,12 @@ pnpm db:setup
 DML only) from the URLs in `.env`, makes `acf_migrator` the owner of the `acf` and `acf_shadow`
 databases, applies the migrations as `acf_migrator`, and grants `acf_app` access. It is
 idempotent: run it again after pulling new migrations. See `docs/DATABASE.md` §8.
+
+Create the asset bucket (`S3_BUCKET`) with the storage admin key from `.env`. Idempotent:
+
+```bash
+pnpm storage:setup
+```
 
 ```bash
 pnpm env:check
@@ -146,6 +153,17 @@ The M1 migration ends with hand-written SQL (CHECK constraints, functions and tr
 Prisma does not model. When you create a migration that touches a guarded table, keep the
 triggers intact; the `integration:database` tests fail if any trigger or CHECK is missing or if
 the database drifts from `schema.prisma`.
+
+### Object storage (M4a)
+
+Asset files (uploaded references, generated images) live in S3-compatible storage — SeaweedFS
+locally, in CI and on staging (ADR-0006, amended). The API and worker use `S3_ENDPOINT`,
+`S3_BUCKET`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` (all or none; without them uploads and
+image generation answer `503 STORAGE_NOT_CONFIGURED`). `STORAGE_ADMIN_*` is used only by
+`pnpm storage:setup` and the integration-test setup. Browsers never talk to storage: uploads are
+`POST /api/v1/projects/:projectId/assets/upload` (raw image body, ≤ 25 MB) and reads are
+`GET /api/v1/assets/:assetId/content`. `pnpm test:integration` includes `integration:storage`
+(bucket `acf-test-storage`); the API tests use `acf-test-api`.
 
 ### Worker (M3)
 

@@ -75,6 +75,19 @@ export default defineConfig({
         },
       },
       {
+        test: {
+          name: 'integration:storage',
+          root: path.join(root, 'packages/storage'),
+          include: ['test/**/*.integration.test.ts'],
+          environment: 'node',
+          setupFiles: [path.join(root, 'test-support/load-root-env.ts'), networkGuard],
+          // Creates the disposable `acf-test-storage` bucket with the storage admin key.
+          globalSetup: [path.join(root, 'packages/storage/test/global-setup.ts')],
+          testTimeout: 30_000,
+          hookTimeout: 60_000,
+        },
+      },
+      {
         plugins: [nestSwc()],
         test: {
           name: 'integration:api',

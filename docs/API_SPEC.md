@@ -390,6 +390,21 @@ segments (`409 STORAGE_KEY_TAKEN` if already registered); `mimeType` must match 
 (`generated` is reserved for provider jobs in M4); `derived` requires a `sourceAssetId` of the
 same project. File identity and lineage never change after registration.
 
+### Asset files (implemented in M4a)
+
+Design: `docs/design/M4-design-review-package.md` §4, ADR-0006 (amended).
+
+| Endpoint | Role | Notes |
+|---|---|---|
+| `POST /projects/:projectId/assets/upload?assetType=reference\|image&filename=&label=&contentItemId=` | editor | The **raw image is the request body** (`Content-Type: image/png\|jpeg\|webp`, ≤ 25 MB). The server detects the type from the bytes, reads dimensions, computes SHA-256, stores the file write-once at `projects/{projectId}/assets/{assetId}/{sha256}.{ext}` and returns `201` with the asset (`sourceType: upload`). |
+| `GET /assets/:assetId/content` | viewer | Streams the file with `ETag: "<sha256>"` (`If-None-Match` → `304`) and `Cache-Control: private, max-age=300`. |
+
+Errors: `415 UNSUPPORTED_MEDIA` (not PNG/JPEG/WebP by its bytes), `415 MEDIA_TYPE_MISMATCH`
+(`Content-Type` disagrees with the bytes), `413 MEDIA_TOO_LARGE` (file over the limit, or over
+8192 px per side / 40 MP), `422 MEDIA_INVALID` (empty or unreadable header), `404
+ASSET_CONTENT_MISSING` (a metadata-only asset registered before M4), `503 STORAGE_NOT_CONFIGURED`,
+`503 STORAGE_UNAVAILABLE` (retryable).
+
 Planned for later milestones:
 
 - `GET /content/:contentId/assets`

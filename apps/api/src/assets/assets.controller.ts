@@ -1,4 +1,5 @@
-import { Controller, Get, HttpCode, Patch, Post } from '@nestjs/common';
+import { Controller, Get, HttpCode, Patch, Post, Req, Res, StreamableFile } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import type { z } from 'zod';
 
 import {
@@ -13,12 +14,15 @@ import {
   projectIdParamsSchema,
   registerAssetRequestSchema,
   updateAssetRequestSchema,
+  UPLOADABLE_IMAGE_TYPES,
+  uploadAssetQuerySchema,
   type AssetDto,
   type AssetUsageDto,
   type LineageResponse,
   type Page,
   type RegisterAssetRequest,
   type UpdateAssetRequest,
+  type UploadAssetQuery,
 } from '@acf/contracts';
 
 import { CurrentActor, type Actor } from '../auth/actor.js';
@@ -49,6 +53,54 @@ export class AssetsController {
     @ValidBody() body: RegisterAssetRequest,
   ): Promise<AssetDto> {
     return this.assets.register(actor, params.projectId, body);
+  }
+
+  @Post('projects/:projectId/assets/upload')
+  @Endpoint({
+    summary: 'Upload an image (editor): the raw image is the request body (≤ 25 MB, PNG/JPEG/WebP)',
+    tags,
+    params: projectIdParamsSchema,
+    query: uploadAssetQuerySchema,
+    binaryBody: UPLOADABLE_IMAGE_TYPES,
+    responses: { 201: { description: 'Stored and registered', schema: assetSchema } },
+    errors: [400, 401, 403, 404, 409, 413, 415, 422, 503],
+  })
+  upload(
+    @CurrentActor() actor: Actor,
+    @ValidParams() params: ProjectParams,
+    @ValidQuery() query: UploadAssetQuery,
+    @Req() request: Request,
+  ): Promise<AssetDto> {
+    return this.assets.upload(actor, params.projectId, query, request);
+  }
+
+  @Get('assets/:assetId/content')
+  @Endpoint({
+    summary: "Stream an asset's bytes (viewer)",
+    tags,
+    params: assetIdParamsSchema,
+    responses: { 200: { description: 'The file', binary: UPLOADABLE_IMAGE_TYPES } },
+    errors: [400, 401, 404, 503],
+  })
+  async content(
+    @CurrentActor() actor: Actor,
+    @ValidParams() params: AssetParams,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile | undefined> {
+    const { asset, body } = await this.assets.content(actor, params.assetId);
+    const etag = `"${asset.checksumSha256}"`;
+    response.setHeader('ETag', etag);
+    response.setHeader('Cache-Control', 'private, max-age=300');
+    if (request.headers['if-none-match'] === etag) {
+      body.stream.destroy();
+      response.status(304);
+      return undefined;
+    }
+    response.setHeader('Content-Type', asset.mimeType);
+    response.setHeader('Content-Length', String(body.sizeBytes));
+    response.setHeader('Content-Disposition', 'inline');
+    return new StreamableFile(body.stream);
   }
 
   @Get('projects/:projectId/assets')
