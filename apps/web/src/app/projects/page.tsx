@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import type { MeResponse, Page, ProjectDto } from '@acf/contracts';
@@ -48,7 +49,9 @@ export default async function ProjectsPage() {
         <ul className="list" aria-label="Your projects">
           {projects.data.data.map((project) => (
             <li key={project.id} className="card">
-              <h2>{project.name}</h2>
+              <h2>
+                <Link href={`/projects/${project.id}`}>{project.name}</Link>
+              </h2>
               <p className="muted">
                 <code>{project.slug}</code> · {ROLE_LABEL[project.role]} · {project.defaultLanguage}{' '}
                 · {project.timezone} · updated <LocalTime iso={project.updatedAt} />

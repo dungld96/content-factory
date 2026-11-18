@@ -43,8 +43,15 @@ export async function startWorker(
     providerTimeoutMs: env.OPENROUTER_TIMEOUT_MS,
   });
 
-  const abandoned = await llm.markAbandoned();
-  if (abandoned > 0) logger.log('warn', 'ai_invocations_abandoned', { count: abandoned });
+  // Best effort: a database that is briefly unavailable must not stop the worker from starting.
+  try {
+    const abandoned = await llm.markAbandoned();
+    if (abandoned > 0) logger.log('warn', 'ai_invocations_abandoned', { count: abandoned });
+  } catch (error) {
+    logger.log('warn', 'abandoned_sweep_failed', {
+      error: error instanceof Error ? error.name : 'unknown',
+    });
+  }
 
   const processor = new GenerationProcessor({
     prisma,

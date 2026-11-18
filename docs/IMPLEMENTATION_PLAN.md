@@ -85,6 +85,16 @@ Acceptance:
 - Invalid model output is repaired/rejected safely.
 - User edits create a new version.
 
+Delivery: `docs/design/M3-design-review-package.md` (revision 1, approved), ADR-0013, slices
+M3a–M3e. Owner decisions: no research provider (F2); the content plan is part of the script (F3).
+
+M3 acceptance evidence: a brief produces schema- and rule-valid script and storyboard JSON
+through the asynchronous job path (API → PostgreSQL intent → BullMQ → `apps/worker` → LLM →
+versions), end to end in `apps/web/e2e/pipeline.spec.ts`; invalid model output gets one repair
+call, then fails with `OUTPUT_INVALID` (`apps/worker/test/processor.integration.test.ts`); every
+edit creates a new immutable version and approved versions cannot change (`AC012`/`AC013`,
+`packages/database/test/artifacts.integration.test.ts`, API integration tests).
+
 ### M4 — Image and asset management
 Deliverables:
 - Image provider adapter.

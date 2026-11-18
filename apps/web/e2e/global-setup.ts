@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { recreateDatabaseFromMigrations } from '@acf/database/admin';
 
-import { e2eDatabaseUrls, loadRootEnv, repoRoot } from './env';
+import { E2E_READY_FILE, e2eDatabaseUrls, loadRootEnv, repoRoot } from './env';
 
 /**
  * Builds the disposable E2E database from the committed migrations and seeds the demo
@@ -29,4 +30,6 @@ export default async function globalSetup(): Promise<void> {
   if (!process.env['E2E_PASSWORD_OWNER']) {
     throw new Error('the seed did not print demo credentials (was the E2E database not empty?)');
   }
+  mkdirSync(path.dirname(E2E_READY_FILE), { recursive: true });
+  writeFileSync(E2E_READY_FILE, new Date().toISOString());
 }

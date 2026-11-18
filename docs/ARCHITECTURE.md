@@ -24,6 +24,9 @@ Use a **monorepo with modular architecture**. Deploy API and workers as separate
 - Job creation and status queries.
 
 ### Worker (`apps/worker`)
+Implemented in M3 as a plain TypeScript process (no HTTP surface; ADR-0013): script and
+storyboard generation jobs, retries, dead-letter copies and a reconciler for jobs persisted while
+Redis was unavailable. The remaining items arrive with M4–M6.
 - BullMQ consumers.
 - Research/script/storyboard jobs.
 - Image/video/TTS generation.
@@ -36,6 +39,8 @@ Use a **monorepo with modular architecture**. Deploy API and workers as separate
 - `contracts`: DTOs, Zod schemas, enums.
 - `database`: Prisma client and repositories.
 - `ai-core`: provider interfaces, model registry, routing, metering.
+- `ai-runtime`: LLM service, model catalog and provider wiring shared by the API and the worker
+  (M3, design Q1).
 - `content-domain`: content, script, storyboard, approval rules.
 - `media`: file validation, FFmpeg commands, metadata extraction.
 - `config`: typed environment configuration.

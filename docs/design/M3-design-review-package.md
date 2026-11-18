@@ -458,13 +458,22 @@ under `apps/worker/test/` and is never part of the production build.
   `409 NOT_CANCELABLE`.
 - pnpm keeps the optional `msgpackr-extract` build script (a BullMQ transitive dependency)
   blocked; msgpackr falls back to its JavaScript implementation.
+- M3e: the fixture LLM lives in `@acf/content-domain/testing` (shared by the API and worker E2E
+  entries) rather than under `apps/worker/test/`; it is still test-only and never wired into a
+  production entry point. The E2E entries load the production `dist` builds.
+- M3e: the E2E found that the API copied the whole normalized brief into the job input, which the
+  worker's strict schema rejected (`INVALID_JOB_INPUT`). The API now builds the brief fields
+  explicitly and parses both job inputs with the worker's schemas before persisting; an API
+  integration test asserts this.
+- M3e: approvals do not change the content status (§9); the UI shows the gates through the
+  version badges ("Approved", "In use").
 
 ## 13. Implementation plan (each slice tested before the next)
 
-| Slice | Scope                                                                                                                                        | Status      |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| M3a   | `packages/content-domain` (brief, schemas, prompts, repair ladder, pipeline); `packages/ai-runtime` extraction (Q1) with M2 tests green      | Done        |
-| M3b   | Migration `m3_script_storyboard`; integrity triggers/CHECKs; DB tests; lock-matrix extension; ai_invocations job FK                          | Done        |
-| M3c   | BullMQ + `apps/worker`: queue, processors, retries/backoff/jitter, DLQ, reconciler, cancel, restarts; worker integration tests on real Redis | Done        |
-| M3d   | API endpoints, contracts, OpenAPI, permission matrix, error codes; `ai_task_routes` CLI; seed routes                                         | Done        |
-| M3e   | Web UI, Playwright E2E with the fixture LLM; docs (API_SPEC, DATABASE, CONTENT_PIPELINE, ARCHITECTURE, LOCAL_DEVELOPMENT, ADR-0013)          | Not started |
+| Slice | Scope                                                                                                                                        | Status |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| M3a   | `packages/content-domain` (brief, schemas, prompts, repair ladder, pipeline); `packages/ai-runtime` extraction (Q1) with M2 tests green      | Done   |
+| M3b   | Migration `m3_script_storyboard`; integrity triggers/CHECKs; DB tests; lock-matrix extension; ai_invocations job FK                          | Done   |
+| M3c   | BullMQ + `apps/worker`: queue, processors, retries/backoff/jitter, DLQ, reconciler, cancel, restarts; worker integration tests on real Redis | Done   |
+| M3d   | API endpoints, contracts, OpenAPI, permission matrix, error codes; `ai_task_routes` CLI; seed routes                                         | Done   |
+| M3e   | Web UI, Playwright E2E with the fixture LLM; docs (API_SPEC, DATABASE, CONTENT_PIPELINE, ARCHITECTURE, LOCAL_DEVELOPMENT, ADR-0013)          | Done   |

@@ -8,6 +8,8 @@ import {
   activeJobKey,
   executionKey,
   nextContentStatus,
+  scriptJobInputSchema,
+  storyboardJobInputSchema,
   validateBrief,
   type BriefValidation,
   type ContentStatus,
@@ -109,10 +111,17 @@ export class GenerationService {
       });
     }
     const model = await this.resolveModel('script_generation', request.modelKey);
-    const input: ScriptJobInput = {
+    const b = brief.validation.normalized;
+    // Parsed with the worker's schema so a contract mismatch fails here, not in the worker.
+    const input: ScriptJobInput = scriptJobInputSchema.parse({
       brief: {
-        ...brief.validation.normalized,
-        sourceUrls: [...brief.validation.normalized.sourceUrls],
+        topic: b.topic,
+        audience: b.audience,
+        objective: b.objective,
+        tone: b.tone,
+        callToAction: b.callToAction,
+        notes: b.notes,
+        sourceUrls: [...b.sourceUrls],
       },
       targetDurationSeconds: item.targetDurationSeconds,
       language: item.language,
@@ -121,7 +130,7 @@ export class GenerationService {
       characterVersionId: brief.characterVersionId,
       environmentVersionId: brief.environmentVersionId,
       qualityTier: DEFAULT_TIER,
-    };
+    });
     const inputVersionIds = [brief.characterVersionId, brief.environmentVersionId].filter(
       (x): x is string => x !== null,
     );
@@ -167,7 +176,7 @@ export class GenerationService {
       });
     }
     const model = await this.resolveModel('storyboard_generation', request.modelKey);
-    const input: StoryboardJobInput = {
+    const input: StoryboardJobInput = storyboardJobInputSchema.parse({
       scriptVersionId: script.id,
       targetDurationSeconds: item.targetDurationSeconds,
       language: item.language,
@@ -175,7 +184,7 @@ export class GenerationService {
       characterVersionIds: brief.characterVersionId ? [brief.characterVersionId] : [],
       environmentVersionIds: brief.environmentVersionId ? [brief.environmentVersionId] : [],
       qualityTier: DEFAULT_TIER,
-    };
+    });
     const inputVersionIds = [
       script.id,
       ...input.characterVersionIds,

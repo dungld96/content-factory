@@ -9,7 +9,11 @@ import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { MockLlmProvider } from '@acf/ai-core/testing';
-import { GENERATION_QUEUE } from '@acf/content-domain';
+import {
+  GENERATION_QUEUE,
+  scriptJobInputSchema,
+  storyboardJobInputSchema,
+} from '@acf/content-domain';
 import {
   briefValidationSchema,
   generateResponseSchema,
@@ -132,7 +136,10 @@ async function completeJob(jobId: string): Promise<string> {
           totalDurationSeconds: '30.00',
         },
       });
-      const { requiredReferenceAssetIds: _a, ...scene } = SCENE;
+      // Reference assets are stored as scene asset rows, not a scene column.
+      const scene: Omit<typeof SCENE, 'requiredReferenceAssetIds'> &
+        Partial<Pick<typeof SCENE, 'requiredReferenceAssetIds'>> = { ...SCENE };
+      delete scene.requiredReferenceAssetIds;
       await tx.storyboardScene.create({
         data: {
           ...scene,
@@ -236,6 +243,8 @@ describe('script generation', () => {
       targetDurationSeconds: 30,
       aspectRatio: '9:16',
     });
+    // The worker parses the stored input strictly: it must match the worker's schema exactly.
+    expect(scriptJobInputSchema.safeParse(job.input).success).toBe(true);
   });
 
   it('refuses a second active job of the same kind', async () => {
@@ -392,6 +401,8 @@ describe('versions, review and gates', () => {
       (await as('editor', 'POST', `/scripts/${scriptId}/storyboards/generate`, { body: {} })).json,
     );
     expect(await status(f)).toBe('storyboarding');
+    const sbInput = await prisma.generationJob.findUniqueOrThrow({ where: { id: sbJob.job.id } });
+    expect(storyboardJobInputSchema.safeParse(sbInput.input).success).toBe(true);
     const sbId = await completeJob(sbJob.job.id);
 
     // Edit a scene: new storyboard version, durations re-validated.

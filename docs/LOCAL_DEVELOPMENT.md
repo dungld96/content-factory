@@ -116,7 +116,7 @@ curl -s localhost:4000/api/v1/health/ready
 | `pnpm typecheck`                    | Builds shared packages, then `tsc --noEmit` in every workspace         |
 | `pnpm test`                         | Unit and HTTP tests with mocked dependencies (no Docker, no network)   |
 | `pnpm test:integration`             | Integration tests against real PostgreSQL and Redis (requires `pnpm infra:up` and `pnpm db:setup`) |
-| `pnpm test:e2e`                     | Playwright: login → projects → logout in Chromium against the built API and web (requires `pnpm build`) |
+| `pnpm test:e2e`                     | Playwright in Chromium against the built API, worker and web (requires `pnpm build`, PostgreSQL, Redis) |
 | `pnpm test:coverage`                | Unit tests with V8 coverage                                            |
 | `pnpm build`                        | Builds all packages and apps (`next build`, `nest build`)              |
 | `pnpm check`                        | format:check + lint + typecheck + test + build (run before pushing)    |
@@ -195,8 +195,17 @@ benchmark it (`docs/AI_PROVIDER_STRATEGY.md` §9), then `model set-status … en
 
 `pnpm test:e2e` runs `apps/web/e2e` in Chromium. Its global setup recreates a disposable
 `acf_test_e2e` database from the migrations and seeds it with the real seed CLI; Playwright then
-starts the production builds of the API (port 4100) and web (port 3100), so they do not clash
-with `pnpm dev`. Build first, and install the browser once:
+starts the production builds of the API (port 4100), the worker and web (port 3100), so they do
+not clash with `pnpm dev`. The API and worker run through E2E entry points
+(`apps/api/test/e2e/api-server.ts`, `apps/worker/test/e2e/worker-server.ts`, run by Node's type
+stripping) that register a **fixture LLM** as the `mock` provider: schema-valid scripts and
+storyboards, no network, no cost. Both use the queue prefix `acf-e2e`. Playwright starts web
+servers before global setup, so the worker waits for a marker file that global setup writes once
+the database is seeded (`apps/web/e2e/env.ts`).
+
+Specs: `auth.spec.ts` (login, logout, sessions) and `pipeline.spec.ts` (editor: generate script →
+edit → approve → generate storyboard → edit scene → approve; viewer: no generate, edit or review
+controls). Build first, and install the browser once:
 
 ```bash
 pnpm build
