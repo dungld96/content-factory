@@ -1,6 +1,7 @@
 # M4 Design Review Package — Image and Asset Management
 
-- Status: **Revision 1, draft for owner review.** Design only: no code until approved.
+- Status: **Revision 1, approved by the owner (2026-11-18)**: G1–G9 as proposed (OpenRouter +
+  capped benchmark, SeaweedFS 4.54, bytes through the API). Implemented in slices M4a–M4e (§11).
 - Date: 2026-11-18
 - Baseline: M3 approved, R0 approved (`69785c2`); ADR-0006 (object storage), ADR-0012 (AI
   ledger), ADR-0013 (jobs), ADR-0015 (masters and variants)
