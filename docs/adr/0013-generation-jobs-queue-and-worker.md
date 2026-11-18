@@ -24,9 +24,10 @@ process (decision F1).
 4. **Idempotency.** Execution keys over all inputs (including prompt template version and model)
    let identical work reuse the existing successful result; client idempotency keys dedupe HTTP
    retries; each LLM call carries `{jobId}:{attempt}:{call}`.
-5. **Process layout.** `apps/worker` is a Nest application context without HTTP. Shared LLM
+5. **Process layout.** `apps/worker` is a separate process without HTTP (plain classes). Shared LLM
    runtime code moves to `packages/ai-runtime` so API and worker use the same implementation.
-6. **Dependency.** `bullmq@6.7.7` with the existing `ioredis@6.0.0` connection.
+6. **Dependency.** `bullmq@6.7.7` with the existing `ioredis@6.0.0` connection (compatibility
+   verified against Redis 7.4.12 by the worker integration suite).
 
 ## Consequences
 

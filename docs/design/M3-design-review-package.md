@@ -438,12 +438,29 @@ under `apps/worker/test/` and is never part of the production build.
 | S5  | BullMQ verified from package metadata and types only (docs host unreachable)                       | M3c starts with a compatibility test on real Redis                                          |
 | S6  | Refactor Q1 touches approved M2 code                                                               | Mechanical move; M2 tests must pass unchanged                                               |
 
+## 12.1 Implementation notes (deviations decided during M3a–M3c)
+
+- `apps/worker` is plain TypeScript with explicit constructor wiring (no Nest application
+  context): it has no HTTP surface, and the shared runtime is already plain classes (Q1).
+- BullMQ 6.7.7 verified on Redis 7.4.12 (`apps/worker/test/queue.integration.test.ts`): enqueue,
+  idempotent duplicate adds, retries through a custom backoff strategy that honours the processor's
+  delay (`Retry-After`), dead-letter copies, reconciliation. BullMQ rejects custom job ids that
+  contain `:` (dead-letter ids use `-`); `attemptsMade` counts every started attempt, like
+  `generation_jobs.attempt`.
+- A failed dead-letter write is logged and never undoes the recorded failure (PostgreSQL is
+  authoritative).
+- `generation_jobs.active_key` (unique, set while queued/running) implements "one active job per
+  item and kind" without a partial index, which Prisma cannot model (drift check).
+- The worker, not the API, sweeps abandoned LLM invocations at start-up.
+- pnpm keeps the optional `msgpackr-extract` build script (a BullMQ transitive dependency)
+  blocked; msgpackr falls back to its JavaScript implementation.
+
 ## 13. Implementation plan (each slice tested before the next)
 
 | Slice | Scope                                                                                                                                        | Status      |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
 | M3a   | `packages/content-domain` (brief, schemas, prompts, repair ladder, pipeline); `packages/ai-runtime` extraction (Q1) with M2 tests green      | Done        |
 | M3b   | Migration `m3_script_storyboard`; integrity triggers/CHECKs; DB tests; lock-matrix extension; ai_invocations job FK                          | Done        |
-| M3c   | BullMQ + `apps/worker`: queue, processors, retries/backoff/jitter, DLQ, reconciler, cancel, restarts; worker integration tests on real Redis | Not started |
+| M3c   | BullMQ + `apps/worker`: queue, processors, retries/backoff/jitter, DLQ, reconciler, cancel, restarts; worker integration tests on real Redis | Done        |
 | M3d   | API endpoints, contracts, OpenAPI, permission matrix, error codes; `ai_task_routes` CLI; seed routes                                         | Not started |
 | M3e   | Web UI, Playwright E2E with the fixture LLM; docs (API_SPEC, DATABASE, CONTENT_PIPELINE, ARCHITECTURE, LOCAL_DEVELOPMENT, ADR-0013)          | Not started |

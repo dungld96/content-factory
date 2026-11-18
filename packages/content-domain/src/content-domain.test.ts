@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import {
+  activeJobKey,
   canonicalJson,
+  generationJobPayloadSchema,
+  retryDelayMs,
   durationTolerance,
   executionKey,
   extractJsonObject,
@@ -378,5 +381,23 @@ describe('content status transitions (design §9)', () => {
   ];
   it.each(refused)('refuses %s + %o', (from, event) => {
     expect(() => nextContentStatus(from, event)).toThrow(InvalidTransitionError);
+  });
+});
+
+describe('job contracts', () => {
+  it('retry delay is exponential, jittered within ±50 %, capped, and honours Retry-After', () => {
+    const mid = () => 0.5; // no jitter
+    expect([1, 2, 3].map((n) => retryDelayMs(n, undefined, mid))).toEqual([5000, 10000, 20000]);
+    expect(retryDelayMs(1, undefined, () => 0)).toBe(2500);
+    expect(retryDelayMs(1, undefined, () => 1)).toBe(7500);
+    expect(retryDelayMs(20, undefined, mid)).toBe(300000);
+    expect(retryDelayMs(1, 60_000, mid)).toBe(60_000);
+    expect(retryDelayMs(3, 1_000, mid)).toBe(20_000);
+  });
+
+  it('payloads carry only ids; inputs are strict', () => {
+    expect(generationJobPayloadSchema.safeParse({ jobId: V1 }).success).toBe(true);
+    expect(generationJobPayloadSchema.safeParse({ jobId: V1, prompt: 'x' }).success).toBe(false);
+    expect(activeJobKey('c', 'script_generation')).toBe('c:script_generation');
   });
 });

@@ -1,0 +1,89 @@
+import { z } from 'zod';
+
+/**
+ * Contracts shared by the API (creates jobs) and the worker (runs them), M3 design §7–§8,
+ * ADR-0013. No BullMQ dependency here: only names, payloads and policy.
+ */
+export const GENERATION_QUEUE = 'generation';
+export const GENERATION_DLQ = 'generation-dlq';
+
+/** The BullMQ payload carries only the job id; PostgreSQL holds everything else. */
+export const generationJobPayloadSchema = z.strictObject({ jobId: z.uuid() });
+export type GenerationJobPayload = z.infer<typeof generationJobPayloadSchema>;
+
+export const deadLetterPayloadSchema = z.strictObject({
+  jobId: z.uuid(),
+  errorCode: z.string(),
+  attempt: z.number().int(),
+  failedAt: z.iso.datetime(),
+});
+export type DeadLetterPayload = z.infer<typeof deadLetterPayloadSchema>;
+
+const qualityTier = z.enum(['economy', 'balanced', 'premium']);
+
+/** `generation_jobs.input` for script generation: everything the worker needs, fixed at creation. */
+export const scriptJobInputSchema = z.strictObject({
+  brief: z.strictObject({
+    topic: z.string().min(1),
+    audience: z.string().nullable(),
+    objective: z.string().nullable(),
+    tone: z.string().nullable(),
+    callToAction: z.string().nullable(),
+    notes: z.string().nullable(),
+    sourceUrls: z.array(z.string()),
+  }),
+  targetDurationSeconds: z.number().int().positive(),
+  language: z.string().min(2),
+  aspectRatio: z.string(),
+  claimFlags: z.array(z.string()),
+  characterVersionId: z.uuid().nullable(),
+  environmentVersionId: z.uuid().nullable(),
+  qualityTier,
+});
+export type ScriptJobInput = z.infer<typeof scriptJobInputSchema>;
+
+/** `generation_jobs.input` for storyboard generation. */
+export const storyboardJobInputSchema = z.strictObject({
+  scriptVersionId: z.uuid(),
+  targetDurationSeconds: z.number().int().positive(),
+  language: z.string().min(2),
+  aspectRatio: z.string(),
+  characterVersionIds: z.array(z.uuid()),
+  environmentVersionIds: z.array(z.uuid()),
+  qualityTier,
+});
+export type StoryboardJobInput = z.infer<typeof storyboardJobInputSchema>;
+
+/** Output token ceilings per kind (bounds cost; scripts are short, storyboards longer). */
+export const MAX_OUTPUT_TOKENS = { script_generation: 4000, storyboard_generation: 8000 } as const;
+
+/** Retry policy (CLAUDE.md §7, ADR-0013): bounded, exponential, jittered, Retry-After honoured. */
+export const RETRY_POLICY = {
+  maxAttempts: 3,
+  baseDelayMs: 5_000,
+  maxDelayMs: 300_000,
+  /** ± fraction of the exponential delay. */
+  jitter: 0.5,
+} as const;
+
+/**
+ * Delay before the next attempt after `attemptsMade` failed attempts:
+ * `base × 2^(attemptsMade−1)`, jittered by ±50 %, capped, and never shorter than the provider's
+ * `Retry-After`. `random` is injectable for tests.
+ */
+export function retryDelayMs(
+  attemptsMade: number,
+  retryAfterMs: number | undefined,
+  random: () => number = Math.random,
+): number {
+  const exponential = RETRY_POLICY.baseDelayMs * 2 ** Math.max(0, attemptsMade - 1);
+  const jittered = exponential * (1 + RETRY_POLICY.jitter * (2 * random() - 1));
+  const delay = Math.min(RETRY_POLICY.maxDelayMs, Math.round(jittered));
+  return Math.max(delay, retryAfterMs ?? 0);
+}
+
+/** One active job per content item and kind (`generation_jobs.active_key`). */
+export const activeJobKey = (
+  contentItemId: string,
+  kind: 'script_generation' | 'storyboard_generation',
+) => `${contentItemId}:${kind}`;

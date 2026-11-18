@@ -8,3 +8,4 @@ export * from './prompts/template.js';
 export * from './prompts/templates.js';
 export * from './script.js';
 export * from './storyboard.js';
+export * from './jobs.js';

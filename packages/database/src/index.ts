@@ -25,6 +25,14 @@ export type {
   AiModelPrice,
   AiInvocation,
   AiUsageRecord,
+  ProductionRun,
+  GenerationJob,
+  JobEvent,
+  ScriptVersion,
+  StoryboardVersion,
+  StoryboardScene,
+  StoryboardSceneAsset,
+  AiTaskRoute,
 } from './generated/prisma/client.js';
 export * from './generated/prisma/enums.js';
 export {

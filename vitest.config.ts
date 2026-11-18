@@ -90,6 +90,20 @@ export default defineConfig({
           hookTimeout: 30_000,
         },
       },
+      {
+        test: {
+          name: 'integration:worker',
+          root: path.join(root, 'apps/worker'),
+          include: ['test/**/*.integration.test.ts'],
+          environment: 'node',
+          setupFiles: [path.join(root, 'test-support/load-root-env.ts'), networkGuard],
+          // Builds the disposable `acf_test_worker` database from the committed migrations.
+          globalSetup: [path.join(root, 'apps/worker/test/support/global-setup.ts')],
+          fileParallelism: false,
+          testTimeout: 30_000,
+          hookTimeout: 60_000,
+        },
+      },
     ],
   },
 });

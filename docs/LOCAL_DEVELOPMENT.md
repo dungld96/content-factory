@@ -147,6 +147,20 @@ Prisma does not model. When you create a migration that touches a guarded table,
 triggers intact; the `integration:database` tests fail if any trigger or CHECK is missing or if
 the database drifts from `schema.prisma`.
 
+### Worker (M3)
+
+Generation jobs (scripts, storyboards) run in a separate process, `apps/worker` (ADR-0013):
+
+```bash
+pnpm dev:worker
+```
+
+It needs `DATABASE_URL`, `REDIS_URL` and, for real models, `OPENROUTER_API_KEY` (validated by
+`packages/config/src/worker-env.ts`; `WORKER_CONCURRENCY`, `WORKER_RECONCILE_INTERVAL_MS` and
+`QUEUE_PREFIX` are optional). PostgreSQL is the source of truth: if Redis was down when a job was
+created, the worker's reconciler enqueues it within a minute. `pnpm test:integration` includes
+`integration:worker` (its own `acf_test_worker` database and a unique Redis key prefix).
+
 ### AI registry and providers (M2)
 
 `pnpm db:seed` also seeds the AI registry: the `openrouter` provider (enabled only if

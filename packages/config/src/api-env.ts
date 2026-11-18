@@ -99,6 +99,11 @@ export const apiEnvSchema = z.object({
   /** Login attempts allowed per client IP per minute. */
   LOGIN_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(10_000).default(10),
 
+  /** BullMQ key prefix shared with the worker (M3); tests isolate themselves with their own. */
+  QUEUE_PREFIX: z
+    .string()
+    .regex(/^[a-z0-9:_-]{1,32}$/)
+    .default('acf'),
   // --- AI providers (M2 design package §8.3), shared with the worker ---
   ...aiProviderEnvShape,
 });
