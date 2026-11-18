@@ -7,6 +7,7 @@
 import type { PrismaClient } from '@acf/database';
 
 import { catalogUrl, planCatalogModel } from '../ai/providers/openrouter-catalog.js';
+import { imageEndpointsUrl, planImageModel } from '../ai/providers/openrouter-image-catalog.js';
 import {
   OPENROUTER_PROVIDER_ROW,
   RegistryAdminService,
@@ -91,6 +92,131 @@ export const CATALOG_SNAPSHOT: readonly unknown[] = [
     expiration_date: null,
   },
 ];
+
+/**
+ * Image benchmark candidates (M4 design §3.3) as published on 2026-11-18 (verification record
+ * docs/design/m4/openrouter-image-verification.md §2). Seeded DISABLED: none is benchmarked yet.
+ */
+export const IMAGE_CATALOG_SNAPSHOT_AT = new Date('2026-11-18T13:46:45Z');
+export const IMAGE_CATALOG_SNAPSHOT = [
+  {
+    id: 'black-forest-labs/flux-3-image-klein',
+    endpoints: [
+      {
+        provider_slug: 'black-forest-labs',
+        supported_parameters: {
+          aspect_ratio: {
+            type: 'enum',
+            values: [
+              '21:9',
+              '2:1',
+              '16:9',
+              '3:2',
+              '7:5',
+              '4:3',
+              '5:4',
+              '1:1',
+              '4:5',
+              '3:4',
+              '5:7',
+              '2:3',
+              '1:2',
+              '9:16',
+              '9:21',
+            ],
+          },
+          input_references: { type: 'range', min: 0, max: 10 },
+          n: { type: 'range', min: 1, max: 1 },
+          output_format: { type: 'enum', values: ['png', 'jpeg', 'webp'] },
+          resolution: { type: 'enum', values: ['768', '1K', '1.5K', '2K', '4K'] },
+          seed: { type: 'boolean' },
+        },
+        pricing: [
+          { billable: 'output_image', unit: 'image', cost_usd: 0.008, variant: '768' },
+          { billable: 'output_image', unit: 'image', cost_usd: 0.009, variant: '1k' },
+          { billable: 'output_image', unit: 'image', cost_usd: 0.011, variant: '1.5k' },
+          { billable: 'output_image', unit: 'image', cost_usd: 0.014, variant: '2k' },
+          { billable: 'output_image', unit: 'image', cost_usd: 0.036, variant: '4k' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'bytedance-seed/seedream-5-0-flash',
+    endpoints: [
+      {
+        provider_slug: 'seed',
+        supported_parameters: {
+          aspect_ratio: {
+            type: 'enum',
+            values: [
+              '1:1',
+              '1:2',
+              '2:1',
+              '2:3',
+              '3:2',
+              '3:4',
+              '4:3',
+              '4:5',
+              '5:4',
+              '9:16',
+              '16:9',
+              '9:19.5',
+            ],
+          },
+          input_references: { type: 'range', min: 0, max: 14 },
+          n: { type: 'range', min: 1, max: 1 },
+          resolution: { type: 'enum', values: ['1K', '1.5K', '2K'] },
+          seed: { type: 'boolean' },
+        },
+        pricing: [
+          { billable: 'output_image', unit: 'image', cost_usd: 0.018 },
+          { billable: 'input_image', unit: 'image', cost_usd: 0 },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'qwen/qwen-image-2.1-turbo',
+    endpoints: [
+      {
+        provider_slug: 'alibaba',
+        supported_parameters: {
+          aspect_ratio: {
+            type: 'enum',
+            values: [
+              '1:1',
+              '1:2',
+              '1:4',
+              '2:1',
+              '2:3',
+              '3:2',
+              '3:4',
+              '4:1',
+              '4:3',
+              '4:5',
+              '5:4',
+              '9:16',
+              '16:9',
+            ],
+          },
+          input_references: { type: 'range', min: 0, max: 10 },
+          n: { type: 'range', min: 1, max: 6 },
+          resolution: { type: 'enum', values: ['1K', '2K'] },
+          seed: { type: 'boolean' },
+        },
+        pricing: [
+          { billable: 'input_image', unit: 'image', cost_usd: 0 },
+          { billable: 'output_image', unit: 'image', cost_usd: 0.0184, variant: '1k' },
+          { billable: 'output_image', unit: 'image', cost_usd: 0.0184, variant: '2k' },
+        ],
+      },
+    ],
+  },
+] as const;
+
+/** The development mock image model (free, offline): routed for image generation by default. */
+export const MOCK_IMAGE_MODEL_KEY = 'mock/solid-image';
 
 export interface AiSeedResult {
   readonly openrouterStatus: string;
@@ -183,5 +309,62 @@ export async function seedAiRegistry(
       update: {},
     });
   }
-  return { openrouterStatus: provider.status, models };
+
+  // M4: image benchmark candidates (disabled) and the mock image model, routed by default.
+  const imageModels = await admin.applyOpenRouterImageImport(
+    IMAGE_CATALOG_SNAPSHOT.map((entry) =>
+      planImageModel(entry as unknown as Parameters<typeof planImageModel>[0]),
+    ),
+    {
+      tier: 'balanced',
+      sourceUrl: (modelKey) => imageEndpointsUrl('https://openrouter.ai/api/v1', modelKey),
+      now: IMAGE_CATALOG_SNAPSHOT_AT,
+    },
+  );
+  let mockImage = await prisma.aiModel.findUnique({
+    where: { providerId_modelKey: { providerId: mock.id, modelKey: MOCK_IMAGE_MODEL_KEY } },
+  });
+  if (!mockImage) {
+    mockImage = await prisma.$transaction(async (tx) => {
+      const model = await tx.aiModel.create({
+        data: {
+          providerId: mock.id,
+          modelKey: MOCK_IMAGE_MODEL_KEY,
+          displayName: 'Mock solid-colour images',
+          supportedParameters: ['aspect_ratio', 'input_references', 'n', 'resolution', 'seed'],
+          inputModalities: ['text', 'image'],
+          outputModalities: ['image'],
+          imageConstraints: {
+            maxImages: 4,
+            maxReferences: 16,
+            aspectRatios: ['9:16', '1:1', '16:9'],
+            resolutions: ['1K', '2K'],
+            seed: true,
+          },
+          qualityTier: 'premium',
+          status: 'enabled',
+          capabilities: { create: { capability: 'image_generation' } },
+        },
+      });
+      await tx.aiModelPrice.create({
+        data: {
+          modelId: model.id,
+          metric: 'output_images',
+          unitPrice: '0',
+          sourceValue: '0',
+          effectiveFrom: IMAGE_CATALOG_SNAPSHOT_AT,
+          source: 'manual_estimate',
+          sourceUrl: 'urn:acf:mock',
+          capturedAt: IMAGE_CATALOG_SNAPSHOT_AT,
+        },
+      });
+      return model;
+    });
+  }
+  await prisma.aiTaskRoute.upsert({
+    where: { task: 'image_generation' },
+    create: { task: 'image_generation', modelId: mockImage.id },
+    update: {},
+  });
+  return { openrouterStatus: provider.status, models: [...models, ...imageModels] };
 }

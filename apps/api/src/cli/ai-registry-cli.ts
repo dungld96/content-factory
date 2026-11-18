@@ -7,14 +7,19 @@
 //   pnpm ai:registry price add <modelKey> <metric> <usdPerUnit> --source <source> --url <url>
 //                              [--effective-from <ISO>] [--min-prompt-tokens <n>] [--provider openrouter]
 //   pnpm ai:registry route list
-//   pnpm ai:registry route set <script_generation|storyboard_generation> <modelKey> [--provider openrouter]
+//   pnpm ai:registry model import-openrouter-images <modelKey>... [--tier <tier>] [--endpoint <slug>] [--apply]
+//   pnpm ai:registry route set <script_generation|storyboard_generation|image_generation> <modelKey> [--provider openrouter]
 //   pnpm ai:registry invocations mark-abandoned
 //   ACF_PAID_SMOKE=1 pnpm ai:registry smoke <modelKey> --project <slug> --max-cost-usd <usd>
+//   ACF_PAID_SMOKE=1 pnpm ai:registry smoke-image <modelKey> --project <slug> --max-cost-usd <usd>
+//                              [--count <1-10>] [--resolution 2K] [--out <dir>]   (M4 benchmark)
 // Runs as the runtime role (DATABASE_URL). The import only reads OpenRouter's public catalog and
 // writes nothing without --apply. `smoke` makes ONE real, paid call and is refused unless
 // explicitly enabled and capped.
 import 'reflect-metadata';
 
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { parseArgs } from 'node:util';
 
 import {
@@ -26,7 +31,10 @@ import {
   type LlmUsage,
 } from '@acf/ai-core';
 import {
+  createImageProviders,
   createLlmProviders,
+  ImageConstraintError,
+  ImageService,
   LlmService,
   ModelCatalog,
   RoutingError,
@@ -42,6 +50,12 @@ import {
 } from '@acf/database';
 
 import { catalogUrl, planOpenRouterImport } from '../ai/providers/openrouter-catalog.js';
+import {
+  imageEndpointsUrl,
+  planOpenRouterImageImport,
+} from '../ai/providers/openrouter-image-catalog.js';
+import { estimateImageCost, IMAGE_RESOLUTIONS, type ImageResolution } from '@acf/ai-core';
+import { inspectImage } from '@acf/storage';
 import { RegistryAdminError, RegistryAdminService } from '../ai/registry/registry-admin.service.js';
 
 const STATUSES = new Set<string>(['enabled', 'disabled', 'degraded']);
@@ -111,6 +125,10 @@ function parseCliArgs(args: readonly string[]) {
       'min-prompt-tokens': { type: 'string' },
       project: { type: 'string' },
       'max-cost-usd': { type: 'string' },
+      endpoint: { type: 'string' },
+      count: { type: 'string' },
+      resolution: { type: 'string' },
+      out: { type: 'string' },
     },
   });
 }
@@ -223,6 +241,51 @@ export async function runAiRegistryCli(
       }
       return outcomes.every((o) => o.action !== 'refused') ? 0 : 1;
     }
+    if (group === 'model' && command === 'import-openrouter-images') {
+      if (positionals.length === 0)
+        return usage(
+          'model import-openrouter-images <modelKey>... [--tier <tier>] [--endpoint <slug>] [--apply]',
+        );
+      if (values.tier !== undefined && !TIERS.has(values.tier))
+        return usage('--tier must be economy, balanced or premium');
+      const baseUrl = rawEnv['OPENROUTER_BASE_URL'] ?? DEFAULT_BASE_URL;
+      let plan: Awaited<ReturnType<typeof planOpenRouterImageImport>>;
+      try {
+        plan = await planOpenRouterImageImport(baseUrl, positionals, values.endpoint);
+      } catch (error) {
+        io.err(`✖ ${error instanceof Error ? error.message : String(error)}`);
+        return 1;
+      }
+      for (const entry of plan) {
+        if (!entry.ok) {
+          io.out(`✖ ${entry.modelKey}: ${entry.reason}`);
+          continue;
+        }
+        const { constraints: c, prices } = entry.model;
+        io.out(
+          `• ${entry.modelKey} @${entry.model.endpoint}: ${prices.map((p) => `${p.metric}${p.variant ? `[${p.variant}]` : ''}=${p.sourceValue}`).join(' ')}`,
+        );
+        io.out(
+          `  n≤${String(c.maxImages)}, references≤${String(c.maxReferences)}, ratios [${c.aspectRatios.join(', ')}], resolutions [${c.resolutions.join(', ')}], seed ${c.seed ? 'yes' : 'no'}`,
+        );
+        for (const warning of entry.model.warnings) io.out(`  ! ${warning}`);
+      }
+      if (!values.apply) {
+        io.out('(dry run: nothing written; pass --apply to write)');
+        return plan.every((e) => e.ok) ? 0 : 1;
+      }
+      const outcomes = await admin.applyOpenRouterImageImport(plan, {
+        ...(values.tier ? { tier: values.tier as AiQualityTier } : {}),
+        sourceUrl: (modelKey) => imageEndpointsUrl(baseUrl, modelKey),
+      });
+      for (const o of outcomes) {
+        io.out(
+          `${o.action === 'refused' ? '✖' : '✔'} ${o.modelKey}: ${o.action}, ${String(o.newPrices)} new price row(s)`,
+        );
+        for (const line of o.detail) io.out(`  ${line}`);
+      }
+      return outcomes.every((o) => o.action !== 'refused') ? 0 : 1;
+    }
     if (group === 'price' && command === 'add') {
       const [modelKey, metric, usd] = positionals;
       if (
@@ -276,9 +339,14 @@ export async function runAiRegistryCli(
     }
     if (group === 'route' && command === 'set') {
       const [task, modelKey] = positionals;
-      if ((task !== 'script_generation' && task !== 'storyboard_generation') || !modelKey) {
+      if (
+        (task !== 'script_generation' &&
+          task !== 'storyboard_generation' &&
+          task !== 'image_generation') ||
+        !modelKey
+      ) {
         return usage(
-          'route set <script_generation|storyboard_generation> <modelKey> [--provider <key>]',
+          'route set <script_generation|storyboard_generation|image_generation> <modelKey> [--provider <key>]',
         );
       }
       const { enabled } = await admin.setRoute(task, values.provider, modelKey);
@@ -301,6 +369,9 @@ export async function runAiRegistryCli(
     }
     if (group === 'smoke') {
       return await smoke(command, values, prisma, rawEnv, io);
+    }
+    if (group === 'smoke-image') {
+      return await smokeImage(command, values, prisma, rawEnv, io);
     }
     return usage(
       'usage: ai:registry provider|model|price|smoke … (see the header of src/cli/ai-registry-cli.ts)',
@@ -406,6 +477,160 @@ async function smoke(
     io.err(`✖ ${error instanceof Error ? error.message : String(error)}`);
     return 1;
   }
+}
+
+/** Fixed benchmark prompt (M4 design §3.3): a 9:16 product scene with no people or text. */
+export const SMOKE_IMAGE_PROMPT =
+  'Vertical product photo: a tidy wooden desk with a small desk lamp, a wireless charger and a ' +
+  'notebook, soft morning light from a window, shallow depth of field, no people, no text.';
+/** Per-endpoint prices can differ from the imported one; the cap check allows for that. */
+export const SMOKE_IMAGE_SAFETY_FACTOR = 2;
+
+async function smokeImage(
+  modelKey: string | undefined,
+  values: {
+    provider: string;
+    project?: string | undefined;
+    'max-cost-usd'?: string | undefined;
+    count?: string | undefined;
+    resolution?: string | undefined;
+    out?: string | undefined;
+  },
+  prisma: PrismaClient,
+  rawEnv: Readonly<Record<string, string | undefined>>,
+  io: CliIo,
+): Promise<number> {
+  if (rawEnv['ACF_PAID_SMOKE'] !== '1') {
+    io.err('✖ refused: smoke-image makes real, paid calls. Set ACF_PAID_SMOKE=1 to enable it.');
+    return 2;
+  }
+  if (!modelKey || !values.project || !values['max-cost-usd']) {
+    io.err(
+      'smoke-image <modelKey> --project <slug> --max-cost-usd <usd> [--count n] [--resolution 2K] [--out dir]',
+    );
+    return 2;
+  }
+  const count = values.count === undefined ? 1 : Number(values.count);
+  if (!Number.isInteger(count) || count < 1 || count > 10) {
+    io.err('--count must be an integer from 1 to 10');
+    return 2;
+  }
+  const resolution = values.resolution as ImageResolution | undefined;
+  if (resolution !== undefined && !(IMAGE_RESOLUTIONS as readonly string[]).includes(resolution)) {
+    io.err(`--resolution must be one of ${IMAGE_RESOLUTIONS.join(', ')}`);
+    return 2;
+  }
+  let cap: UsdAmount;
+  try {
+    cap = UsdAmount.parse(values['max-cost-usd']);
+  } catch {
+    io.err('--max-cost-usd must be a non-negative decimal');
+    return 2;
+  }
+  const env = loadApiEnv(rawEnv);
+  const providers = createImageProviders(env);
+  if (!providers.has(values.provider)) {
+    io.err(`✖ refused: provider ${values.provider} has no credentials (OPENROUTER_API_KEY).`);
+    return 2;
+  }
+  const project = await prisma.project.findUnique({
+    where: { slug: values.project },
+    select: { id: true },
+  });
+  if (!project) {
+    io.err(`✖ unknown project ${values.project}`);
+    return 1;
+  }
+  const images = new ImageService(
+    prisma,
+    new ModelCatalog(prisma, new Map(), providers),
+    providers,
+    {
+      pixelsOf: (bytes) => {
+        try {
+          const i = inspectImage(bytes);
+          return i.width * i.height;
+        } catch {
+          return null;
+        }
+      },
+    },
+  );
+  const request = {
+    modelKey,
+    prompt: SMOKE_IMAGE_PROMPT,
+    aspectRatio: '9:16' as const,
+    count: 1,
+    references: [],
+    ...(resolution ? { resolution } : {}),
+  };
+  let worst: UsdAmount | null;
+  try {
+    const { row } = await images.route({ qualityTier: 'economy' }, request, {
+      providerKey: values.provider,
+      allowDisabled: true,
+    });
+    const one = estimateImageCost({
+      prices: activePrices(row.prices, new Date()),
+      count: 1,
+      references: 0,
+      resolution,
+      aspectRatio: '9:16',
+    });
+    worst = one === null ? null : one.times(count).times(SMOKE_IMAGE_SAFETY_FACTOR);
+  } catch (error) {
+    if (error instanceof RoutingError || error instanceof ImageConstraintError) {
+      io.err(`✖ ${error.message}`);
+      return 1;
+    }
+    throw error;
+  }
+  if (worst === null) {
+    io.err(
+      '✖ refused: the per-image price is unknown (token-priced?), so the cost cannot be capped.',
+    );
+    return 2;
+  }
+  if (worst.compare(cap) > 0) {
+    io.err(
+      `✖ refused: worst case ${worst.toString()} USD exceeds --max-cost-usd ${cap.toString()}.`,
+    );
+    return 2;
+  }
+  const outDir = path.resolve(values.out ?? 'smoke-images');
+  await mkdir(outDir, { recursive: true });
+  io.out(
+    `→ ${String(count)} paid image call(s) to ${values.provider}/${modelKey} (worst case ${worst.toString()} USD)`,
+  );
+  let failures = 0;
+  for (let i = 1; i <= count; i++) {
+    const correlationId = `smoke-image-${String(Date.now())}-${String(i)}`;
+    try {
+      const { result, cost, invocationId } = await images.generate(
+        { projectId: project.id, correlationId, qualityTier: 'economy' },
+        request,
+        { providerKey: values.provider, allowDisabled: true },
+      );
+      for (const [n, image] of result.images.entries()) {
+        const inspected = inspectImage(image.bytes, image.declaredType);
+        const file = path.join(
+          outDir,
+          `${modelKey.replace(/[^a-z0-9._-]+/gi, '_')}-${String(i)}-${String(n)}.${inspected.mimeType.split('/')[1] ?? 'img'}`,
+        );
+        await writeFile(file, image.bytes);
+        io.out(
+          `✔ ${String(i)}: ${String(inspected.width)}×${String(inspected.height)} ${inspected.mimeType}, ${String(result.latencyMs)} ms → ${file}`,
+        );
+      }
+      io.out(
+        `  cost: reported ${cost.reportedCost?.toString() ?? 'n/a'}, estimated ${cost.estimatedCost?.toString() ?? 'unknown'} (${cost.status}); invocation ${invocationId}`,
+      );
+    } catch (error) {
+      failures += 1;
+      io.err(`✖ ${String(i)}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return failures === 0 ? 0 : 1;
 }
 
 async function main(): Promise<number> {

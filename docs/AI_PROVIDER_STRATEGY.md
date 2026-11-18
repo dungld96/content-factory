@@ -15,6 +15,25 @@ Implemented per `docs/design/M2-design-review-package.md` (ADR-0004, ADR-0012):
   API. New models are disabled until enabled explicitly; none is a production default until
   benchmarked (§9).
 
+## 0.1 Implementation status (M4: image generation)
+
+Per `docs/design/M4-design-review-package.md` §3 (verification record
+`docs/design/m4/openrouter-image-verification.md`):
+- `ImageProvider` (`packages/ai-core`, `media.ts`): typed request (prompt, aspect ratio,
+  resolution tier, count, seed, reference images) and result (decoded images, usage, reported
+  cost); `imageConstraintIssues` checks a model's recorded limits (`ai_models.image_constraints`).
+- One adapter: the OpenRouter **Image API** (`POST /api/v1/images`, synchronous, base64 output,
+  all-or-nothing billing). Every request sends `provider.data_collection: "deny"`; `zdr` is set
+  per route. Only parameters the request uses are sent. `MockImageProvider` for tests and E2E.
+- `ImageService` (`packages/ai-runtime`): route → persist intent → call → persist usage and cost,
+  like `LlmService`. Image prices are registry data: per image, per pixel (per-megapixel prices),
+  or per image token, optionally per resolution tier (`ai_model_prices.variant`).
+- Registry CLI: `model import-openrouter-images` (public endpoint records → disabled models with
+  limits and prices), `route set image_generation <modelKey>`, and the paid, capped
+  `smoke-image` used for the benchmark (AI_PROVIDER_STRATEGY §9). The development seed routes
+  image generation to the free `mock/solid-image` model; the three benchmark candidates are
+  seeded disabled.
+
 ## 1. Objectives
 
 - Avoid vendor lock-in.

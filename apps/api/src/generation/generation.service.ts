@@ -15,6 +15,7 @@ import {
   type ContentStatus,
   type ScriptJobInput,
   type StoryboardJobInput,
+  type TextJobKind,
 } from '@acf/content-domain';
 import {
   ApiErrorCode,
@@ -31,7 +32,6 @@ import {
   PostgresSqlState,
   type ContentItem,
   type GenerationJob,
-  type GenerationJobKind,
   type TransactionClient,
 } from '@acf/database';
 
@@ -54,7 +54,7 @@ const REQUIRED_PARAMETERS = new Set<string>([
   LlmParameter.RESPONSE_FORMAT,
   LlmParameter.STRUCTURED_OUTPUTS,
 ]);
-const TEMPLATE: Readonly<Record<GenerationJobKind, string>> = {
+const TEMPLATE: Readonly<Record<TextJobKind, string>> = {
   script_generation: 'script.v1',
   storyboard_generation: 'storyboard.v1',
 };
@@ -296,7 +296,7 @@ export class GenerationService {
   private async createJob(
     actor: Actor,
     item: ContentItem,
-    kind: GenerationJobKind,
+    kind: TextJobKind,
     input: ScriptJobInput | StoryboardJobInput,
     inputVersionIds: readonly string[],
     model: { id: string; modelKey: string },
@@ -425,7 +425,7 @@ export class GenerationService {
 
   /** The model routed to the task (or the override), and only if routing would accept it. */
   private async resolveModel(
-    kind: GenerationJobKind,
+    kind: TextJobKind,
     modelKey: string | undefined,
   ): Promise<{ id: string; modelKey: string }> {
     const key =

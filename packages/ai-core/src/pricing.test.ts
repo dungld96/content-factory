@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import { UsdAmount } from './money.js';
-import { activePrices, assessCost, priceFor, type PriceComponent } from './pricing.js';
+import type { ImageUsage } from './media.js';
+import {
+  activePrices,
+  approximatePixels,
+  assessCost,
+  assessImageCost,
+  estimateImageCost,
+  priceFor,
+  type PriceComponent,
+} from './pricing.js';
 import { CostStatus, PriceMetric, type LlmUsage, type PriceMetric as Metric } from './usage.js';
 
 const day = (n: number) => new Date(Date.UTC(2026, 10, n));
@@ -9,12 +18,13 @@ let seq = 0;
 const price = (
   metric: Metric,
   usd: string,
-  options: { minPromptTokens?: number; from?: Date; id?: string } = {},
+  options: { minPromptTokens?: number; from?: Date; id?: string; variant?: string } = {},
 ): PriceComponent => ({
   id: options.id ?? `p${String(++seq)}`,
   metric,
   unitPrice: UsdAmount.parse(usd),
   minPromptTokens: options.minPromptTokens ?? 0,
+  variant: options.variant ?? '',
   effectiveFrom: options.from ?? day(1),
 });
 const usage = (u: Partial<LlmUsage>): LlmUsage => ({
@@ -218,5 +228,118 @@ describe('assessCost', () => {
     usage({ outputTokens: 10, reasoningTokens: 11 }),
   ])('rejects inconsistent usage %o', (bad) => {
     expect(() => assessCost({ usage: bad, prices: flash, reportedCost: null })).toThrow(RangeError);
+  });
+});
+
+describe('image pricing (M4)', () => {
+  const imageUsage = (u: Partial<ImageUsage>): ImageUsage => ({
+    outputImages: 1,
+    inputImages: 0,
+    outputPixels: null,
+    inputPixels: null,
+    outputTokens: null,
+    inputTokens: null,
+    ...u,
+  });
+
+  it('prices per image, preferring the resolution tier', () => {
+    const prices = [
+      price('output_images', '0.009'),
+      price('output_images', '0.014', { variant: '2k' }),
+    ];
+    const at2k = assessImageCost({
+      usage: imageUsage({ outputImages: 2 }),
+      prices,
+      reportedCost: null,
+      variant: '2k',
+    });
+    expect(at2k.status).toBe('estimated');
+    expect(at2k.estimatedCost?.toString()).toBe('0.028');
+    const general = assessImageCost({
+      usage: imageUsage({}),
+      prices,
+      reportedCost: null,
+      variant: '1k',
+    });
+    expect(general.estimatedCost?.toString()).toBe('0.009');
+  });
+
+  it('bills only metrics the model is priced on, and free input images cost nothing', () => {
+    const prices = [price('output_images', '0.018'), price('input_images', '0')];
+    const result = assessImageCost({
+      usage: imageUsage({ inputImages: 2, outputTokens: 4175 }),
+      prices,
+      reportedCost: null,
+      variant: '',
+    });
+    expect(result.lines.map((l) => [l.metric, l.quantity])).toEqual([
+      ['output_images', 1],
+      ['input_images', 2],
+    ]);
+    expect(result.estimatedCost?.toString()).toBe('0.018');
+  });
+
+  it('is unknown, never zero, when a priced quantity was not reported or nothing is priced', () => {
+    const tokenPriced = [price('output_image_tokens', '0.00006')];
+    expect(
+      assessImageCost({
+        usage: imageUsage({}),
+        prices: tokenPriced,
+        reportedCost: null,
+        variant: '',
+      }).status,
+    ).toBe('unknown');
+    expect(
+      assessImageCost({ usage: imageUsage({}), prices: [], reportedCost: null, variant: '' })
+        .status,
+    ).toBe('unknown');
+    const reported = assessImageCost({
+      usage: imageUsage({ outputTokens: 1290 }),
+      prices: tokenPriced,
+      reportedCost: UsdAmount.parse('0.0774'),
+      variant: '',
+    });
+    expect([reported.status, reported.estimatedCost?.toString()]).toEqual(['reported', '0.0774']);
+  });
+
+  it('prices per megapixel through per-pixel prices', () => {
+    const prices = [price('output_pixels', '0.000000014')]; // $0.014 per megapixel
+    const result = assessImageCost({
+      usage: imageUsage({ outputPixels: 1_000_000 }),
+      prices,
+      reportedCost: null,
+      variant: '',
+    });
+    expect(result.estimatedCost?.toString()).toBe('0.014');
+  });
+
+  it('estimates before generation, unknown for token-priced models', () => {
+    expect(
+      estimateImageCost({
+        prices: [price('output_images', '0.018')],
+        count: 3,
+        references: 1,
+        resolution: '2K',
+        aspectRatio: '9:16',
+      })?.toString(),
+    ).toBe('0.054');
+    expect(
+      estimateImageCost({
+        prices: [price('output_image_tokens', '0.00006')],
+        count: 1,
+        references: 0,
+        resolution: '1K',
+        aspectRatio: '9:16',
+      }),
+    ).toBeNull();
+    expect(approximatePixels('2K', '9:16')).toBe(2048 * 1152);
+  });
+
+  it('keeps LLM pricing on general (untiered) prices only', () => {
+    const active = activePrices(
+      [price('input_tokens', '0.000001'), price('input_tokens', '0.5', { variant: '2k' })],
+      day(5),
+    );
+    expect(priceFor(active, 'input_tokens', 10)?.unitPrice.toString()).toBe('0.000001');
   });
 });

@@ -1,5 +1,8 @@
 import {
   effectiveParameters,
+  imageConstraintsSchema,
+  type ImageConstraints,
+  type ImageProvider,
   type LlmProvider,
   type ModelCandidate,
   type PriceComponent,
@@ -17,6 +20,7 @@ export function toPriceComponents(prices: readonly AiModelPrice[]): PriceCompone
     metric: p.metric,
     unitPrice: usdFromDecimal(p.unitPrice),
     minPromptTokens: p.minPromptTokens,
+    variant: p.variant,
     effectiveFrom: p.effectiveFrom,
   }));
 }
@@ -28,6 +32,8 @@ export class ModelCatalog {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly llmProviders: ReadonlyMap<string, LlmProvider>,
+    /** Image adapters (M4); image models are "configured" only when their provider has one. */
+    private readonly imageProviders: ReadonlyMap<string, ImageProvider> = new Map(),
   ) {}
 
   /**
@@ -41,6 +47,27 @@ export class ModelCatalog {
       orderBy: { provider: { key: 'asc' } },
     });
     return rows.map((row) => {
+      if (capability === 'image_generation') {
+        const constraints = imageConstraintsSchema.safeParse(row.imageConstraints);
+        const candidate: ModelCandidate = {
+          modelId: row.id,
+          modelKey: row.modelKey,
+          providerKey: row.provider.key,
+          capabilities: row.capabilities.map((c) => c.capability),
+          // Image adapters send whatever the model's endpoint record declares.
+          supportedParameters: row.supportedParameters,
+          qualityTier: row.qualityTier,
+          modelStatus: row.status,
+          providerStatus: row.provider.status,
+          providerConfigured: this.imageProviders.has(row.provider.key),
+        };
+        return {
+          candidate,
+          providerId: row.providerId,
+          prices: toPriceComponents(row.prices),
+          imageConstraints: constraints.success ? constraints.data : null,
+        };
+      }
       const adapter = this.llmProviders.get(row.provider.key);
       const candidate: ModelCandidate = {
         modelId: row.id,
@@ -56,7 +83,12 @@ export class ModelCatalog {
         providerStatus: row.provider.status,
         providerConfigured: adapter !== undefined,
       };
-      return { candidate, providerId: row.providerId, prices: toPriceComponents(row.prices) };
+      return {
+        candidate,
+        providerId: row.providerId,
+        prices: toPriceComponents(row.prices),
+        imageConstraints: null,
+      };
     });
   }
 }
@@ -66,4 +98,6 @@ export interface CandidateRow {
   readonly providerId: string;
   /** Every price row of the model (history included); select with `activePrices(at)`. */
   readonly prices: readonly PriceComponent[];
+  /** Image models only (M4); `null` otherwise or when not recorded. */
+  readonly imageConstraints: ImageConstraints | null;
 }

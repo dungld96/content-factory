@@ -71,15 +71,19 @@ describe('seed (S1)', () => {
         .sort(),
     ).toEqual([
       ['anthropic/claude-haiku-5.5', 'disabled'],
+      // M4: image benchmark candidates, seeded disabled.
+      ['black-forest-labs/flux-3-image-klein', 'disabled'],
+      ['bytedance-seed/seedream-5-0-flash', 'disabled'],
       ['deepseek/deepseek-v4-flash', 'disabled'],
       ['google/gemini-3.5-flash-lite', 'disabled'],
+      ['qwen/qwen-image-2.1-turbo', 'disabled'],
     ]);
   });
 
   it('is idempotent', async () => {
     const before = await prisma.aiModelPrice.count();
     const again = await seedAiRegistry(prisma, { openrouterConfigured: true });
-    expect(again.models.map((m) => m.action)).toEqual(['unchanged', 'unchanged', 'unchanged']);
+    expect(again.models.map((m) => m.action)).toEqual(Array(6).fill('unchanged'));
     expect(again.openrouterStatus).toBe('disabled'); // existing rows are never changed by the seed
     expect(await prisma.aiModelPrice.count()).toBe(before);
     expect(CATALOG_SNAPSHOT).toHaveLength(3);
@@ -177,23 +181,36 @@ describe('GET /ai/models', () => {
   });
 
   it.each([
-    ['?status=enabled', ['mock/echo']],
-    ['?providerKey=mock', ['mock/echo']],
-    ['?capability=image_generation', []],
-    ['?qualityTier=premium', []],
+    ['?status=enabled', ['mock/echo', 'mock/solid-image']],
+    ['?providerKey=mock', ['mock/echo', 'mock/solid-image']],
+    [
+      '?capability=image_generation',
+      [
+        'black-forest-labs/flux-3-image-klein',
+        'bytedance-seed/seedream-5-0-flash',
+        'mock/solid-image',
+        'qwen/qwen-image-2.1-turbo',
+      ],
+    ],
+    ['?qualityTier=premium', ['mock/solid-image']],
   ])('filters %s', async (query, keys) => {
-    expect((await models(query)).data.map((m) => m.modelKey)).toEqual(keys);
+    expect((await models(query)).data.map((m) => m.modelKey).sort()).toEqual(keys);
   });
 
   it('paginates with an opaque cursor', async () => {
     const first = await models('?limit=2');
     expect(first.data).toHaveLength(2);
     expect(first.page.nextCursor).not.toBeNull();
-    const second = await models(`?limit=2&cursor=${first.page.nextCursor ?? ''}`);
-    expect(second.data).toHaveLength(2);
-    expect(second.page.nextCursor).toBeNull();
-    const all = [...first.data, ...second.data].map((m) => m.id);
-    expect(new Set(all).size).toBe(4);
+    const all = first.data.map((m) => m.id);
+    let cursor = first.page.nextCursor;
+    while (cursor !== null) {
+      const page = await models(`?limit=2&cursor=${cursor}`);
+      all.push(...page.data.map((m) => m.id));
+      cursor = page.page.nextCursor;
+    }
+    // M2 seed: 3 text models + mock/echo; M4 adds 3 image candidates + mock/solid-image.
+    expect(all).toHaveLength(8);
+    expect(new Set(all).size).toBe(8);
   });
 
   it('rejects unknown filters and bad cursors', async () => {
@@ -205,7 +222,8 @@ describe('GET /ai/models', () => {
 
 describe('GET /ai/models/:modelId', () => {
   it('includes the full price history', async () => {
-    const id = (await models('?providerKey=mock')).data[0]?.id ?? '';
+    const id =
+      (await models('?providerKey=mock')).data.find((m) => m.modelKey === 'mock/echo')?.id ?? '';
     const res = await as('editor', 'GET', `/ai/models/${id}`);
     expect(res.status).toBe(200);
     const detail = aiModelDetailSchema.parse(res.json);

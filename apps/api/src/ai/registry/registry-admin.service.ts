@@ -9,6 +9,7 @@ import type {
 
 import { usdFromDecimal } from '@acf/ai-runtime';
 import type { ImportPlanEntry, PlannedModel } from '../providers/openrouter-catalog.js';
+import type { ImagePlanEntry, PlannedImageModel } from '../providers/openrouter-image-catalog.js';
 
 export class RegistryAdminError extends Error {
   override readonly name = 'RegistryAdminError';
@@ -57,8 +58,9 @@ export class RegistryAdminService {
   }
 
   /**
-   * Routes a generation task to a model (M3 Q4). The model needs the `llm` capability; it may be
-   * disabled (generation then refuses with NO_MODEL_ROUTE until it is enabled).
+   * Routes a generation task to a model (M3 Q4). Text tasks need the `llm` capability, image
+   * generation (M4) the `image_generation` capability. The model may be disabled (generation then
+   * refuses with NO_MODEL_ROUTE until it is enabled).
    */
   async setRoute(
     task: GenerationJobKind,
@@ -70,8 +72,9 @@ export class RegistryAdminService {
       include: { capabilities: true, provider: true },
     });
     if (!model) throw new RegistryAdminError(`unknown model ${providerKey}/${modelKey}`);
-    if (!model.capabilities.some((c) => c.capability === 'llm')) {
-      throw new RegistryAdminError(`${providerKey}/${modelKey} has no llm capability`);
+    const needed = task === 'image_generation' ? 'image_generation' : 'llm';
+    if (!model.capabilities.some((c) => c.capability === needed)) {
+      throw new RegistryAdminError(`${providerKey}/${modelKey} has no ${needed} capability`);
     }
     await this.prisma.aiTaskRoute.upsert({
       where: { task },
@@ -235,6 +238,121 @@ export class RegistryAdminService {
         newPrices += 1;
         detail.push(
           `${price.metric}${price.minPromptTokens > 0 ? ` (≥${String(price.minPromptTokens)} prompt tokens)` : ''}: ${latest ? `${usdFromDecimal(latest.unitPrice).toString()} → ` : ''}${price.unitPrice.toString()} USD/unit`,
+        );
+      }
+      const action = !existing ? 'created' : newPrices > 0 ? 'updated' : 'unchanged';
+      return { modelKey: m.modelKey, action, newPrices, detail };
+    });
+  }
+
+  /**
+   * Applies an OpenRouter image import plan (M4 design §3.3). Like the text import: new models
+   * need a tier and start disabled; a price row is appended only when the published value for
+   * that metric and resolution tier changed.
+   */
+  async applyOpenRouterImageImport(
+    plan: readonly ImagePlanEntry[],
+    options: { tier?: AiQualityTier; sourceUrl: (modelKey: string) => string; now?: Date },
+  ): Promise<ImportOutcome[]> {
+    const now = options.now ?? new Date();
+    const provider = await this.prisma.aiProvider.upsert({
+      where: { key: OPENROUTER_PROVIDER_ROW.key },
+      create: { ...OPENROUTER_PROVIDER_ROW, status: 'disabled' },
+      update: {},
+      select: { id: true },
+    });
+    const outcomes: ImportOutcome[] = [];
+    for (const entry of plan) {
+      if (!entry.ok) {
+        outcomes.push({
+          modelKey: entry.modelKey,
+          action: 'refused',
+          newPrices: 0,
+          detail: [entry.reason],
+        });
+        continue;
+      }
+      outcomes.push(
+        await this.importImageModel(
+          provider.id,
+          entry.model,
+          options.tier,
+          options.sourceUrl(entry.modelKey),
+          now,
+        ),
+      );
+    }
+    return outcomes;
+  }
+
+  private async importImageModel(
+    providerId: string,
+    m: PlannedImageModel,
+    tier: AiQualityTier | undefined,
+    sourceUrl: string,
+    now: Date,
+  ): Promise<ImportOutcome> {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.aiModel.findUnique({
+        where: { providerId_modelKey: { providerId, modelKey: m.modelKey } },
+        include: { prices: { orderBy: { effectiveFrom: 'desc' } } },
+      });
+      if (!existing && tier === undefined) {
+        return {
+          modelKey: m.modelKey,
+          action: 'refused' as const,
+          newPrices: 0,
+          detail: ['new model: pass --tier economy|balanced|premium'],
+        };
+      }
+      const metadata = {
+        displayName: m.modelKey,
+        supportedParameters: m.supportedParameters,
+        inputModalities: m.constraints.maxReferences > 0 ? ['text', 'image'] : ['text'],
+        outputModalities: ['image'],
+        imageConstraints: { ...m.constraints },
+        dataPolicyNotes: `Endpoint ${m.endpoint}. Requests send data_collection=deny; zdr per route.`,
+      };
+      const model = existing
+        ? await tx.aiModel.update({ where: { id: existing.id }, data: metadata })
+        : await tx.aiModel.create({
+            data: {
+              providerId,
+              modelKey: m.modelKey,
+              qualityTier: tier ?? 'economy',
+              status: 'disabled',
+              ...metadata,
+            },
+          });
+      await tx.aiModelCapability.upsert({
+        where: { modelId_capability: { modelId: model.id, capability: 'image_generation' } },
+        create: { modelId: model.id, capability: 'image_generation' },
+        update: {},
+      });
+      let newPrices = 0;
+      const detail: string[] = [...m.warnings];
+      for (const price of m.prices) {
+        const latest = existing?.prices.find(
+          (p) => p.metric === price.metric && p.variant === price.variant && p.effectiveFrom <= now,
+        );
+        if (latest && usdFromDecimal(latest.unitPrice).equals(price.unitPrice)) continue;
+        await tx.aiModelPrice.create({
+          data: {
+            modelId: model.id,
+            metric: price.metric,
+            variant: price.variant,
+            unitPrice: price.unitPrice.toString(),
+            sourceValue: price.sourceValue,
+            minPromptTokens: 0,
+            effectiveFrom: now,
+            source: 'official_api',
+            sourceUrl,
+            capturedAt: now,
+          },
+        });
+        newPrices += 1;
+        detail.push(
+          `${price.metric}${price.variant ? ` [${price.variant}]` : ''}: ${latest ? `${usdFromDecimal(latest.unitPrice).toString()} → ` : ''}${price.sourceValue} USD (published)`,
         );
       }
       const action = !existing ? 'created' : newPrices > 0 ? 'updated' : 'unchanged';

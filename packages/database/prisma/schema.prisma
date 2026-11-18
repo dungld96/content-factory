@@ -607,6 +607,14 @@ enum AiPriceMetric {
   cache_write_tokens
   reasoning_tokens
   request
+  // Image generation (M4; docs/design/m4/openrouter-image-verification.md)
+  output_images
+  input_images
+  /// Per-megapixel prices are stored per pixel, so usage quantities stay integers.
+  output_pixels
+  input_pixels
+  output_image_tokens
+  input_image_tokens
 
   @@map("ai_price_metric")
 }
@@ -688,6 +696,9 @@ model AiModel {
   benchmarkScore      Decimal?         @map("benchmark_score") @db.Decimal(5, 2)
   lastTestedAt        DateTime?        @map("last_tested_at") @db.Timestamptz(3)
   expiresAt           DateTime?        @map("expires_at") @db.Timestamptz(3)
+  /// Image models (M4): { maxImages, maxReferences, aspectRatios[], resolutions[], seed } from
+  /// the provider's endpoint record; null for other capabilities.
+  imageConstraints    Json?            @map("image_constraints") @db.JsonB
   createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -727,6 +738,8 @@ model AiModelPrice {
   currency        String        @default("USD") @db.Char(3)
   /// Prompt-size tier: applies to calls with at least this many input tokens.
   minPromptTokens Int           @default(0) @map("min_prompt_tokens")
+  /// Output tier the price applies to (image resolution, e.g. "2k"); "" = any request (M4).
+  variant         String        @default("") @db.VarChar(32)
   effectiveFrom   DateTime      @map("effective_from") @db.Timestamptz(3)
   source          AiPriceSource
   sourceUrl       String        @map("source_url") @db.VarChar(2048)
@@ -738,7 +751,7 @@ model AiModelPrice {
   createdBy    User?           @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   usageRecords AiUsageRecord[]
 
-  @@unique([modelId, metric, minPromptTokens, effectiveFrom])
+  @@unique([modelId, metric, minPromptTokens, variant, effectiveFrom])
   @@index([createdById])
   @@map("ai_model_prices")
 }
@@ -823,6 +836,7 @@ model AiUsageRecord {
 enum GenerationJobKind {
   script_generation
   storyboard_generation
+  image_generation
 
   @@map("generation_job_kind")
 }

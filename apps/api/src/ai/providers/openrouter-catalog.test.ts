@@ -87,6 +87,7 @@ describe('smokeWorstCase', () => {
     metric,
     unitPrice: UsdAmount.parse(usd),
     minPromptTokens: 0,
+    variant: '',
     effectiveFrom: new Date(0),
   });
 

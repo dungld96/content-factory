@@ -197,10 +197,13 @@ never called. Tests never need it and cannot reach `openrouter.ai` (network guar
 | `pnpm ai:registry model list` | Models with status, tier and active prices |
 | `pnpm ai:registry model import-openrouter <modelKey>... [--tier <tier>] [--apply]` | Reads OpenRouter's public catalog and prints a plan; with `--apply`, creates new models **disabled** (a tier is required) and appends a price row only for a changed published price |
 | `pnpm ai:registry model set-status <modelKey> <status>` | Enable/disable a model |
+| `pnpm ai:registry model import-openrouter-images <modelKey>... [--tier <tier>] [--endpoint <slug>] [--apply]` | M4: reads the public image endpoint records and prints a plan (limits: `n`, references, aspect ratios, resolutions, seed; per-image/megapixel/token prices with resolution tiers); with `--apply`, creates image models **disabled** |
 | `pnpm ai:registry price add <modelKey> <metric> <usdPerUnit> --source <source> --url <url>` | Append a price row (rows are never edited) |
-| `pnpm ai:registry route list` / `route set <script_generation\|storyboard_generation> <modelKey> [--provider <key>]` | Which model each generation task uses (M3); `pnpm db:seed` routes both to `mock/echo` |
+| `pnpm ai:registry route list` / `route set <script_generation\|storyboard_generation\|image_generation> <modelKey> [--provider <key>]` | Which model each generation task uses (M3, M4); `pnpm db:seed` routes the text tasks to `mock/echo` and image generation to `mock/solid-image` (free, offline) |
 | `pnpm ai:registry invocations mark-abandoned` | Marks invocations stuck in `started` past every deadline as `outcome_unknown` (never re-sent) |
 | `ACF_PAID_SMOKE=1 pnpm ai:registry smoke <modelKey> --project <slug> --max-cost-usd <usd>` | **One real, paid call.** Refused unless enabled, a key is set, input and output prices are known, and the worst case (fixed tiny prompt, 16 output tokens) is within the cap. Prints reported vs estimated cost to check assumptions A1–A3 |
+
+| `ACF_PAID_SMOKE=1 pnpm ai:registry smoke-image <modelKey> --project <slug> --max-cost-usd <usd> [--count 1-10] [--resolution 2K] [--out dir]` | **Real, paid image calls** (M4 benchmark): a fixed 9:16 product prompt, refused unless the per-image price is known and `count × price × 2` is within the cap. Saves each image to `--out` (default `./smoke-images`) and prints size, latency and reported vs estimated cost. Benchmark: run it with `--count 10` per candidate and score the images |
 
 Behind an HTTPS proxy, Node's built-in `fetch` (catalog import, smoke test) ignores
 `HTTPS_PROXY` unless `NODE_USE_ENV_PROXY=1` is set (and `NODE_EXTRA_CA_CERTS` for a custom CA);

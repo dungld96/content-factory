@@ -8,6 +8,14 @@ export const PriceMetric = {
   CACHE_WRITE_TOKENS: 'cache_write_tokens',
   REASONING_TOKENS: 'reasoning_tokens',
   REQUEST: 'request',
+  // Image generation (M4; verification record §1: per image, per megapixel, per image token).
+  OUTPUT_IMAGES: 'output_images',
+  INPUT_IMAGES: 'input_images',
+  /** Per-megapixel prices are stored per pixel so quantities stay integers. */
+  OUTPUT_PIXELS: 'output_pixels',
+  INPUT_PIXELS: 'input_pixels',
+  OUTPUT_IMAGE_TOKENS: 'output_image_tokens',
+  INPUT_IMAGE_TOKENS: 'input_image_tokens',
 } as const;
 export type PriceMetric = (typeof PriceMetric)[keyof typeof PriceMetric];
 

@@ -9,8 +9,9 @@ import {
   executionKey,
   type ScriptJobInput,
   type StoryboardJobInput,
+  type TextJobKind,
 } from '@acf/content-domain';
-import { createPrismaClient, type GenerationJobKind, type PrismaClient } from '@acf/database';
+import { createPrismaClient, type PrismaClient } from '@acf/database';
 
 export const appPrisma = (): PrismaClient =>
   createPrismaClient({ databaseUrl: inject('workerDatabaseUrls').appUrl, maxConnections: 4 });
@@ -208,7 +209,7 @@ export const storyboardInput = (
 export async function createJob(
   prisma: PrismaClient,
   w: World,
-  kind: GenerationJobKind,
+  kind: TextJobKind,
   input: ScriptJobInput | StoryboardJobInput,
 ): Promise<string> {
   return prisma.$transaction(async (tx) => {

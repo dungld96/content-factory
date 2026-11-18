@@ -31,6 +31,13 @@ export const aiPriceMetricSchema = z
     'cache_write_tokens',
     'reasoning_tokens',
     'request',
+    // Image generation (M4)
+    'output_images',
+    'input_images',
+    'output_pixels',
+    'input_pixels',
+    'output_image_tokens',
+    'input_image_tokens',
   ])
   .meta({ id: 'AiPriceMetric' });
 

@@ -29,6 +29,8 @@ export const aiProviderEnvShape = {
   ),
   /** Per-call ceiling in milliseconds. */
   OPENROUTER_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(120_000),
+  /** Per image call (M4 design §3.2): image generation can take minutes. */
+  OPENROUTER_IMAGE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(240_000),
   /** Send app attribution headers (public rankings). Off by default: they identify the deployment. */
   OPENROUTER_APP_ATTRIBUTION: booleanStringSchema.default(false),
   OPENROUTER_APP_URL: z.preprocess(emptyAsUndefined, z.url().optional()),

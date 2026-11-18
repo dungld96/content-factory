@@ -29,6 +29,7 @@ import {
   type DeadLetterPayload,
   type RuleIssue,
   type ScriptContent,
+  type TextJobKind,
 } from '@acf/content-domain';
 import type { GenerationJob, Prisma, PrismaClient } from '@acf/database';
 import { ZodError, type z } from 'zod';
@@ -290,7 +291,8 @@ export class GenerationProcessor {
         {
           modelKey: model.modelKey,
           messages: msgs,
-          maxOutputTokens: MAX_OUTPUT_TOKENS[job.kind],
+          // Text jobs only reach this path (image jobs have their own processor, M4c).
+          maxOutputTokens: MAX_OUTPUT_TOKENS[job.kind as TextJobKind],
           responseFormat: {
             type: 'json_schema',
             name: structured.name,

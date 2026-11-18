@@ -34,6 +34,13 @@ provider-reported cost and the registry estimate separately, with `cost_status`
 
 `estimated_cost = Σ(quantity × configured_unit_price)`
 
+**Images (M4):** image prices are registry rows with the metrics `output_images`/`input_images`
+(per image), `output_pixels`/`input_pixels` (per-megapixel prices stored per pixel, so quantities
+stay integers) and `output_image_tokens`/`input_image_tokens`, optionally per resolution tier
+(`variant`, e.g. `2k`). Only metrics a model is priced on are billed. A model priced by token has
+no per-image estimate before the call: its estimate is unknown (never zero) and generation needs
+explicit confirmation; the provider-reported cost is recorded after the call.
+
 Each pricing record must include:
 - Provider.
 - Model.

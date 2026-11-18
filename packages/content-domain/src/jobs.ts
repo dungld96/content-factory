@@ -82,11 +82,16 @@ export function retryDelayMs(
   return Math.max(delay, retryAfterMs ?? 0);
 }
 
+/** Text generation kinds (M3); image generation (M4) is scene-scoped. */
+export type TextJobKind = 'script_generation' | 'storyboard_generation';
+export type GenerationKind = TextJobKind | 'image_generation';
+
 /** One active job per content item and kind (`generation_jobs.active_key`). */
-export const activeJobKey = (
-  contentItemId: string,
-  kind: 'script_generation' | 'storyboard_generation',
-) => `${contentItemId}:${kind}`;
+export const activeJobKey = (contentItemId: string, kind: TextJobKind) =>
+  `${contentItemId}:${kind}`;
+
+/** One active image job per storyboard scene (M4 design §5.1). */
+export const activeImageJobKey = (sceneId: string) => `${sceneId}:image_generation`;
 
 /**
  * BullMQ options for a generation job, shared by the API (enqueue) and the worker (reconcile).
