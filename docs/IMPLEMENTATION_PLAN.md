@@ -154,6 +154,9 @@ Deliverables:
 - Scene-level retries.
 - Usage/cost records.
 
+Design: `docs/design/M5-design-review-package.md` (revision 1, proposed; decisions V1–V12),
+provider facts in `docs/design/m5/openrouter-video-tts-verification.md`.
+
 Acceptance:
 - Video job completes or returns a clear actionable error.
 - Worker restart does not lose provider job tracking.

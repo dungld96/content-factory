@@ -80,8 +80,9 @@ pnpm test:integration
 | M2 — AI core and model registry | Done and approved |
 | M3 — Script and storyboard pipeline (+ R0 content masters) | Done and approved |
 | M4 — Image and asset management | Done and approved |
-| M4.5 — UI/UX refinement | Implemented, awaiting review (`docs/design/M4.5-ui-refinement.md`) |
-| M5–M8 | Not started |
+| M4.5 — UI/UX refinement | Done and approved (`docs/design/M4.5-ui-refinement.md`) |
+| M5 — Video and audio generation | Design package proposed (`docs/design/M5-design-review-package.md`), awaiting decisions |
+| M6–M8 | Not started |
 
 ## Decisions fixed for MVP
 
