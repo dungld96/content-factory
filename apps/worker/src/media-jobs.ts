@@ -71,6 +71,8 @@ export interface MediaJobsDeps {
   readonly tools?: MediaTools | undefined;
   readonly logger: Logger;
   readonly now?: (() => Date) | undefined;
+  /** Factor applied to the poll schedule (`WORKER_VIDEO_POLL_SCALE`; tests and E2E only). */
+  readonly pollScale?: number | undefined;
 }
 
 /** How the processor finishes a job (dead letter, content status) and handles other errors. */
@@ -95,6 +97,10 @@ export class MediaJobs {
     private readonly deps: MediaJobsDeps,
     private readonly outcomes: MediaOutcomes,
   ) {}
+
+  private pollDelay(pollCount: number): number {
+    return Math.round(videoPollDelayMs(pollCount) * (this.deps.pollScale ?? 1));
+  }
 
   private now(): Date {
     return this.deps.now?.() ?? new Date();
@@ -184,7 +190,7 @@ export class MediaJobs {
       }
       throw error;
     }
-    const delayMs = videoPollDelayMs(0);
+    const delayMs = this.pollDelay(0);
     await this.deps.jobs.recordProviderJob(
       job,
       submission.state,
@@ -281,7 +287,7 @@ export class MediaJobs {
         `the provider did not finish within ${String(VIDEO_POLL_LIMIT_MS / 3_600_000)} h; it may still charge`,
       );
     }
-    const delayMs = videoPollDelayMs(job.pollCount + 1);
+    const delayMs = this.pollDelay(job.pollCount + 1);
     const pollCount = await jobs.recordPoll(job, state, new Date(this.now().getTime() + delayMs));
     if (pollCount === null) return { type: 'skipped' };
     await this.schedulePoll(job.id, pollCount, delayMs);
@@ -343,7 +349,7 @@ export class MediaJobs {
           );
         }
         // Network trouble: download again on the next poll.
-        const delayMs = videoPollDelayMs(1);
+        const delayMs = this.pollDelay(1);
         const pollCount = await this.deps.jobs.recordPoll(
           job,
           state,

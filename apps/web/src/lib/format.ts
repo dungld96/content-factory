@@ -50,3 +50,33 @@ export function formatBytes(bytes: number): string {
 export function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
+
+/** "4.2 s" from milliseconds (media durations). */
+export function formatSeconds(ms: number): string {
+  const seconds = ms / 1000;
+  return `${seconds >= 10 ? seconds.toFixed(0) : seconds.toFixed(1)} s`;
+}
+
+/**
+ * What a media job's error code means for the user and what they can do (M5 design §5.4).
+ * Unknown codes fall back to the code itself.
+ */
+export function jobErrorText(code: string): string {
+  const messages: Readonly<Record<string, string>> = {
+    SUBMIT_OUTCOME_UNKNOWN:
+      'The submission could not be confirmed. Regenerating may be charged twice.',
+    PROVIDER_TIMEOUT: 'The provider did not finish in time; it may still charge.',
+    PROVIDER_FAILED: 'The provider failed to generate the clip. Regenerate the scene.',
+    PROVIDER_CANCELLED: 'The provider cancelled the job. Regenerate the scene.',
+    PROVIDER_EXPIRED: 'The provider expired the job. Regenerate the scene.',
+    OUTPUT_INVALID: 'The file failed validation. Regenerate the scene.',
+    OUTPUT_EXPIRED: 'The provider deleted the output before download. Regenerate the scene.',
+    INSUFFICIENT_CREDITS: 'Provider credits are exhausted. Top up, then regenerate.',
+    CONTENT_POLICY: 'Blocked by the provider’s content policy. Change the prompt or keyframe.',
+    INVALID_REQUEST: 'The model does not support these parameters. Pick another model.',
+    AUTH: 'The provider rejected the API key. Ask an operator to check it.',
+    MEDIA_TOOLS_MISSING: 'FFprobe is not installed on the worker. Ask an operator.',
+    CANCELED_BY_USER: 'Canceled; the provider may still charge.',
+  };
+  return messages[code] ?? code;
+}

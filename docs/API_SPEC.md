@@ -380,31 +380,69 @@ the starting status). Canceling the run (`POST /production-runs/:runId/cancel`) 
 way. Image jobs appear in `GET /generation-jobs/:jobId` and `GET /production-runs/:runId` with
 `kind: image_generation`.
 
-### `POST /scenes/:sceneId/video-generations`
-Request:
+### Clips, voice-overs and voice profiles (implemented in M5)
+
+Design: `docs/design/M5-design-review-package.md` §5–§11 (deviations §15). Schemas:
+`packages/contracts/src/media.ts`. Like images, these are storyboard-level batches with one job per
+scene; the original per-scene/per-content sketches are replaced.
+
+| Endpoint | Viewer | Editor/Owner | Notes |
+|---|:-:|:-:|---|
+| `POST /storyboards/:storyboardVersionId/videos/estimate` | ✓ | ✓ | Per scene: action, scene seconds, billed seconds, price; total, `spendGuardUsd`, `providerRetainsInputs` |
+| `POST /storyboards/:storyboardVersionId/videos/generate` | 403 | 202 | Same body + `confirmedEstimateUsd` (the total shown; `null` confirms an unknown one) |
+| `GET /storyboards/:storyboardVersionId/videos` | ✓ | ✓ | Per scene: keyframe, clip, candidates, active/last job, provider `progress`; `clipsComplete` |
+| `PUT /scenes/:sceneId/clip` | 403 | ✓ | `{ assetId }`: an approved clip of the scene or generated from its keyframe |
+| `POST /generation-jobs/:jobId/recheck` | 403 | 202 | "Check again": an immediate status read of a running video job the provider accepted (free) |
+| `POST /storyboards/:storyboardVersionId/voiceovers/estimate` | ✓ | ✓ | Per scene: action, characters, price (the content item's voice profile) |
+| `POST /storyboards/:storyboardVersionId/voiceovers/generate` | 403 | 202 | Queues one TTS job per scene with voice-over text |
+| `GET /storyboards/:storyboardVersionId/voiceovers` | ✓ | ✓ | Per scene: text, voice-over, candidates (generated + imported uploads), `exceedsScene`; `voiceoversComplete` |
+| `PUT /scenes/:sceneId/voiceover` | 403 | ✓ | `{ assetId }`: an approved generated voice-over or imported `voiceover` upload |
+| `GET /projects/:projectId/voice-profiles` | ✓ | ✓ | `?includeArchived=true` |
+| `POST /projects/:projectId/voice-profiles` | 403 | 201 | `{ name, modelKey, voice, language, speed?, instructions? }`; the voice is checked against the model's voices |
+| `PATCH /voice-profiles/:voiceProfileId` | 403 | ✓ | Past jobs keep their snapshot |
+| `POST /voice-profiles/:voiceProfileId/archive` | 403 | ✓ | |
+| `PATCH /content/:contentId` | 403 | ✓ | + `voiceProfileId` (active profile of the same project, or `null`) |
+| `POST /assets/:assetId/approve`, `/reject` | 403 | ✓ | Now also clips (`video`) and `audio`; a selected clip/voice-over cannot be rejected (`409 SCENE_SELECTION_INVALID`) |
+
+Video request body (estimate and generate):
+
 ```json
 {
-  "sourceImageAssetId": "uuid",
-  "providerPreference": ["provider-x"],
-  "qualityTier": "balanced",
-  "durationSeconds": 5,
-  "aspectRatio": "9:16",
-  "idempotencyKey": "unique-key"
+  "sceneIds": ["uuid"],
+  "resolution": "720p",
+  "generateAudio": false,
+  "modelKey": "mock/still-video",
+  "seed": 7,
+  "regenerate": false,
+  "acceptUnknownCost": false,
+  "confirmedEstimateUsd": "0.6"
 }
 ```
 
-### `POST /content/:contentId/tts-generations`
-Request:
-```json
-{
-  "scriptVersionId": "uuid",
-  "voiceProfileId": "uuid",
-  "language": "vi",
-  "idempotencyKey": "unique-key"
-}
-```
+Defaults: every scene with a keyframe and no clip, 720p, no native audio, the model routed to
+`video_generation` (`pnpm ai:registry route set video_generation <modelKey>`). The billed duration
+is the smallest supported duration ≥ the scene. Plan actions: `generate`, `reuse_clip`,
+`skip_has_clip`, `skip_existing_result`, `skip_in_progress`, `skip_no_keyframe`,
+`skip_exceeds_model_maximum`. Voice-over actions: `generate`, `reuse_voiceover`,
+`skip_has_voiceover`, `skip_existing_result`, `skip_in_progress`, `skip_no_text`.
 
-All generation endpoints return a job ID and initial status. Do not hold an HTTP request open while waiting for long-running generation.
+Errors: `409 STORYBOARD_NOT_APPROVED`, `409 ESTIMATE_CHANGED` (no or a lower confirmed total; the
+current plan is in `error.current`), `422 SPEND_GUARD` (above
+`VIDEO_MAX_ESTIMATED_USD_PER_REQUEST`, default USD 5), `422 UNKNOWN_COST_NOT_ACCEPTED`, `409
+VOICE_PROFILE_REQUIRED`, `409 CLIP_INVALID`, `409 VOICEOVER_INVALID`, `409 SCENE_SELECTION_INVALID`
+(AC016), `409 JOB_NOT_RECHECKABLE`, `409 GENERATION_IN_PROGRESS`, `422 NO_MODEL_ROUTE`, `422
+MODEL_LIMITS`, `422 REFERENCE_FILE_MISSING` (keyframe file), `503 STORAGE_NOT_CONFIGURED`.
+
+Job error codes shown to the user (video): `SUBMIT_OUTCOME_UNKNOWN` (never resubmitted
+automatically; regenerating may be charged twice), `PROVIDER_FAILED`/`_CANCELLED`/`_EXPIRED`,
+`PROVIDER_TIMEOUT` (followed for 6 h), `OUTPUT_INVALID` (FFprobe), `OUTPUT_EXPIRED`. Canceling a
+run with a submitted video records its invocation as `outcome_unknown` (`CANCELED_BY_USER`): the
+provider has no cancel endpoint and may still charge.
+
+Content status: as for images (`generating_assets` while any scene media job is active, then
+`asset_review`).
+
+All generation endpoints return job IDs and initial status. Do not hold an HTTP request open while waiting for long-running generation.
 
 ## 7. Assets and renders
 

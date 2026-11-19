@@ -81,7 +81,7 @@ pnpm test:integration
 | M3 — Script and storyboard pipeline (+ R0 content masters) | Done and approved |
 | M4 — Image and asset management | Done and approved |
 | M4.5 — UI/UX refinement | Done and approved (`docs/design/M4.5-ui-refinement.md`) |
-| M5 — Video and audio generation | Design approved (`docs/design/M5-design-review-package.md`); slices M5a–M5e in progress |
+| M5 — Video and audio generation | Slices M5a–M5e delivered (`docs/design/M5-design-review-package.md` §15, ADR-0017); awaiting review; paid benchmark waits for an API key |
 | M6–M8 | Not started |
 
 ## Decisions fixed for MVP

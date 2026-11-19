@@ -39,6 +39,11 @@ export const workerEnvSchema = z
     WORKER_IMAGE_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
     /** Video submit/poll/download steps (M5): short, so more in parallel. */
     WORKER_VIDEO_CONCURRENCY: z.coerce.number().int().min(1).max(16).default(4),
+    /**
+     * Multiplies the video poll schedule (15 s, 30 s, 60 s …). Tests and E2E use a small factor
+     * so mock clips finish in seconds; production keeps 1.
+     */
+    WORKER_VIDEO_POLL_SCALE: z.coerce.number().min(0.001).max(1).default(1),
     /** TTS calls (M5). */
     WORKER_AUDIO_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
   })

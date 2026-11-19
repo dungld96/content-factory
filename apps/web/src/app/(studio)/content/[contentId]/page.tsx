@@ -11,6 +11,9 @@ import type {
   ProjectDto,
   ScriptVersionDto,
   StoryboardImagesDto,
+  StoryboardVideosDto,
+  StoryboardVoiceoversDto,
+  VoiceProfileListDto,
   StoryboardVersionDetailDto,
   StoryboardVersionDto,
 } from '@acf/contracts';
@@ -31,13 +34,15 @@ import {
   SceneEditor,
   ScriptEditor,
 } from './pipeline-controls';
+import { SceneClipsPanel } from './scene-clips';
 import { ResyncBriefButton, SceneImagesPanel } from './scene-images';
+import { SceneVoiceoversPanel } from './scene-voiceovers';
 import { WorkspaceTabs } from './workspace-tabs';
 
 export const metadata: Metadata = { title: 'Content · Content Studio' };
 export const dynamic = 'force-dynamic';
 
-type TabId = 'script' | 'storyboard' | 'keyframes' | 'activity';
+type TabId = 'script' | 'storyboard' | 'keyframes' | 'clips' | 'voiceover' | 'activity';
 
 interface Step {
   readonly label: string;
@@ -117,6 +122,7 @@ function activityOf(
   scripts: readonly ScriptVersionDto[],
   storyboards: readonly StoryboardVersionDto[],
   images: StoryboardImagesDto | null,
+  media: readonly { kind: string; scenes: readonly SceneJobs[] }[] = [],
 ): ActivityEvent[] {
   const events: ActivityEvent[] = [];
   const review = (kind: string, v: ScriptVersionDto | StoryboardVersionDto) => {
@@ -154,8 +160,32 @@ function activityOf(
       });
     }
   }
+  for (const { kind, scenes } of media) {
+    for (const scene of scenes) {
+      const job = scene.activeJob ?? scene.lastJob;
+      if (job) {
+        events.push({
+          at: job.completedAt ?? job.startedAt ?? job.queuedAt,
+          title: `Scene ${String(scene.sceneNumber)} ${kind} job ${job.status}`,
+          detail: `${job.modelKey}${job.errorCode ? ` · ${job.errorCode}` : ''}`,
+        });
+      }
+    }
+  }
   return events.sort((a, b) => b.at.localeCompare(a.at));
 }
+
+interface SceneJobs {
+  readonly sceneNumber: number;
+  readonly activeJob: GenerationJobDto | null;
+  readonly lastJob: GenerationJobDto | null;
+}
+
+const jobsOf = (scenes: readonly SceneJobs[] | undefined): GenerationJobDto[] =>
+  (scenes ?? []).flatMap((s) => {
+    const job = s.activeJob ?? s.lastJob;
+    return job ? [job] : [];
+  });
 
 export default async function ContentPage({
   params,
@@ -174,15 +204,24 @@ export default async function ContentPage({
     );
   }
   const content = item.data;
-  const [project, scripts, storyboards, master, images] = await Promise.all([
-    apiGet<ProjectDto>(`/projects/${content.projectId}`),
-    apiGet<Page<ScriptVersionDto>>(`/content/${contentId}/scripts?limit=20`),
-    apiGet<Page<StoryboardVersionDto>>(`/content/${contentId}/storyboards?limit=20`),
-    apiGet<ContentMasterDto>(`/content-masters/${content.contentMasterId}`),
-    content.approvedStoryboardVersionId
-      ? apiGet<StoryboardImagesDto>(`/storyboards/${content.approvedStoryboardVersionId}/images`)
-      : Promise.resolve(null),
-  ]);
+  const approvedBoard = content.approvedStoryboardVersionId;
+  const [project, scripts, storyboards, master, images, videos, voiceovers, profiles] =
+    await Promise.all([
+      apiGet<ProjectDto>(`/projects/${content.projectId}`),
+      apiGet<Page<ScriptVersionDto>>(`/content/${contentId}/scripts?limit=20`),
+      apiGet<Page<StoryboardVersionDto>>(`/content/${contentId}/storyboards?limit=20`),
+      apiGet<ContentMasterDto>(`/content-masters/${content.contentMasterId}`),
+      approvedBoard
+        ? apiGet<StoryboardImagesDto>(`/storyboards/${approvedBoard}/images`)
+        : Promise.resolve(null),
+      approvedBoard
+        ? apiGet<StoryboardVideosDto>(`/storyboards/${approvedBoard}/videos`)
+        : Promise.resolve(null),
+      approvedBoard
+        ? apiGet<StoryboardVoiceoversDto>(`/storyboards/${approvedBoard}/voiceovers`)
+        : Promise.resolve(null),
+      apiGet<VoiceProfileListDto>(`/projects/${content.projectId}/voice-profiles`),
+    ]);
   const canEdit =
     project.kind === 'ok' && project.data.role !== 'viewer' && content.archivedAt === null;
   const scriptList = scripts.kind === 'ok' ? scripts.data.data : [];
@@ -203,10 +242,15 @@ export default async function ContentPage({
   const board = storyboard?.kind === 'ok' ? storyboard.data : null;
   const scriptJobData = scriptJob?.kind === 'ok' ? scriptJob.data : null;
   const storyboardJobData = storyboardJob?.kind === 'ok' ? storyboardJob.data : null;
-  const imageJobs = (imageData?.scenes ?? []).flatMap((s) => {
-    const job = s.activeJob ?? s.lastJob;
-    return job ? [job] : [];
-  });
+  const imageJobs = jobsOf(imageData?.scenes);
+  const videoData = videos?.kind === 'ok' ? videos.data : null;
+  const voiceData = voiceovers?.kind === 'ok' ? voiceovers.data : null;
+  const profileList = profiles.kind === 'ok' ? profiles.data.items : [];
+  const clipJobs = jobsOf(videoData?.scenes);
+  const voiceJobs = jobsOf(voiceData?.scenes);
+  const clipCount = videoData?.scenes.filter((s) => s.clip !== null).length ?? 0;
+  const voiceScenes = voiceData?.scenes.filter((s) => s.text !== '') ?? [];
+  const voiceCount = voiceScenes.filter((s) => s.voiceover !== null).length;
   const projectName = project.kind === 'ok' ? project.data.name : 'Project';
   const masterTitle = master.kind === 'ok' ? master.data.title : 'its content master';
   const keyframeCount = imageData?.scenes.filter((s) => s.keyframe !== null).length ?? 0;
@@ -249,13 +293,22 @@ export default async function ContentPage({
       done: keyframesDone,
       note: !imageData ? 'Locked' : `${String(keyframeCount)} of ${String(sceneCount)} scenes`,
     },
+    {
+      label: 'Clips & voice',
+      done: (videoData?.clipsComplete ?? false) && (voiceData?.voiceoversComplete ?? false),
+      note: !videoData
+        ? 'Locked'
+        : `${String(clipCount)} clip(s) · ${String(voiceCount)} voice-over(s)`,
+    },
     { label: 'Export', done: false, note: 'Not available yet' },
   ];
   const initialTab: TabId = !approvedScript
     ? 'script'
     : !content.approvedStoryboardVersionId
       ? 'storyboard'
-      : 'keyframes';
+      : !keyframesDone
+        ? 'keyframes'
+        : 'clips';
   const keyframeByScene = new Map(
     board && imageData && board.id === imageData.storyboardVersionId
       ? imageData.scenes.flatMap((s) => (s.keyframe ? [[s.sceneId, s.keyframe] as const] : []))
@@ -530,7 +583,59 @@ export default async function ContentPage({
     </section>
   );
 
-  const events = activityOf(scriptList, storyboardList, imageData);
+  const clipsPanel = (
+    <section className="card work-card">
+      {!videos ? (
+        <>
+          <div className="section-head">
+            <div>
+              <h2>Scene clips</h2>
+              <p>Animate each approved keyframe, review the clips and choose one per scene.</p>
+            </div>
+          </div>
+          <div className="empty">Approve a storyboard first (gate 2).</div>
+        </>
+      ) : !videoData ? (
+        <p className="notice error" role="alert">
+          The scene clips could not be loaded.
+        </p>
+      ) : (
+        <SceneClipsPanel videos={videoData} canEdit={canEdit} />
+      )}
+    </section>
+  );
+
+  const voiceoverPanel = (
+    <section className="card work-card">
+      {!voiceovers ? (
+        <>
+          <div className="section-head">
+            <div>
+              <h2>Voice-over</h2>
+              <p>Narrate each scene with the content’s voice profile, or use imported narration.</p>
+            </div>
+          </div>
+          <div className="empty">Approve a storyboard first (gate 2).</div>
+        </>
+      ) : !voiceData ? (
+        <p className="notice error" role="alert">
+          The voice-overs could not be loaded.
+        </p>
+      ) : (
+        <SceneVoiceoversPanel
+          contentId={content.id}
+          voiceovers={voiceData}
+          profiles={profileList}
+          canEdit={canEdit}
+        />
+      )}
+    </section>
+  );
+
+  const events = activityOf(scriptList, storyboardList, imageData, [
+    { kind: 'clip', scenes: videoData?.scenes ?? [] },
+    { kind: 'voice-over', scenes: voiceData?.scenes ?? [] },
+  ]);
   const activityPanel = (
     <section className="card work-card">
       <h2>Activity & version history</h2>
@@ -582,10 +687,24 @@ export default async function ContentPage({
         ? `${String(keyframeCount)} of ${String(sceneCount)} scenes chosen`
         : 'Unlocks after storyboard approval',
     },
+    {
+      label: 'Clip selection',
+      done: videoData?.clipsComplete ?? false,
+      note: videoData
+        ? `${String(clipCount)} of ${String(sceneCount)} scenes chosen`
+        : 'Unlocks after storyboard approval',
+    },
+    {
+      label: 'Voice-over selection',
+      done: voiceData?.voiceoversComplete ?? false,
+      note: voiceData
+        ? `${String(voiceCount)} of ${String(voiceScenes.length)} scenes chosen`
+        : 'Unlocks after storyboard approval',
+    },
     { label: 'Render & export', done: false, note: 'Not available yet' },
   ];
-  const costs = [scriptJobData, storyboardJobData, ...imageJobs].flatMap((j) =>
-    j ? [j.cost] : [],
+  const costs = [scriptJobData, storyboardJobData, ...imageJobs, ...clipJobs, ...voiceJobs].flatMap(
+    (j) => (j ? [j.cost] : []),
   );
 
   return (
@@ -627,6 +746,20 @@ export default async function ContentPage({
                 badge: imageData ? `${String(keyframeCount)}/${String(sceneCount)}` : undefined,
                 panel: keyframesPanel,
               },
+              {
+                id: 'clips',
+                label: 'Clips',
+                badge: videoData ? `${String(clipCount)}/${String(sceneCount)}` : undefined,
+                panel: clipsPanel,
+              },
+              {
+                id: 'voiceover',
+                label: 'Voice-over',
+                badge: voiceData
+                  ? `${String(voiceCount)}/${String(voiceScenes.length)}`
+                  : undefined,
+                panel: voiceoverPanel,
+              },
               { id: 'activity', label: 'Activity', panel: activityPanel },
             ]}
           />
@@ -660,6 +793,14 @@ export default async function ContentPage({
               <dt>Images</dt>
               <dd>
                 {[...new Set(imageJobs.map((j) => j.modelKey))].join(', ') || 'Not generated yet'}
+              </dd>
+              <dt>Clips</dt>
+              <dd>
+                {[...new Set(clipJobs.map((j) => j.modelKey))].join(', ') || 'Not generated yet'}
+              </dd>
+              <dt>Voice-over</dt>
+              <dd>
+                {[...new Set(voiceJobs.map((j) => j.modelKey))].join(', ') || 'Not generated yet'}
               </dd>
             </dl>
           </div>

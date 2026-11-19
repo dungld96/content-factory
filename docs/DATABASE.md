@@ -82,6 +82,31 @@ Migrations `m4_image_registry` and `m4_images` (design: `docs/design/M4-design-r
 
 Enforced by the database: `AC015` (a keyframe is an approved, active image of the scene's own content item; never deleted; the asset cannot lose its approval while it is a keyframe), `AC008` extended (a keyframe asset cannot be archived), CHECKs for the job/scene and asset/job pairing. The keyframe trigger reads the asset `FOR SHARE`, so it serializes with an asset update that would archive it or revoke its approval.
 
+## 0.5 Implemented schema (M5: video and audio)
+
+Migrations `m5_media_registry` (M5b), `m5_job_kinds` (enum values only: PostgreSQL cannot use a
+new enum value in the transaction that adds it) and `m5_media` (design:
+`docs/design/M5-design-review-package.md` §5–§7, ADR-0017):
+
+| Table / column | Purpose |
+|---|---|
+| `ai_price_metric` += `output_video_seconds`, `input_characters`, `output_video_tokens` | Video prices per billed second (variant `720p-silent`, `720p`, `audio`, …: most specific first), TTS prices per input character, video tokens (recorded only). |
+| `ai_models.media_constraints` | Video limits (`durations`, `resolutions`, `aspectRatios`, `frameImages`, `audio`, `seed`) or TTS limits (`voices`, `mp3`), tagged by `kind`. |
+| `generation_job_kind` += `video_generation`, `tts_generation` | Scene-scoped like images: one active job per scene and kind (`active_key = {sceneId}:{kind}`). |
+| `generation_jobs.provider_key`, `invocation_id`, `submitted_at` | The submission intent, recorded **before** the paid submit (decision V3). Cleared only when the provider refused the submit. |
+| `generation_jobs.provider_job_id` (unique), `provider_status`, `provider_expires_at`, `poll_count`, `last_polled_at`, `next_poll_at` | The provider's async job and how it is being followed. Once `provider_job_id` is set, it and the intent are frozen (`AC011`); `poll_count` never decreases. Video jobs only (CHECK). |
+| `asset_inputs.role` += `keyframe` | A clip's input: the keyframe it starts from. |
+| `scene_clips`, `scene_clip_events` | The selected clip of each scene (gate 4) and its append-only history (`selected`, `reused`, `cleared`). A selection may be deleted (cleared when the scene's keyframe changes). |
+| `scene_voiceovers`, `scene_voiceover_events` | The selected voice-over of each scene: a generated audio file of the scene's content item, or an imported voice-over upload (no content item). Same history. |
+| `voice_profiles` | Project voices for TTS: model, provider voice, language tag, speed (0.5–2), instructions; archived, never deleted. |
+| `content_items.voice_profile_id` | The voice profile used for this item's voice-overs (composite FK, same project). |
+
+Enforced by the database: `AC016` (a selected clip/voice-over is an approved, active video/audio of
+the scene's content item, or for voice-overs an imported upload; the selection stays on its scene;
+the asset cannot lose its approval while selected), `AC008` extended (a selected clip or voice-over
+cannot be archived). The selection triggers read the asset `FOR SHARE`. Verified by
+`packages/database/test/media.integration.test.ts`.
+
 ## 1. Entity groups
 
 ### Identity and workspace

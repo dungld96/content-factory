@@ -79,7 +79,7 @@ test('editor: new content → master page → add a variant; upload a reference 
   // Upload a reference image from the project's asset library.
   await page.getByRole('link', { name: 'Demo Studio' }).click();
   await page.getByRole('link', { name: 'Assets' }).click();
-  await page.getByRole('button', { name: 'Upload reference' }).click();
+  await page.getByRole('button', { name: 'Upload asset' }).click();
   const upload = page.getByRole('form', { name: 'Upload asset' });
   await expect(upload.getByLabel('Project')).toHaveValue(/.+/);
   await upload.getByLabel('Reference image').setInputFiles({

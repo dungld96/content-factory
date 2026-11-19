@@ -55,13 +55,22 @@ export async function fetchJson<T>(path: string): Promise<T | null> {
 export async function uploadImage<T>(
   projectId: string,
   file: File,
-  options: { assetType: 'reference' | 'image'; label?: string; contentItemId?: string },
+  options: {
+    assetType: 'reference' | 'image' | 'audio';
+    label?: string;
+    contentItemId?: string;
+    /** Audio only (M5 §7.3): voice-over narration or licensed music. */
+    purpose?: 'voiceover' | 'music';
+    licenseNote?: string;
+  },
 ): Promise<MutationResult<T>> {
   try {
     const token = await csrfToken();
     const query = new URLSearchParams({ assetType: options.assetType, filename: file.name });
     if (options.label) query.set('label', options.label);
     if (options.contentItemId) query.set('contentItemId', options.contentItemId);
+    if (options.purpose) query.set('purpose', options.purpose);
+    if (options.licenseNote) query.set('licenseNote', options.licenseNote);
     const res = await fetch(`/api/v1/projects/${projectId}/assets/upload?${query.toString()}`, {
       method: 'POST',
       headers: {

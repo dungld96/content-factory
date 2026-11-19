@@ -52,6 +52,8 @@ export default defineConfig({
         TRUST_PROXY: 'loopback',
         WEB_ORIGINS: WEB_URL,
         QUEUE_PREFIX: E2E_QUEUE_PREFIX,
+        // Every test signs in; the suite exceeds the default 10 logins per minute.
+        LOGIN_RATE_LIMIT_PER_MINUTE: '60',
         ...e2eStorageEnv(),
       },
     },
@@ -70,6 +72,8 @@ export default defineConfig({
         REDIS_URL: process.env['REDIS_URL'] ?? 'redis://localhost:6379',
         QUEUE_PREFIX: E2E_QUEUE_PREFIX,
         WORKER_RECONCILE_INTERVAL_MS: '5000',
+        // Mock clips finish after two polls: 150 ms and 300 ms instead of 15 s and 30 s.
+        WORKER_VIDEO_POLL_SCALE: '0.01',
         E2E_READY_FILE,
         ...e2eStorageEnv(),
       },

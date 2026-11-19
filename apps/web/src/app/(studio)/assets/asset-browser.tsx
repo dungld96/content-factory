@@ -9,7 +9,7 @@ import { LocalTime } from '@/components/local-time';
 import { ApprovalPill, Pill } from '@/components/status-pill';
 import { fetchJson } from '@/lib/api-client';
 import { assetContentUrl } from '@/lib/asset-url';
-import { formatBytes } from '@/lib/format';
+import { formatBytes, formatSeconds } from '@/lib/format';
 import { addUsd, formatUsd } from '@/lib/money';
 
 export type AssetRow = AssetDto & { readonly projectName: string };
@@ -64,6 +64,33 @@ function useProvenance(asset: AssetDto | null): Provenance | 'loading' | null {
   return state?.id === asset.id ? state.value : 'loading';
 }
 
+/** Players for clips and audio (Range-streamed through the API, M5a). */
+function MediaPreview({ asset }: { readonly asset: AssetDto }) {
+  if (asset.mimeType.startsWith('video/')) {
+    return (
+      <video
+        className="media-player"
+        controls
+        preload="metadata"
+        src={assetContentUrl(asset.id)}
+        aria-label={`Play ${nameOf(asset)}`}
+      />
+    );
+  }
+  if (asset.mimeType.startsWith('audio/')) {
+    return (
+      <audio
+        className="media-player"
+        controls
+        preload="metadata"
+        src={assetContentUrl(asset.id)}
+        aria-label={`Play ${nameOf(asset)}`}
+      />
+    );
+  }
+  return null;
+}
+
 function LineagePanel({ asset }: { readonly asset: AssetRow }) {
   const provenance = useProvenance(asset);
   return (
@@ -75,6 +102,7 @@ function LineagePanel({ asset }: { readonly asset: AssetRow }) {
         </div>
         <ApprovalPill status={asset.approvalStatus} />
       </div>
+      <MediaPreview asset={asset} />
       <div className="brief-box">
         <span className="box-label">Selected asset · {nameOf(asset)}</span>
         <dl className="lineage">
@@ -169,7 +197,7 @@ export function AssetBrowser({ assets }: { readonly assets: readonly AssetRow[] 
     return (
       <section className="card empty">
         <h2>No assets</h2>
-        Upload a reference image, or generate scene images from an approved storyboard.
+        Upload a reference image or audio, or generate scene media from an approved storyboard.
       </section>
     );
   }
@@ -193,7 +221,14 @@ export function AssetBrowser({ assets }: { readonly assets: readonly AssetRow[] 
                     // eslint-disable-next-line @next/next/no-img-element -- authenticated API stream
                     <img src={assetContentUrl(asset.id)} alt={name} loading="lazy" />
                   ) : (
-                    <span>{asset.mimeType}</span>
+                    <span>
+                      {asset.mimeType.startsWith('video/')
+                        ? '▶ Clip'
+                        : asset.mimeType.startsWith('audio/')
+                          ? '♪ Audio'
+                          : asset.mimeType}
+                      {asset.durationMs ? ` · ${formatSeconds(asset.durationMs)}` : ''}
+                    </span>
                   )}
                 </span>
                 <span className="asset-meta">

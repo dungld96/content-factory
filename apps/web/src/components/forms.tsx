@@ -676,6 +676,27 @@ export function NewVariantButton(props: { readonly masterId: string; readonly la
 
 // --- Assets --------------------------------------------------------------------------------
 
+type UploadKind = 'reference' | 'voiceover' | 'music';
+
+const UPLOAD_KINDS: Readonly<Record<UploadKind, { label: string; accept: string; hint: string }>> =
+  {
+    reference: {
+      label: 'Reference image',
+      accept: 'image/png,image/jpeg,image/webp',
+      hint: 'PNG, JPEG or WebP, up to 25 MB',
+    },
+    voiceover: {
+      label: 'Voice-over audio',
+      accept: 'audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/aac,.mp3,.wav,.m4a',
+      hint: 'MP3, WAV or M4A, up to 25 MB; can be selected as a scene voice-over',
+    },
+    music: {
+      label: 'Music audio',
+      accept: 'audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/aac,.mp3,.wav,.m4a',
+      hint: 'MP3, WAV or M4A, up to 25 MB; needs a license note',
+    },
+  };
+
 function UploadForm(props: {
   readonly projects: readonly ProjectOption[];
   readonly projectId: string;
@@ -683,6 +704,7 @@ function UploadForm(props: {
 }) {
   const router = useRouter();
   const [projectId, setProjectId] = useState(props.projectId);
+  const [kind, setKind] = useState<UploadKind>('reference');
   const { busy, error, run } = useSubmit();
 
   async function upload(event: SubmitEvent_) {
@@ -691,30 +713,57 @@ function UploadForm(props: {
     const file = form.get('file');
     if (!(file instanceof File) || file.size === 0) return;
     const label = field(form, 'label');
+    const licenseNote = field(form, 'licenseNote');
     const asset = await run(() =>
       uploadImage<AssetDto>(projectId, file, {
-        assetType: 'reference',
+        assetType: kind === 'reference' ? 'reference' : 'audio',
+        ...(kind === 'reference' ? {} : { purpose: kind }),
         ...(label ? { label } : {}),
+        ...(kind === 'music' && licenseNote ? { licenseNote } : {}),
       }),
     );
     if (asset) {
-      toast(`Uploaded ${asset.originalFilename ?? 'the image'}.`);
+      toast(`Uploaded ${asset.originalFilename ?? 'the file'}.`);
       props.onDone();
       router.refresh();
     }
   }
 
+  const spec = UPLOAD_KINDS[kind];
   return (
     <form className="form" aria-label="Upload asset" onSubmit={(e) => void upload(e)}>
       <ProjectSelect projects={props.projects} value={projectId} onChange={setProjectId} />
+      <div className="field">
+        <label htmlFor="upload-kind">Kind</label>
+        <select
+          id="upload-kind"
+          name="kind"
+          value={kind}
+          onChange={(e) => {
+            setKind(e.target.value as UploadKind);
+          }}
+        >
+          {(Object.keys(UPLOAD_KINDS) as UploadKind[]).map((k) => (
+            <option key={k} value={k}>
+              {UPLOAD_KINDS[k].label}
+            </option>
+          ))}
+        </select>
+      </div>
       <label className="field">
-        Reference image <small>(PNG, JPEG or WebP, up to 25 MB)</small>
-        <input name="file" type="file" accept="image/png,image/jpeg,image/webp" required />
+        {spec.label} <small>({spec.hint})</small>
+        <input key={kind} name="file" type="file" accept={spec.accept} required />
       </label>
       <label className="field">
         Label <small>(optional)</small>
         <input name="label" maxLength={200} />
       </label>
+      {kind === 'music' && (
+        <label className="field">
+          License note <small>(source and terms of use)</small>
+          <textarea name="licenseNote" minLength={3} maxLength={1000} required rows={3} />
+        </label>
+      )}
       <FormError error={error} />
       <div className="form-actions">
         <button type="button" className="btn" onClick={props.onDone}>
@@ -728,7 +777,10 @@ function UploadForm(props: {
   );
 }
 
-/** Uploads a reference image (M4a: raw body through the API, ≤ 25 MB, PNG/JPEG/WebP). */
+/**
+ * Uploads a reference image (M4a) or audio (M5 §7.3: voice-over or licensed music): raw body
+ * through the API, ≤ 25 MB, validated server-side (magic bytes, FFprobe for audio).
+ */
 export function UploadAssetButton(props: {
   readonly projects: readonly ProjectOption[];
   readonly projectId?: string | undefined;
@@ -740,11 +792,11 @@ export function UploadAssetButton(props: {
       className="btn primary"
       label={
         <>
-          <span aria-hidden="true">↑</span> Upload reference
+          <span aria-hidden="true">↑</span> Upload asset
         </>
       }
-      title="Upload a reference image"
-      description="Reference images are stored immutably in object storage and can be attached to characters and environments."
+      title="Upload an asset"
+      description="Files are stored immutably in object storage. Reference images can be attached to characters and environments; voice-over audio can be selected for scenes."
     >
       {(close) => <UploadForm projects={props.projects} projectId={first} onDone={close} />}
     </ModalButton>

@@ -17,9 +17,11 @@ export const dynamic = 'force-dynamic';
 const TYPES = [
   { value: 'reference', label: 'Reference images' },
   { value: 'image', label: 'Generated images' },
+  { value: 'video', label: 'Clips' },
+  { value: 'audio', label: 'Audio' },
 ] as const;
 
-/** Reference and generated images with their provenance (prototype "Asset library"). */
+/** Reference images, generated images, clips and audio with their provenance (prototype "Asset library"). */
 export default async function AssetsPage(props: { readonly searchParams: Promise<SearchParams> }) {
   const query = await props.searchParams;
   const projects = await apiGetAll<ProjectDto>('/projects');
@@ -62,7 +64,7 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
         <div>
           <div className="eyebrow">Project resources</div>
           <h1>Asset library</h1>
-          <p>Reference images and generated assets with traceable production history.</p>
+          <p>Reference images, audio and generated media with traceable production history.</p>
         </div>
         <div className="actions">
           <UploadAssetButton

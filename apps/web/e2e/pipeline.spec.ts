@@ -24,7 +24,7 @@ async function openDemoContent(page: Page, email: string, password: string) {
   ).toBeVisible();
 }
 
-/** Opens a tab of the content workspace (script & brief, storyboard, keyframes, activity). */
+/** Opens a tab of the content workspace (script & brief, storyboard, keyframes, clips, …). */
 async function openTab(page: Page, name: RegExp) {
   await page.getByRole('tab', { name }).click();
   await expect(page.getByRole('tab', { name })).toHaveAttribute('aria-selected', 'true');
@@ -136,6 +136,106 @@ test('editor: scene images → review → keyframes (gate 3)', async ({ page }) 
   );
 });
 
+test('editor: voice profile → clips → voice-over (gate 4)', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openDemoContent(page, EDITOR, passwordOf('EDITOR'));
+
+  // A project voice profile (Settings) with the seeded mock TTS model.
+  await page.goto('/settings');
+  const form = page.getByRole('form', { name: 'New voice profile' });
+  await form.getByLabel('Name').fill('Narrator');
+  await form
+    .getByLabel('Model')
+    .selectOption({ label: 'Mock speech (FFmpeg tone) (mock/tone-tts)' });
+  await form.getByLabel(/^Voice/).fill('mock-a');
+  await form.getByRole('button', { name: 'Create voice profile' }).click();
+  await expect(page.getByRole('list', { name: 'Voice profiles' })).toContainText('Narrator');
+
+  await page.goBack();
+  await page.reload();
+  // Every scene has a keyframe: the workspace opens on the clips tab.
+  await expect(page.getByRole('tab', { name: /^Clips/ })).toHaveAttribute('aria-selected', 'true');
+  const clips = page.getByLabel('Scene clip controls');
+  await expect(clips).toBeVisible();
+
+  // Generate is enabled only once the estimate (billed seconds, limit) has been shown.
+  await expect(clips.getByRole('button', { name: 'Generate clips' })).toBeDisabled();
+  await clips.getByRole('button', { name: 'Estimate cost' }).click();
+  const estimate = clips.getByLabel('Clip estimate');
+  await expect(estimate).toContainText('mock/still-video');
+  await expect(estimate).toContainText('billed as');
+  await expect(estimate).toContainText('keeps prompts and keyframes');
+  const clipScenes = page.getByRole('article', { name: /^Scene \d+ clips$/ });
+  const sceneCount = await clipScenes.count();
+  expect(sceneCount).toBeGreaterThan(0);
+  await clips.getByRole('button', { name: 'Generate clips' }).click();
+  await expect(page.getByText(/clip job\(s\) queued/)).toBeVisible();
+  // The worker submits, polls the mock provider, renders and validates real MP4s (FFmpeg).
+  await expect
+    .poll(
+      async () => {
+        await page.reload();
+        await expect(page.getByLabel('Scene clip controls')).toBeVisible();
+        return page.getByRole('listitem', { name: /^Scene \d+ clip 1$/ }).count();
+      },
+      { timeout: GENERATION_TIMEOUT, intervals: [1_000] },
+    )
+    .toBe(sceneCount);
+  for (let n = 1; n <= sceneCount; n++) {
+    const scene = page.getByRole('article', { name: `Scene ${String(n)} clips` });
+    const candidate = scene.getByRole('listitem', { name: `Scene ${String(n)} clip 1` });
+    // The clip streams through the API with Range support (seeking). Playwright's Chromium has
+    // no H.264 decoder, so the stream is checked over HTTP instead of decoding it.
+    const src = await candidate.locator('video').getAttribute('src');
+    expect(src).toBeTruthy();
+    const ranged = await page.request.get(src ?? '', { headers: { range: 'bytes=0-15' } });
+    expect(ranged.status()).toBe(206);
+    expect(ranged.headers()['content-type']).toBe('video/mp4');
+    expect((await ranged.body()).subarray(4, 8).toString('latin1')).toBe('ftyp');
+    await candidate.getByRole('button', { name: 'Approve' }).click();
+    await expect(candidate).toContainText('approved');
+    await candidate.getByRole('button', { name: 'Use as clip' }).click();
+    await expect(scene).toContainText('Clip chosen');
+  }
+  await expect(page.getByLabel('Clip gate')).toHaveText('All scenes have a clip');
+
+  // Voice-over with the new profile; narration is synthesized by the mock TTS (FFmpeg tone).
+  await openTab(page, /^Voice-over/);
+  const voice = page.getByLabel('Voice-over controls');
+  await voice.getByLabel('Voice profile').selectOption({ label: 'Narrator · mock-a · vi' });
+  await expect(voice.getByRole('button', { name: 'Generate voice-overs' })).toBeEnabled();
+  await voice.getByRole('button', { name: 'Estimate cost' }).click();
+  await expect(voice.getByLabel('Voice-over estimate')).toContainText('mock/tone-tts');
+  await voice.getByRole('button', { name: 'Generate voice-overs' }).click();
+  await expect(page.getByText(/voice-over job\(s\) queued/)).toBeVisible();
+  const voiceScenes = page.getByRole('list', { name: /^Scene \d+ voice-over candidates$/ });
+  // Every fixture scene has voice-over text: one generated candidate each.
+  await expect
+    .poll(
+      async () => {
+        await page.reload();
+        await expect(page.getByLabel('Voice-over controls')).toBeVisible();
+        return voiceScenes.count();
+      },
+      { timeout: GENERATION_TIMEOUT, intervals: [1_000] },
+    )
+    .toBe(sceneCount);
+  const withAudio = await voiceScenes.count();
+  for (let i = 0; i < withAudio; i++) {
+    const candidate = voiceScenes.nth(i).getByRole('listitem').first();
+    const audio = candidate.locator('audio');
+    await expect
+      .poll(() => audio.evaluate((el) => (el as HTMLAudioElement).duration), { timeout: 15_000 })
+      .toBeGreaterThan(0);
+    await candidate.getByRole('button', { name: 'Approve' }).click();
+    await candidate.getByRole('button', { name: 'Use as voice-over' }).click();
+    await expect(candidate).toContainText('✓ Voice-over');
+  }
+  await expect(page.getByLabel('Voice-over gate')).toHaveText(
+    'Every scene with text has a voice-over',
+  );
+});
+
 test('viewer: sees the versions but no generate, edit or review controls', async ({ page }) => {
   await openDemoContent(page, VIEWER, passwordOf('VIEWER'));
   const noControls = async () => {
@@ -152,6 +252,14 @@ test('viewer: sees the versions but no generate, edit or review controls', async
   await noControls();
   await openTab(page, /^Keyframes/);
   await expect(page.getByLabel('Keyframe gate')).toHaveText('All scenes have a keyframe');
+  await noControls();
+  await openTab(page, /^Clips/);
+  await expect(page.getByLabel('Clip gate')).toHaveText('All scenes have a clip');
+  await noControls();
+  await openTab(page, /^Voice-over/);
+  await expect(page.getByLabel('Voice-over gate')).toHaveText(
+    'Every scene with text has a voice-over',
+  );
   await noControls();
   await openTab(page, /^Activity/);
   await expect(page.getByRole('list', { name: 'Version history' })).toContainText(

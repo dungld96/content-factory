@@ -153,6 +153,7 @@ export async function startWorker(
     schedulePoll: (jobId, pollCount, delayMs) =>
       scheduleVideoPoll(queues, jobId, pollCount, delayMs),
     mediaTools: mediaTools(env),
+    videoPollScale: env.WORKER_VIDEO_POLL_SCALE,
     store,
     deadLetter: (payload) => addDeadLetter(queues, payload),
     logger,

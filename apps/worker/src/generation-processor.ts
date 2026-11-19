@@ -93,6 +93,8 @@ export interface ProcessorDeps {
   readonly schedulePoll?: (jobId: string, pollCount: number, delayMs: number) => Promise<void>;
   /** FFprobe/FFmpeg locations (M5a). */
   readonly mediaTools?: MediaTools;
+  /** Factor applied to the video poll schedule (tests and E2E). */
+  readonly videoPollScale?: number;
   /** Copies a finally failed job to the dead-letter queue (M3 Q8). */
   readonly deadLetter: (payload: DeadLetterPayload) => Promise<void>;
   readonly logger: Logger;
@@ -147,6 +149,7 @@ export class GenerationProcessor {
         tts: deps.tts,
         schedulePoll: deps.schedulePoll,
         tools: deps.mediaTools,
+        pollScale: deps.videoPollScale,
         logger: deps.logger,
       },
       { failFinal: (job, code, message) => this.failFinal(job, code, message) },
@@ -657,7 +660,9 @@ export class GenerationProcessor {
         jobId,
         error: error instanceof Error ? error.name : 'unknown',
       });
-      const delayMs = videoPollDelayMs(job.pollCount + 1);
+      const delayMs = Math.round(
+        videoPollDelayMs(job.pollCount + 1) * (this.deps.videoPollScale ?? 1),
+      );
       const pollCount = await this.deps.jobs.recordPoll(job, null, new Date(Date.now() + delayMs));
       if (pollCount === null || !this.deps.schedulePoll) return { type: 'skipped' };
       await this.deps.schedulePoll(jobId, pollCount, delayMs);

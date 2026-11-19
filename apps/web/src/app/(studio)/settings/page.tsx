@@ -2,12 +2,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import type { MeResponse, ProjectDto } from '@acf/contracts';
+import type { AiModelDto, MeResponse, Page, ProjectDto, VoiceProfileListDto } from '@acf/contracts';
 
 import { ProjectSettingsForm } from '@/components/forms';
 import { LocalTime } from '@/components/local-time';
 import { QueryFilters } from '@/components/query-filters';
 import { Pill } from '@/components/status-pill';
+import { VoiceProfilesCard } from '@/components/voice-profiles';
 import { fetchApiHealth } from '@/lib/api-health';
 import { apiGet } from '@/lib/api-server';
 import { param, type SearchParams } from '@/lib/content-filters';
@@ -30,6 +31,20 @@ export default async function SettingsPage(props: {
   if (me.kind === 'unauthenticated' || projects.kind === 'unauthenticated') redirect('/login');
   const list = projects.kind === 'ok' ? projects.data.items : [];
   const selected = list.find((p) => p.id === param(query, 'project')) ?? list[0];
+  const [profiles, models] = selected
+    ? await Promise.all([
+        apiGet<VoiceProfileListDto>(`/projects/${selected.id}/voice-profiles`),
+        apiGet<Page<AiModelDto>>('/ai/models?capability=tts&limit=100'),
+      ])
+    : [null, null];
+  const ttsModels =
+    models?.kind === 'ok'
+      ? models.data.data.map((m) => ({
+          modelKey: m.modelKey,
+          label: `${m.displayName} (${m.modelKey})`,
+          enabled: m.status === 'enabled',
+        }))
+      : [];
 
   return (
     <>
@@ -111,6 +126,30 @@ export default async function SettingsPage(props: {
             </>
           )}
         </section>
+
+        {selected && (
+          <section className="card card-pad" aria-labelledby="voice-profiles">
+            <div className="section-head">
+              <div>
+                <h2 id="voice-profiles">Voice profiles</h2>
+                <p>
+                  Voices for scene voice-overs in {selected.name}. Editors manage them; past
+                  voice-overs keep the voice they were made with.
+                </p>
+              </div>
+            </div>
+            {profiles?.kind === 'ok' ? (
+              <VoiceProfilesCard
+                projectId={selected.id}
+                profiles={profiles.data.items}
+                models={ttsModels}
+                canEdit={selected.role !== 'viewer' && selected.archivedAt === null}
+              />
+            ) : (
+              <p className="notice error">The voice profiles could not be loaded.</p>
+            )}
+          </section>
+        )}
 
         <section className="card card-pad" aria-labelledby="system">
           <div className="section-head">
