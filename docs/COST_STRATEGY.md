@@ -41,6 +41,15 @@ stay integers) and `output_image_tokens`/`input_image_tokens`, optionally per re
 no per-image estimate before the call: its estimate is unknown (never zero) and generation needs
 explicit confirmation; the provider-reported cost is recorded after the call.
 
+**Video and TTS (M5):** video prices are `output_video_seconds` per second, with a variant for
+resolution and audio (`720p-silent`, `720p`, `silent`, `` — most specific first); cents in the
+catalog are converted exactly; a first-frame image fee is `input_images`. Seconds billed are the
+model's supported duration chosen for the scene (never less than the scene). Token-priced video
+models (`output_video_tokens`) and unrecognised SKUs have an **unknown** estimate. TTS is
+`input_characters` (Unicode code points of the text); token-priced TTS (e.g. Gemini) is unknown
+before the call. The provider-reported cost (`usage.cost` for video, `GET /generation` for TTS)
+is recorded as `reported`.
+
 Each pricing record must include:
 - Provider.
 - Model.

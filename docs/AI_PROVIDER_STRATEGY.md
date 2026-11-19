@@ -34,6 +34,27 @@ Per `docs/design/M4-design-review-package.md` §3 (verification record
   image generation to the free `mock/solid-image` model; the three benchmark candidates are
   seeded disabled.
 
+## 0.2 Implementation status (M5: video and TTS)
+
+Per `docs/design/M5-design-review-package.md` §3–§4 (verification record
+`docs/design/m5/openrouter-video-tts-verification.md`):
+- `VideoProvider` (`packages/ai-core`, `media.ts`) is **asynchronous**: `submit` → `poll` →
+  `download`. Submitting is paid and has no idempotency key, so the adapter reports a lost
+  submit response as outcome `unknown` and the job layer never resubmits on its own
+  (decision V3). `videoConstraintIssues` and `chooseVideoDuration` (smallest supported duration
+  covering the scene) check requests against `ai_models.media_constraints`.
+- `TtsProvider` is synchronous (`synthesize`), MP3 by default; PCM-only models are wrapped as WAV.
+- One adapter each: OpenRouter `POST /videos` (frame images as base64 data URLs,
+  `generate_audio` always explicit, `data_collection: deny`; **no ZDR exists for video**) and
+  `POST /audio/speech` (`data_collection: deny`, `zdr: true` on TTS routes; reported cost from
+  `GET /generation?id=`). Mocks: `MockVideoProvider` (async, counts submissions, renders a real
+  MP4 through an injected renderer) and `MockTtsProvider`.
+- `VideoService` / `TtsService` (`packages/ai-runtime`): one invocation per submission spans
+  submit → terminal state; the abandoned-invocation sweep skips video invocations.
+- Registry CLI: `model import-openrouter-videos|-tts` and the paid, capped `smoke-video` /
+  `smoke-tts`. The seed adds three video and three TTS benchmark candidates **disabled**, and the
+  free `mock/still-video` and `mock/tone-tts` models.
+
 ## 1. Objectives
 
 - Avoid vendor lock-in.

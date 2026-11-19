@@ -13,6 +13,12 @@
 //   ACF_PAID_SMOKE=1 pnpm ai:registry smoke <modelKey> --project <slug> --max-cost-usd <usd>
 //   ACF_PAID_SMOKE=1 pnpm ai:registry smoke-image <modelKey> --project <slug> --max-cost-usd <usd>
 //                              [--count <1-10>] [--resolution 2K] [--out <dir>]   (M4 benchmark)
+//   pnpm ai:registry model import-openrouter-videos <modelKey>... [--tier <tier>] [--apply]   (M5)
+//   pnpm ai:registry model import-openrouter-tts <modelKey>... [--tier <tier>] [--apply]      (M5)
+//   ACF_PAID_SMOKE=1 pnpm ai:registry smoke-video <modelKey> --project <slug> --max-cost-usd <usd>
+//                              [--frame <png|jpg>] [--duration <s>] [--resolution 720p] [--count n] [--out <dir>]
+//   ACF_PAID_SMOKE=1 pnpm ai:registry smoke-tts <modelKey> --voice <id> --project <slug> --max-cost-usd <usd>
+//                              [--text "…"] [--count n] [--out <dir>]                 (M5 benchmark)
 // Runs as the runtime role (DATABASE_URL). The import only reads OpenRouter's public catalog and
 // writes nothing without --apply. `smoke` makes ONE real, paid call and is refused unless
 // explicitly enabled and capped.
@@ -55,6 +61,12 @@ import {
   planOpenRouterImageImport,
 } from '../ai/providers/openrouter-image-catalog.js';
 import { estimateImageCost, IMAGE_RESOLUTIONS, type ImageResolution } from '@acf/ai-core';
+import {
+  planOpenRouterTtsImport,
+  planOpenRouterVideoImport,
+  type MediaPlanEntry,
+} from '../ai/providers/openrouter-media-catalog.js';
+import { smokeTts, smokeVideo } from './media-smoke.js';
 import { inspectImage } from '@acf/storage';
 import { RegistryAdminError, RegistryAdminService } from '../ai/registry/registry-admin.service.js';
 
@@ -130,6 +142,10 @@ function parseCliArgs(args: readonly string[]) {
       resolution: { type: 'string' },
       out: { type: 'string' },
       zdr: { type: 'boolean', default: false },
+      duration: { type: 'string' },
+      frame: { type: 'string' },
+      voice: { type: 'string' },
+      text: { type: 'string' },
     },
   });
 }
@@ -287,6 +303,58 @@ export async function runAiRegistryCli(
       }
       return outcomes.every((o) => o.action !== 'refused') ? 0 : 1;
     }
+    if (
+      group === 'model' &&
+      (command === 'import-openrouter-videos' || command === 'import-openrouter-tts')
+    ) {
+      const video = command === 'import-openrouter-videos';
+      if (positionals.length === 0)
+        return usage(`model ${command} <modelKey>... [--tier <tier>] [--apply]`);
+      if (values.tier !== undefined && !TIERS.has(values.tier))
+        return usage('--tier must be economy, balanced or premium');
+      const baseUrl = rawEnv['OPENROUTER_BASE_URL'] ?? DEFAULT_BASE_URL;
+      let plan: MediaPlanEntry[];
+      try {
+        plan = video
+          ? await planOpenRouterVideoImport(baseUrl, positionals)
+          : await planOpenRouterTtsImport(baseUrl, positionals);
+      } catch (error) {
+        io.err(`✖ ${error instanceof Error ? error.message : String(error)}`);
+        return 1;
+      }
+      for (const entry of plan) {
+        if (!entry.ok) {
+          io.out(`✖ ${entry.modelKey}: ${entry.reason}`);
+          continue;
+        }
+        const { constraints: c, prices } = entry.model;
+        io.out(
+          `• ${entry.modelKey}: ${prices.map((p) => `${p.metric}${p.variant ? `[${p.variant}]` : ''}=${p.unitPrice.toString()}`).join(' ') || 'no prices'}`,
+        );
+        io.out(
+          c.kind === 'video'
+            ? `  durations [${c.durations.join(', ')}] s, resolutions [${c.resolutions.join(', ')}], ratios [${c.aspectRatios.join(', ')}], frames [${c.frameImages.join(', ')}], audio ${String(c.audio)}, seed ${c.seed ? 'yes' : 'no'}`
+            : `  ${String(c.voices.length)} voice(s)${c.voices.length > 0 ? ` (${c.voices.slice(0, 6).join(', ')}${c.voices.length > 6 ? ', …' : ''})` : ''}, ${c.mp3 ? 'mp3' : 'pcm only'}`,
+        );
+        for (const warning of entry.model.warnings) io.out(`  ! ${warning}`);
+      }
+      if (!values.apply) {
+        io.out('(dry run: nothing written; pass --apply to write)');
+        return plan.every((e) => e.ok) ? 0 : 1;
+      }
+      const outcomes = await admin.applyOpenRouterMediaImport(plan, {
+        ...(values.tier ? { tier: values.tier as AiQualityTier } : {}),
+        sourceUrl: () =>
+          video ? `${baseUrl}/videos/models` : `${baseUrl}/models?output_modalities=speech`,
+      });
+      for (const o of outcomes) {
+        io.out(
+          `${o.action === 'refused' ? '✖' : '✔'} ${o.modelKey}: ${o.action}, ${String(o.newPrices)} new price row(s)`,
+        );
+        for (const line of o.detail) io.out(`  ${line}`);
+      }
+      return outcomes.every((o) => o.action !== 'refused') ? 0 : 1;
+    }
     if (group === 'price' && command === 'add') {
       const [modelKey, metric, usd] = positionals;
       if (
@@ -377,6 +445,12 @@ export async function runAiRegistryCli(
     }
     if (group === 'smoke-image') {
       return await smokeImage(command, values, prisma, rawEnv, io);
+    }
+    if (group === 'smoke-video') {
+      return await smokeVideo(command, values, prisma, rawEnv, io);
+    }
+    if (group === 'smoke-tts') {
+      return await smokeTts(command, values, prisma, rawEnv, io);
     }
     return usage(
       'usage: ai:registry provider|model|price|smoke … (see the header of src/cli/ai-registry-cli.ts)',

@@ -4,15 +4,26 @@
 // are the default endpoint's; the endpoint that serves a call may charge more or less (§5.1), so
 // these are estimates and the provider-reported cost stays authoritative. Every model starts DISABLED: none
 // has been benchmarked (AI_PROVIDER_STRATEGY §9) and their commercial terms are unreviewed.
-import type { PrismaClient } from '@acf/database';
+import type { Prisma, PrismaClient } from '@acf/database';
 
 import { catalogUrl, planCatalogModel } from '../ai/providers/openrouter-catalog.js';
 import { imageEndpointsUrl, planImageModel } from '../ai/providers/openrouter-image-catalog.js';
+import {
+  planTtsModel,
+  planVideoModel,
+  type SpeechModelRecord,
+  type VideoModelRecord,
+} from '../ai/providers/openrouter-media-catalog.js';
 import {
   OPENROUTER_PROVIDER_ROW,
   RegistryAdminService,
   type ImportOutcome,
 } from '../ai/registry/registry-admin.service.js';
+import {
+  MEDIA_CATALOG_SNAPSHOT_AT,
+  TTS_CATALOG_SNAPSHOT,
+  VIDEO_CATALOG_SNAPSHOT,
+} from './seed-media-snapshot.js';
 
 /** When the snapshot was taken (UTC). Used as effective/captured time of the seeded prices. */
 export const CATALOG_SNAPSHOT_AT = new Date('2026-11-17T16:05:34Z');
@@ -217,6 +228,56 @@ export const IMAGE_CATALOG_SNAPSHOT = [
 
 /** The development mock image model (free, offline): routed for image generation by default. */
 export const MOCK_IMAGE_MODEL_KEY = 'mock/solid-image';
+/** Free mock media models (M5): routed by default in development and E2E (seeded in M5c). */
+export const MOCK_VIDEO_MODEL_KEY = 'mock/still-video';
+export const MOCK_TTS_MODEL_KEY = 'mock/tone-tts';
+
+/** An enabled, free mock model for video or TTS (idempotent). */
+async function seedMockMediaModel(
+  prisma: PrismaClient,
+  providerId: string,
+  m: {
+    modelKey: string;
+    displayName: string;
+    capability: 'video_generation' | 'tts';
+    outputModalities: string[];
+    mediaConstraints: Record<string, unknown>;
+    metric: 'output_video_seconds' | 'input_characters';
+  },
+): Promise<void> {
+  const existing = await prisma.aiModel.findUnique({
+    where: { providerId_modelKey: { providerId, modelKey: m.modelKey } },
+  });
+  if (existing) return;
+  await prisma.$transaction(async (tx) => {
+    const model = await tx.aiModel.create({
+      data: {
+        providerId,
+        modelKey: m.modelKey,
+        displayName: m.displayName,
+        supportedParameters: [],
+        inputModalities: m.capability === 'tts' ? ['text'] : ['text', 'image'],
+        outputModalities: m.outputModalities,
+        mediaConstraints: m.mediaConstraints as Prisma.InputJsonObject,
+        qualityTier: 'premium',
+        status: 'enabled',
+        capabilities: { create: { capability: m.capability } },
+      },
+    });
+    await tx.aiModelPrice.create({
+      data: {
+        modelId: model.id,
+        metric: m.metric,
+        unitPrice: '0',
+        sourceValue: '0',
+        effectiveFrom: MEDIA_CATALOG_SNAPSHOT_AT,
+        source: 'manual_estimate',
+        sourceUrl: 'urn:acf:mock',
+        capturedAt: MEDIA_CATALOG_SNAPSHOT_AT,
+      },
+    });
+  });
+}
 
 export interface AiSeedResult {
   readonly openrouterStatus: string;
@@ -366,5 +427,48 @@ export async function seedAiRegistry(
     create: { task: 'image_generation', modelId: mockImage.id },
     update: {},
   });
-  return { openrouterStatus: provider.status, models: [...models, ...imageModels] };
+  // M5: video and TTS benchmark candidates (disabled) and the free mock models. Their routes come
+  // with the M5c job kinds (seeded there).
+  const mediaModels = await admin.applyOpenRouterMediaImport(
+    [
+      ...VIDEO_CATALOG_SNAPSHOT.map((r) => planVideoModel(r as unknown as VideoModelRecord)),
+      ...TTS_CATALOG_SNAPSHOT.map((r) => planTtsModel(r as unknown as SpeechModelRecord)),
+    ],
+    {
+      tier: 'balanced',
+      sourceUrl: (modelKey) =>
+        modelKey.startsWith('elevenlabs/') || modelKey.startsWith('microsoft/')
+          ? 'https://openrouter.ai/api/v1/models?output_modalities=speech'
+          : 'https://openrouter.ai/api/v1/videos/models',
+      now: MEDIA_CATALOG_SNAPSHOT_AT,
+    },
+  );
+  await seedMockMediaModel(prisma, mock.id, {
+    modelKey: MOCK_VIDEO_MODEL_KEY,
+    displayName: 'Mock video clips (FFmpeg still from the keyframe)',
+    capability: 'video_generation',
+    outputModalities: ['video'],
+    mediaConstraints: {
+      kind: 'video',
+      durations: [2, 3, 4, 5, 6, 7, 8, 9, 10],
+      resolutions: ['480p', '720p', '1080p'],
+      aspectRatios: ['9:16', '1:1', '16:9'],
+      frameImages: ['first_frame'],
+      audio: false,
+      seed: true,
+    },
+    metric: 'output_video_seconds',
+  });
+  await seedMockMediaModel(prisma, mock.id, {
+    modelKey: MOCK_TTS_MODEL_KEY,
+    displayName: 'Mock speech (FFmpeg tone)',
+    capability: 'tts',
+    outputModalities: ['speech'],
+    mediaConstraints: { kind: 'tts', voices: ['mock-a', 'mock-b'], mp3: true },
+    metric: 'input_characters',
+  });
+  return {
+    openrouterStatus: provider.status,
+    models: [...models, ...imageModels, ...mediaModels],
+  };
 }

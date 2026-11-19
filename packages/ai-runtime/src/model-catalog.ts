@@ -1,11 +1,17 @@
 import {
   effectiveParameters,
   imageConstraintsSchema,
+  ttsConstraintsSchema,
+  videoConstraintsSchema,
   type ImageConstraints,
   type ImageProvider,
   type LlmProvider,
   type ModelCandidate,
   type PriceComponent,
+  type TtsConstraints,
+  type TtsProvider,
+  type VideoConstraints,
+  type VideoProvider,
 } from '@acf/ai-core';
 import type { AiCapability, AiModelPrice, PrismaClient } from '@acf/database';
 
@@ -34,6 +40,9 @@ export class ModelCatalog {
     private readonly llmProviders: ReadonlyMap<string, LlmProvider>,
     /** Image adapters (M4); image models are "configured" only when their provider has one. */
     private readonly imageProviders: ReadonlyMap<string, ImageProvider> = new Map(),
+    /** Video and TTS adapters (M5), likewise. */
+    private readonly videoProviders: ReadonlyMap<string, VideoProvider> = new Map(),
+    private readonly ttsProviders: ReadonlyMap<string, TtsProvider> = new Map(),
   ) {}
 
   /**
@@ -47,6 +56,29 @@ export class ModelCatalog {
       orderBy: { provider: { key: 'asc' } },
     });
     return rows.map((row) => {
+      if (capability === 'video_generation' || capability === 'tts') {
+        const adapters = capability === 'tts' ? this.ttsProviders : this.videoProviders;
+        const video = videoConstraintsSchema.safeParse(row.mediaConstraints);
+        const tts = ttsConstraintsSchema.safeParse(row.mediaConstraints);
+        return {
+          candidate: {
+            modelId: row.id,
+            modelKey: row.modelKey,
+            providerKey: row.provider.key,
+            capabilities: row.capabilities.map((c) => c.capability),
+            supportedParameters: row.supportedParameters,
+            qualityTier: row.qualityTier,
+            modelStatus: row.status,
+            providerStatus: row.provider.status,
+            providerConfigured: adapters.has(row.provider.key),
+          },
+          providerId: row.providerId,
+          prices: toPriceComponents(row.prices),
+          imageConstraints: null,
+          videoConstraints: video.success ? video.data : null,
+          ttsConstraints: tts.success ? tts.data : null,
+        };
+      }
       if (capability === 'image_generation') {
         const constraints = imageConstraintsSchema.safeParse(row.imageConstraints);
         const candidate: ModelCandidate = {
@@ -66,6 +98,8 @@ export class ModelCatalog {
           providerId: row.providerId,
           prices: toPriceComponents(row.prices),
           imageConstraints: constraints.success ? constraints.data : null,
+          videoConstraints: null,
+          ttsConstraints: null,
         };
       }
       const adapter = this.llmProviders.get(row.provider.key);
@@ -88,6 +122,8 @@ export class ModelCatalog {
         providerId: row.providerId,
         prices: toPriceComponents(row.prices),
         imageConstraints: null,
+        videoConstraints: null,
+        ttsConstraints: null,
       };
     });
   }
@@ -100,4 +136,8 @@ export interface CandidateRow {
   readonly prices: readonly PriceComponent[];
   /** Image models only (M4); `null` otherwise or when not recorded. */
   readonly imageConstraints: ImageConstraints | null;
+  /** Video models only (M5). */
+  readonly videoConstraints: VideoConstraints | null;
+  /** TTS models only (M5). */
+  readonly ttsConstraints: TtsConstraints | null;
 }

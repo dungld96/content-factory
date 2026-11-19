@@ -10,6 +10,7 @@ import type {
 import { usdFromDecimal } from '@acf/ai-runtime';
 import type { ImportPlanEntry, PlannedModel } from '../providers/openrouter-catalog.js';
 import type { ImagePlanEntry, PlannedImageModel } from '../providers/openrouter-image-catalog.js';
+import type { MediaPlanEntry, PlannedMediaModel } from '../providers/openrouter-media-catalog.js';
 
 export class RegistryAdminError extends Error {
   override readonly name = 'RegistryAdminError';
@@ -355,6 +356,118 @@ export class RegistryAdminService {
         newPrices += 1;
         detail.push(
           `${price.metric}${price.variant ? ` [${price.variant}]` : ''}: ${latest ? `${usdFromDecimal(latest.unitPrice).toString()} → ` : ''}${price.sourceValue} USD (published)`,
+        );
+      }
+      const action = !existing ? 'created' : newPrices > 0 ? 'updated' : 'unchanged';
+      return { modelKey: m.modelKey, action, newPrices, detail };
+    });
+  }
+
+  /**
+   * Applies an OpenRouter video or TTS import plan (M5 design §3.3, §4.2). New models need a tier
+   * and start disabled; a price row is appended only when the published value for that metric
+   * and variant changed. Constraints are refreshed on every import.
+   */
+  async applyOpenRouterMediaImport(
+    plan: readonly MediaPlanEntry[],
+    options: { tier?: AiQualityTier; sourceUrl: (modelKey: string) => string; now?: Date },
+  ): Promise<ImportOutcome[]> {
+    const now = options.now ?? new Date();
+    const provider = await this.prisma.aiProvider.upsert({
+      where: { key: OPENROUTER_PROVIDER_ROW.key },
+      create: { ...OPENROUTER_PROVIDER_ROW, status: 'disabled' },
+      update: {},
+      select: { id: true },
+    });
+    const outcomes: ImportOutcome[] = [];
+    for (const entry of plan) {
+      outcomes.push(
+        entry.ok
+          ? await this.importMediaModel(
+              provider.id,
+              entry.model,
+              options.tier,
+              options.sourceUrl(entry.modelKey),
+              now,
+            )
+          : { modelKey: entry.modelKey, action: 'refused', newPrices: 0, detail: [entry.reason] },
+      );
+    }
+    return outcomes;
+  }
+
+  private async importMediaModel(
+    providerId: string,
+    m: PlannedMediaModel,
+    tier: AiQualityTier | undefined,
+    sourceUrl: string,
+    now: Date,
+  ): Promise<ImportOutcome> {
+    const capability = m.kind === 'video' ? ('video_generation' as const) : ('tts' as const);
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.aiModel.findUnique({
+        where: { providerId_modelKey: { providerId, modelKey: m.modelKey } },
+        include: { prices: { orderBy: { effectiveFrom: 'desc' } } },
+      });
+      if (!existing && tier === undefined) {
+        return {
+          modelKey: m.modelKey,
+          action: 'refused' as const,
+          newPrices: 0,
+          detail: ['new model: pass --tier economy|balanced|premium'],
+        };
+      }
+      const metadata = {
+        displayName: m.modelKey,
+        supportedParameters: [],
+        inputModalities: m.kind === 'video' ? ['text', 'image'] : ['text'],
+        outputModalities: [m.kind === 'video' ? 'video' : 'speech'],
+        mediaConstraints: { ...m.constraints },
+        dataPolicyNotes:
+          m.kind === 'video'
+            ? 'Requests send data_collection=deny. No video endpoint offers ZDR: the provider retains inputs and outputs briefly (verification record §1).'
+            : 'Requests send data_collection=deny and zdr=true (decision V2).',
+      };
+      const model = existing
+        ? await tx.aiModel.update({ where: { id: existing.id }, data: metadata })
+        : await tx.aiModel.create({
+            data: {
+              providerId,
+              modelKey: m.modelKey,
+              qualityTier: tier ?? 'economy',
+              status: 'disabled',
+              ...metadata,
+            },
+          });
+      await tx.aiModelCapability.upsert({
+        where: { modelId_capability: { modelId: model.id, capability } },
+        create: { modelId: model.id, capability },
+        update: {},
+      });
+      let newPrices = 0;
+      const detail: string[] = [...m.warnings];
+      for (const price of m.prices) {
+        const latest = existing?.prices.find(
+          (p) => p.metric === price.metric && p.variant === price.variant && p.effectiveFrom <= now,
+        );
+        if (latest && usdFromDecimal(latest.unitPrice).equals(price.unitPrice)) continue;
+        await tx.aiModelPrice.create({
+          data: {
+            modelId: model.id,
+            metric: price.metric,
+            variant: price.variant,
+            unitPrice: price.unitPrice.toString(),
+            sourceValue: price.sourceValue.slice(0, 64),
+            minPromptTokens: 0,
+            effectiveFrom: now,
+            source: 'official_api',
+            sourceUrl,
+            capturedAt: now,
+          },
+        });
+        newPrices += 1;
+        detail.push(
+          `${price.metric}${price.variant ? ` [${price.variant}]` : ''}: ${latest ? `${usdFromDecimal(latest.unitPrice).toString()} → ` : ''}${price.unitPrice.toString()} USD/unit (${price.sourceValue})`,
         );
       }
       const action = !existing ? 'created' : newPrices > 0 ? 'updated' : 'unchanged';

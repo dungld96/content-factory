@@ -70,12 +70,20 @@ describe('seed (S1)', () => {
         .map((m) => [m.modelKey, m.status])
         .sort(),
     ).toEqual([
+      // M5: video benchmark candidates, seeded disabled.
+      ['alibaba/wan-3.0', 'disabled'],
       ['anthropic/claude-haiku-5.5', 'disabled'],
       // M4: image benchmark candidates, seeded disabled.
       ['black-forest-labs/flux-3-image-klein', 'disabled'],
       ['bytedance-seed/seedream-5-0-flash', 'disabled'],
       ['deepseek/deepseek-v4-flash', 'disabled'],
+      // M5: TTS benchmark candidates, seeded disabled.
+      ['elevenlabs/eleven-flash-v2.5', 'disabled'],
+      ['elevenlabs/eleven-v4', 'disabled'],
       ['google/gemini-3.5-flash-lite', 'disabled'],
+      ['google/veo-3.1-lite', 'disabled'],
+      ['kwaivgi/kling-v3.0-std', 'disabled'],
+      ['microsoft/mai-voice-2.1', 'disabled'],
       ['qwen/qwen-image-2.1-turbo', 'disabled'],
     ]);
   });
@@ -83,7 +91,7 @@ describe('seed (S1)', () => {
   it('is idempotent', async () => {
     const before = await prisma.aiModelPrice.count();
     const again = await seedAiRegistry(prisma, { openrouterConfigured: true });
-    expect(again.models.map((m) => m.action)).toEqual(Array(6).fill('unchanged'));
+    expect(again.models.map((m) => m.action)).toEqual(Array(12).fill('unchanged'));
     expect(again.openrouterStatus).toBe('disabled'); // existing rows are never changed by the seed
     expect(await prisma.aiModelPrice.count()).toBe(before);
     expect(CATALOG_SNAPSHOT).toHaveLength(3);
@@ -181,8 +189,21 @@ describe('GET /ai/models', () => {
   });
 
   it.each([
-    ['?status=enabled', ['mock/echo', 'mock/solid-image']],
-    ['?providerKey=mock', ['mock/echo', 'mock/solid-image']],
+    ['?status=enabled', ['mock/echo', 'mock/solid-image', 'mock/still-video', 'mock/tone-tts']],
+    ['?providerKey=mock', ['mock/echo', 'mock/solid-image', 'mock/still-video', 'mock/tone-tts']],
+    [
+      '?capability=video_generation',
+      ['alibaba/wan-3.0', 'google/veo-3.1-lite', 'kwaivgi/kling-v3.0-std', 'mock/still-video'],
+    ],
+    [
+      '?capability=tts',
+      [
+        'elevenlabs/eleven-flash-v2.5',
+        'elevenlabs/eleven-v4',
+        'microsoft/mai-voice-2.1',
+        'mock/tone-tts',
+      ],
+    ],
     [
       '?capability=image_generation',
       [
@@ -192,7 +213,7 @@ describe('GET /ai/models', () => {
         'qwen/qwen-image-2.1-turbo',
       ],
     ],
-    ['?qualityTier=premium', ['mock/solid-image']],
+    ['?qualityTier=premium', ['mock/solid-image', 'mock/still-video', 'mock/tone-tts']],
   ])('filters %s', async (query, keys) => {
     expect((await models(query)).data.map((m) => m.modelKey).sort()).toEqual(keys);
   });
@@ -208,9 +229,10 @@ describe('GET /ai/models', () => {
       all.push(...page.data.map((m) => m.id));
       cursor = page.page.nextCursor;
     }
-    // M2 seed: 3 text models + mock/echo; M4 adds 3 image candidates + mock/solid-image.
-    expect(all).toHaveLength(8);
-    expect(new Set(all).size).toBe(8);
+    // M2 seed: 3 text models + mock/echo; M4 adds 3 image candidates + mock/solid-image;
+    // M5 adds 3 video + 3 TTS candidates and two mock media models.
+    expect(all).toHaveLength(16);
+    expect(new Set(all).size).toBe(16);
   });
 
   it('rejects unknown filters and bad cursors', async () => {

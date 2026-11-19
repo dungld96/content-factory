@@ -38,6 +38,9 @@ export const aiPriceMetricSchema = z
     'input_pixels',
     'output_image_tokens',
     'input_image_tokens',
+    'output_video_seconds',
+    'output_video_tokens',
+    'input_characters',
   ])
   .meta({ id: 'AiPriceMetric' });
 

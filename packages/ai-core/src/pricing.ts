@@ -1,4 +1,4 @@
-import type { ImageResolution, ImageUsage } from './media.js';
+import type { ImageResolution, ImageUsage, VideoResolution } from './media.js';
 import { UsdAmount } from './money.js';
 import {
   CostStatus,
@@ -285,3 +285,99 @@ export function estimateImageCost(input: {
   });
   return assessed.estimatedCost;
 }
+
+// ----------------------------------------------------------------------------- video and TTS (M5)
+
+/**
+ * Registry variants of a per-second video price, most specific first (M5 design §9.1):
+ * `720p-silent`, `720p`, `silent`, `` for a silent 720p clip. Catalog SKUs such as
+ * `duration_seconds_without_audio_720p` import as `720p-silent`; `duration_seconds` as ``.
+ */
+export function videoPriceVariants(resolution: VideoResolution, audio: boolean): string[] {
+  const sound = audio ? 'audio' : 'silent';
+  return [`${resolution}-${sound}`, resolution, sound, ''];
+}
+
+export interface VideoUsage {
+  /** Seconds billed (the requested duration). */
+  readonly seconds: number;
+  /** Input images sent (the first frame). */
+  readonly inputImages: number;
+  readonly resolution: VideoResolution;
+  readonly audio: boolean;
+}
+
+/**
+ * Usage lines and cost status of one video job (ADR-0012 rules). A model priced by video token,
+ * or without a per-second price for the variant, has an unknown estimate — never zero.
+ */
+export function assessVideoCost(input: {
+  readonly usage: VideoUsage;
+  readonly prices: readonly PriceComponent[];
+  readonly reportedCost: UsdAmount | null;
+}): CostAssessment {
+  const { usage, prices, reportedCost } = input;
+  if (!Number.isSafeInteger(usage.seconds) || usage.seconds < 0) {
+    throw new RangeError('video seconds must be a non-negative integer');
+  }
+  const lines: UsageLine[] = [];
+  const perSecond = videoPriceVariants(usage.resolution, usage.audio)
+    .map((v) =>
+      prices.find((p) => p.metric === PriceMetric.OUTPUT_VIDEO_SECONDS && p.variant === v),
+    )
+    .find((p) => p !== undefined);
+  // Token-priced models (e.g. Seedance) have no per-second price: the estimate stays unknown.
+  const unknown = !perSecond;
+  lines.push(line(PriceMetric.OUTPUT_VIDEO_SECONDS, usage.seconds, perSecond));
+  const imagePrice = imagePriceFor(prices, PriceMetric.INPUT_IMAGES, '');
+  if (imagePrice && usage.inputImages > 0) {
+    lines.push(line(PriceMetric.INPUT_IMAGES, usage.inputImages, imagePrice));
+  }
+  const requestPrice = imagePriceFor(prices, PriceMetric.REQUEST, '');
+  if (requestPrice) lines.push(line(PriceMetric.REQUEST, 1, requestPrice));
+  const estimatedCost = unknown ? null : UsdAmount.sum(lines.map((l) => l.cost ?? UsdAmount.ZERO));
+  const status = reportedCost
+    ? CostStatus.REPORTED
+    : estimatedCost
+      ? CostStatus.ESTIMATED
+      : CostStatus.UNKNOWN;
+  return { status, reportedCost, estimatedCost, lines };
+}
+
+/** Pre-generation estimate of one clip; `null` when unknowable (token-priced or unpriced). */
+export function estimateVideoCost(input: {
+  readonly prices: readonly PriceComponent[];
+  readonly usage: VideoUsage;
+}): UsdAmount | null {
+  return assessVideoCost({ ...input, reportedCost: null }).estimatedCost;
+}
+
+/**
+ * Cost of one TTS call: characters × the per-character price. Token-priced TTS models (e.g.
+ * Gemini) cannot be estimated before the call: unknown, never zero.
+ */
+export function assessTtsCost(input: {
+  readonly characters: number;
+  readonly prices: readonly PriceComponent[];
+  readonly reportedCost: UsdAmount | null;
+}): CostAssessment {
+  const { characters, prices, reportedCost } = input;
+  if (!Number.isSafeInteger(characters) || characters < 0) {
+    throw new RangeError('characters must be a non-negative integer');
+  }
+  const price = imagePriceFor(prices, PriceMetric.INPUT_CHARACTERS, '');
+  const lines: UsageLine[] = [line(PriceMetric.INPUT_CHARACTERS, characters, price)];
+  const requestPrice = imagePriceFor(prices, PriceMetric.REQUEST, '');
+  if (requestPrice) lines.push(line(PriceMetric.REQUEST, 1, requestPrice));
+  const estimatedCost =
+    price === undefined ? null : UsdAmount.sum(lines.map((l) => l.cost ?? UsdAmount.ZERO));
+  const status = reportedCost
+    ? CostStatus.REPORTED
+    : estimatedCost
+      ? CostStatus.ESTIMATED
+      : CostStatus.UNKNOWN;
+  return { status, reportedCost, estimatedCost, lines };
+}
+
+/** Billed characters of a TTS input (Unicode code points, as providers count them). */
+export const ttsCharacters = (text: string): number => Array.from(text).length;

@@ -80,6 +80,7 @@ const EXPECTED_CHECKS = [
   'ai_models.ai_models_context_positive',
   'ai_models.ai_models_image_constraints_object',
   'ai_models.ai_models_max_output_positive',
+  'ai_models.ai_models_media_constraints_kind',
   'ai_models.ai_models_model_key_nonempty',
   'ai_providers.ai_providers_key_format',
   'ai_providers.ai_providers_kind_known',

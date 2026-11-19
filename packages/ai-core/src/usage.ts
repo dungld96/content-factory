@@ -16,6 +16,13 @@ export const PriceMetric = {
   INPUT_PIXELS: 'input_pixels',
   OUTPUT_IMAGE_TOKENS: 'output_image_tokens',
   INPUT_IMAGE_TOKENS: 'input_image_tokens',
+  // Video and TTS (M5; docs/design/m5/openrouter-video-tts-verification.md).
+  /** USD per output second; `variant` = resolution and audio (see `videoPriceVariants`). */
+  OUTPUT_VIDEO_SECONDS: 'output_video_seconds',
+  /** Video models billed by token: recorded, but no estimate is possible before the call. */
+  OUTPUT_VIDEO_TOKENS: 'output_video_tokens',
+  /** TTS priced per input character. */
+  INPUT_CHARACTERS: 'input_characters',
 } as const;
 export type PriceMetric = (typeof PriceMetric)[keyof typeof PriceMetric];
 

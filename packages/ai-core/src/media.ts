@@ -128,10 +128,6 @@ export interface ImageProvider extends MediaProviderBase<'image_generation'> {
 
 /** Out of scope in M4 (design §1). */
 export type ImageEditProvider = MediaProviderBase<'image_edit'>;
-/** M5. */
-export type VideoProvider = MediaProviderBase<'video_generation'>;
-/** M5. */
-export type TtsProvider = MediaProviderBase<'tts'>;
 
 /**
  * What an image model accepts (`ai_models.image_constraints`, from the provider's endpoint
@@ -189,4 +185,268 @@ export function imageConstraintIssues(
   }
   if (request.seed !== undefined && !constraints.seed) issues.push('seed is not supported');
   return issues;
+}
+
+// ----------------------------------------------------------------------------- video (M5)
+
+/** Resolution tiers the pipeline requests (verification record `docs/design/m5/…` §1). */
+export const VIDEO_RESOLUTIONS = ['480p', '720p', '1080p'] as const;
+export type VideoResolution = (typeof VIDEO_RESOLUTIONS)[number];
+export const VIDEO_ASPECT_RATIOS = IMAGE_ASPECT_RATIOS;
+
+export const VIDEO_LIMITS = {
+  maxPromptChars: 4000,
+  maxDurationSeconds: 30,
+  maxFrameBytes: 20 * 1024 * 1024,
+} as const;
+
+/** Validated before any network call (M5 design §3.1). */
+export const videoRequestSchema = z
+  .object({
+    modelKey: z.string().min(1).max(200),
+    prompt: z.string().trim().min(1).max(VIDEO_LIMITS.maxPromptChars),
+    /** One of the model's supported durations (see {@link chooseVideoDuration}). */
+    durationSeconds: z.number().int().min(1).max(VIDEO_LIMITS.maxDurationSeconds),
+    resolution: z.enum(VIDEO_RESOLUTIONS),
+    aspectRatio: z.enum(VIDEO_ASPECT_RATIOS),
+    /** Default false: voice-over comes from TTS (decision V4). */
+    generateAudio: z.boolean(),
+    seed: z
+      .number()
+      .int()
+      .min(0)
+      .max(2 ** 31 - 1)
+      .optional(),
+    /** The approved keyframe, sent as the first frame (image-to-video). */
+    firstFrame: referenceSchema
+      .refine((r) => r.bytes.byteLength <= VIDEO_LIMITS.maxFrameBytes, 'first frame too large')
+      .optional(),
+  })
+  .strict();
+export type VideoRequest = z.infer<typeof videoRequestSchema>;
+
+/** @throws {ProviderError} `INVALID_REQUEST`, outcome `not_sent`. */
+export function parseVideoRequest(input: unknown): VideoRequest {
+  const result = videoRequestSchema.safeParse(input);
+  if (!result.success) {
+    const fields = [
+      ...new Set(result.error.issues.map((issue) => issue.path.join('.') || '(root)')),
+    ];
+    throw new ProviderError(
+      ProviderErrorCode.INVALID_REQUEST,
+      `invalid video request: ${fields.join(', ')}`,
+      { outcome: ProviderErrorOutcome.NOT_SENT },
+    );
+  }
+  return result.data;
+}
+
+/** Normalized provider job states (OpenRouter: pending, in_progress, completed, …). */
+export const VideoJobStatus = {
+  PENDING: 'pending',
+  RUNNING: 'running',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  CANCELLED: 'cancelled',
+  EXPIRED: 'expired',
+} as const;
+export type VideoJobStatus = (typeof VideoJobStatus)[keyof typeof VideoJobStatus];
+export const TERMINAL_VIDEO_STATUSES: ReadonlySet<VideoJobStatus> = new Set([
+  'completed',
+  'failed',
+  'cancelled',
+  'expired',
+]);
+
+/** A provider job, as accepted at submit or as seen on a poll. */
+export interface VideoJobState {
+  readonly providerJobId: string;
+  readonly status: VideoJobStatus;
+  /** The provider's error text (failed/cancelled/expired); safe to show, never the prompt. */
+  readonly error: string | null;
+  /** Provider-reported cost; known once completed (null = not reported). */
+  readonly reportedCost: UsdAmount | null;
+  /** Number of downloadable outputs (completed jobs). */
+  readonly outputCount: number;
+  /** When the provider's stored copy of the outputs stops being downloadable. */
+  readonly expiresAt: Date | null;
+}
+
+export interface VideoDownload {
+  readonly contentType: string | null;
+  readonly contentLength: number | null;
+  readonly body: AsyncIterable<Uint8Array>;
+}
+
+/**
+ * Asynchronous image/text-to-video provider (M5 design §3.1, decision V3): `submit` once, then
+ * `poll` until a terminal state, then `download`. Submitting is paid and not idempotent, so the
+ * caller persists the returned provider job id before waiting and never resubmits on its own.
+ * Implementations validate input, never retry, and throw only {@link ProviderError}.
+ */
+export interface VideoProvider extends MediaProviderBase<'video_generation'> {
+  submit(
+    request: VideoRequest,
+    context: GenerationContext,
+    signal: AbortSignal,
+  ): Promise<VideoJobState>;
+  poll(
+    providerJobId: string,
+    context: GenerationContext,
+    signal: AbortSignal,
+  ): Promise<VideoJobState>;
+  download(
+    providerJobId: string,
+    index: number,
+    context: GenerationContext,
+    signal: AbortSignal,
+  ): Promise<VideoDownload>;
+}
+
+/** What a video model accepts (`ai_models.media_constraints`, from the catalog record). */
+export interface VideoConstraints {
+  readonly kind: 'video';
+  readonly durations: readonly number[];
+  readonly resolutions: readonly string[];
+  readonly aspectRatios: readonly string[];
+  readonly frameImages: readonly string[];
+  /** Whether the model can generate audio; null = not declared. */
+  readonly audio: boolean | null;
+  readonly seed: boolean;
+}
+
+export const videoConstraintsSchema = z
+  .object({
+    kind: z.literal('video'),
+    durations: z.array(z.number().int().min(-1).max(600)).max(64),
+    resolutions: z.array(z.string().max(16)).max(16),
+    aspectRatios: z.array(z.string().max(16)).max(32),
+    frameImages: z.array(z.string().max(32)).max(4),
+    audio: z.boolean().nullable(),
+    seed: z.boolean(),
+  })
+  .strict();
+
+/**
+ * Billed clip length for a scene (decision V5): the smallest supported duration that covers the
+ * scene, or `null` when the scene is longer than the model's maximum.
+ */
+export function chooseVideoDuration(
+  sceneSeconds: number,
+  supported: readonly number[],
+): number | null {
+  const needed = Math.max(1, Math.ceil(sceneSeconds - 1e-9));
+  const fitting = supported.filter((d) => d >= needed).sort((a, b) => a - b);
+  return fitting[0] ?? null;
+}
+
+export function videoConstraintIssues(
+  request: Pick<
+    VideoRequest,
+    'durationSeconds' | 'resolution' | 'aspectRatio' | 'generateAudio' | 'seed' | 'firstFrame'
+  >,
+  constraints: VideoConstraints | null,
+): string[] {
+  if (!constraints) return ['the model has no recorded video constraints (re-import it)'];
+  const issues: string[] = [];
+  if (!constraints.durations.includes(request.durationSeconds)) {
+    issues.push(`duration ${String(request.durationSeconds)} s is not supported`);
+  }
+  if (!constraints.resolutions.includes(request.resolution)) {
+    issues.push(`resolution ${request.resolution} is not supported`);
+  }
+  if (!constraints.aspectRatios.includes(request.aspectRatio)) {
+    issues.push(`aspect ratio ${request.aspectRatio} is not supported`);
+  }
+  if (request.firstFrame && !constraints.frameImages.includes('first_frame')) {
+    issues.push('a first frame image is not supported');
+  }
+  if (request.generateAudio && constraints.audio === false) {
+    issues.push('audio generation is not supported');
+  }
+  if (request.seed !== undefined && !constraints.seed) issues.push('seed is not supported');
+  return issues;
+}
+
+// ----------------------------------------------------------------------------- TTS (M5)
+
+export const TTS_LIMITS = { maxChars: 5000, maxInstructionsChars: 500 } as const;
+
+export const ttsRequestSchema = z
+  .object({
+    modelKey: z.string().min(1).max(200),
+    text: z.string().trim().min(1).max(TTS_LIMITS.maxChars),
+    /** Provider voice id (model-specific). */
+    voice: z.string().trim().min(1).max(200),
+    /** BCP 47 tag; used by models that take a language option, else informational. */
+    language: z.string().trim().min(2).max(35).optional(),
+    speed: z.number().min(0.5).max(2).optional(),
+    instructions: z.string().trim().min(1).max(TTS_LIMITS.maxInstructionsChars).optional(),
+    /** Restrict routing to zero-data-retention endpoints (decision V2: always on for TTS routes). */
+    dataPolicy: z.object({ zeroDataRetention: z.boolean() }).strict().optional(),
+  })
+  .strict();
+export type TtsRequest = z.infer<typeof ttsRequestSchema>;
+
+/** @throws {ProviderError} `INVALID_REQUEST`, outcome `not_sent`. */
+export function parseTtsRequest(input: unknown): TtsRequest {
+  const result = ttsRequestSchema.safeParse(input);
+  if (!result.success) {
+    const fields = [
+      ...new Set(result.error.issues.map((issue) => issue.path.join('.') || '(root)')),
+    ];
+    throw new ProviderError(
+      ProviderErrorCode.INVALID_REQUEST,
+      `invalid TTS request: ${fields.join(', ')}`,
+      { outcome: ProviderErrorOutcome.NOT_SENT },
+    );
+  }
+  return result.data;
+}
+
+export interface TtsResult {
+  /** Encoded audio (MP3, or WAV when the provider only returns PCM). */
+  readonly bytes: Uint8Array;
+  readonly mimeType: 'audio/mpeg' | 'audio/wav';
+  /** Characters billed (the input text length). */
+  readonly characters: number;
+  readonly reportedCost: UsdAmount | null;
+  readonly providerRequestId: string | null;
+  readonly latencyMs: number;
+}
+
+/** Text-to-speech provider (synchronous). Validates input, never retries, throws ProviderError. */
+export interface TtsProvider extends MediaProviderBase<'tts'> {
+  synthesize(
+    request: TtsRequest,
+    context: GenerationContext,
+    signal: AbortSignal,
+  ): Promise<TtsResult>;
+}
+
+export interface TtsConstraints {
+  readonly kind: 'tts';
+  /** Voices the catalog lists (empty = not listed: any id is sent as is). */
+  readonly voices: readonly string[];
+  /** Whether the model can return MP3 (some return PCM only). */
+  readonly mp3: boolean;
+}
+
+export const ttsConstraintsSchema = z
+  .object({
+    kind: z.literal('tts'),
+    voices: z.array(z.string().max(200)).max(2000),
+    mp3: z.boolean(),
+  })
+  .strict();
+
+export function ttsConstraintIssues(
+  request: Pick<TtsRequest, 'voice'>,
+  constraints: TtsConstraints | null,
+): string[] {
+  if (!constraints) return ['the model has no recorded TTS constraints (re-import it)'];
+  if (constraints.voices.length > 0 && !constraints.voices.includes(request.voice)) {
+    return [`voice ${request.voice} is not offered by the model`];
+  }
+  return [];
 }

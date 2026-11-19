@@ -4,3 +4,5 @@ export * from './money.js';
 export { createLlmProviders } from './providers/llm-providers.js';
 export * from './image-service.js';
 export { createImageProviders } from './providers/image-providers.js';
+export * from './media-service.js';
+export { createTtsProviders, createVideoProviders } from './providers/media-providers.js';

@@ -126,7 +126,13 @@ export class LlmService {
   async markAbandoned(now: Date = new Date()): Promise<number> {
     const cutoff = new Date(now.getTime() - this.options.providerTimeoutMs - ABANDON_GRACE_MS);
     const { count } = await this.prisma.aiInvocation.updateMany({
-      where: { status: 'started', startedAt: { lt: cutoff } },
+      // Video invocations stay `started` while their provider job is polled (M5 design §5): the
+      // video job layer records their outcome, never this sweep.
+      where: {
+        status: 'started',
+        startedAt: { lt: cutoff },
+        capability: { not: 'video_generation' },
+      },
       data: {
         status: 'outcome_unknown',
         completedAt: now,

@@ -390,4 +390,22 @@ describe('abandoned invocations', () => {
     });
     expect((await invocationOf(recent)).status).toBe('started');
   });
+
+  it('leaves video invocations alone: they stay started while the provider job is polled (M5)', async () => {
+    const video = context();
+    const model = await prisma.aiModel.findFirstOrThrow({ where: { modelKey: 'mock/echo' } });
+    await prisma.aiInvocation.create({
+      data: {
+        projectId,
+        capability: 'video_generation',
+        providerId: model.providerId,
+        modelId: model.id,
+        requestSummary: {},
+        correlationId: video.correlationId,
+        startedAt: new Date(Date.now() - 3_600_000),
+      },
+    });
+    expect(await llm.markAbandoned()).toBe(0);
+    expect((await invocationOf(video)).status).toBe('started');
+  });
 });

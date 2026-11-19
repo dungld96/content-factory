@@ -31,6 +31,10 @@ export const aiProviderEnvShape = {
   OPENROUTER_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(120_000),
   /** Per image call (M4 design §3.2): image generation can take minutes. */
   OPENROUTER_IMAGE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(240_000),
+  /** Per video HTTP call (M5: submit, status read, download); the job itself is polled. */
+  OPENROUTER_VIDEO_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(120_000),
+  /** Per TTS call (M5, synchronous). */
+  OPENROUTER_TTS_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(120_000),
   /** Send app attribution headers (public rankings). Off by default: they identify the deployment. */
   OPENROUTER_APP_ATTRIBUTION: booleanStringSchema.default(false),
   OPENROUTER_APP_URL: z.preprocess(emptyAsUndefined, z.url().optional()),

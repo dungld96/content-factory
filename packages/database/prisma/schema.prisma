@@ -636,6 +636,13 @@ enum AiPriceMetric {
   input_pixels
   output_image_tokens
   input_image_tokens
+  // Video and TTS (M5; docs/design/m5/openrouter-video-tts-verification.md)
+  /// Per output second; variant = resolution and audio (e.g. `720p-silent`).
+  output_video_seconds
+  /// Video models billed by token: recorded, no estimate before the call.
+  output_video_tokens
+  /// TTS priced per input character.
+  input_characters
 
   @@map("ai_price_metric")
 }
@@ -720,6 +727,8 @@ model AiModel {
   /// Image models (M4): { maxImages, maxReferences, aspectRatios[], resolutions[], seed } from
   /// the provider's endpoint record; null for other capabilities.
   imageConstraints    Json?            @map("image_constraints") @db.JsonB
+  /// Video or TTS limits (M5): `{ kind: "video" | "tts", … }` from the catalog record.
+  mediaConstraints    Json?            @map("media_constraints") @db.JsonB
   createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
