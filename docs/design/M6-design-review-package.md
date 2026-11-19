@@ -1,7 +1,7 @@
 # M6 Design Review Package — Rendering and Export
 
-- Status: **Revision 1, proposed (2026-11-19)** — waiting for owner review. Questions 1–5 answered
-  with the recommended defaults (owner, 2026-11-19); they appear below as X3–X7.
+- Status: **Revision 1, approved by the owner (2026-11-19)**: X1–X12 as proposed (questions 1–5
+  answered with the recommended defaults: X3–X7). Implemented in slices M6a–M6d (§15).
 - Date: 2026-11-19
 - Baseline: M5 approved (`5f9aed6`); ADR-0006 (object storage), ADR-0012 (ledger), ADR-0013
   (jobs), ADR-0016 (keyframes), ADR-0017 (async provider jobs)

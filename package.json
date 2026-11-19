@@ -41,6 +41,7 @@
     "db:bootstrap": "pnpm build:packages && pnpm --filter @acf/database db:bootstrap",
     "db:setup": "pnpm build:packages && pnpm --filter @acf/database db:setup",
     "db:seed": "pnpm build:packages && pnpm --filter @acf/api build && pnpm --filter @acf/api seed",
+    "media:selftest": "pnpm --filter @acf/media build && node packages/media/dist/selftest-cli.js",
     "user:create": "pnpm build:packages && pnpm --filter @acf/api build && pnpm --filter @acf/api user create",
     "user:set-password": "pnpm build:packages && pnpm --filter @acf/api build && pnpm --filter @acf/api user set-password",
     "user:disable": "pnpm build:packages && pnpm --filter @acf/api build && pnpm --filter @acf/api user disable",
