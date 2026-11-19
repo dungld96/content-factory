@@ -240,6 +240,71 @@ test('editor: voice profile → clips → voice-over (gate 4)', async ({ page })
   );
 });
 
+test('editor: render → QC → approve (gate 5) → export the package', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openDemoContent(page, EDITOR, passwordOf('EDITOR'));
+  // Every scene has a clip and a voice-over: the workspace opens on the render tab.
+  await expect(page.getByRole('tab', { name: /^Render & export/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  const panel = page.getByLabel('Render controls');
+  await expect(panel.getByLabel('Render readiness')).toContainText('Ready:');
+  await expect(panel).toContainText('upscaled from'); // mock clips are below 1080×1920
+  await panel.getByRole('button', { name: 'Render video' }).click();
+  await expect(page.getByText('Render queued.')).toBeVisible();
+
+  // The worker renders with FFmpeg (mixed scenes, narration, captions, loudness) and runs QC.
+  const card = page.getByRole('article', { name: 'Render 1' });
+  await expect
+    .poll(
+      async () => {
+        await page.reload();
+        await expect(page.getByLabel('Render controls')).toBeVisible();
+        return (await card.count()) > 0 ? card.innerText() : '';
+      },
+      { timeout: 180_000, intervals: [2_000] },
+    )
+    .toContain('Review required');
+  await expect(card).toContainText('✓ Passed');
+  await expect(card).toContainText('1080×1920');
+  await expect(card.getByLabel('Cost summary')).toContainText('rendering $0');
+
+  // The video streams through the API with Range support (Chromium here has no H.264 decoder).
+  const src = await card.locator('video').getAttribute('src');
+  const head = await page.request.get(src ?? '', { headers: { range: 'bytes=0-15' } });
+  expect(head.status()).toBe(206);
+  expect(head.headers()['content-type']).toBe('video/mp4');
+
+  await card.getByRole('button', { name: 'Approve render' }).click();
+  await expect(card).toContainText('Current export');
+  await expect(page.getByLabel('Content status')).toHaveText('Approved');
+  await card.getByRole('button', { name: 'Export package' }).click();
+  await expect(page.getByLabel('Content status')).toHaveText('Exported');
+
+  const downloads = card.getByRole('list', { name: 'Package downloads' });
+  for (const name of [
+    'video.mp4',
+    'captions.srt',
+    'thumbnail.jpg',
+    'manifest.json',
+    'cost-report.json',
+  ]) {
+    await expect(downloads.getByRole('link', { name })).toBeVisible();
+  }
+  const srt = await page.request.get(
+    (await downloads.getByRole('link', { name: 'captions.srt' }).getAttribute('href')) ?? '',
+  );
+  expect(await srt.text()).toMatch(/^1\n00:00:00,000 --> /);
+  const manifest = (await (
+    await page.request.get(
+      (await downloads.getByRole('link', { name: 'manifest.json' }).getAttribute('href')) ?? '',
+    )
+  ).json()) as { outputs: { role: string }[]; review: { status: string } };
+  expect(manifest.outputs.map((o) => o.role)).toEqual(['video', 'subtitles', 'thumbnail']);
+  expect(manifest.review.status).toBe('approved');
+});
+
 test('viewer: sees the versions but no generate, edit or review controls', async ({ page }) => {
   await openDemoContent(page, VIEWER, passwordOf('VIEWER'));
   const noControls = async () => {
@@ -264,6 +329,10 @@ test('viewer: sees the versions but no generate, edit or review controls', async
   await expect(page.getByLabel('Voice-over gate')).toHaveText(
     'Every scene with text has a voice-over',
   );
+  await noControls();
+  await openTab(page, /^Render & export/);
+  await expect(page.getByRole('article', { name: 'Render 1' })).toContainText('Current export');
+  await expect(page.getByRole('button', { name: /Render video|Export package/ })).toHaveCount(0);
   await noControls();
   await openTab(page, /^Activity/);
   await expect(page.getByRole('list', { name: 'Version history' })).toContainText(

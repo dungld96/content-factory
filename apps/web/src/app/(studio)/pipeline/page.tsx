@@ -14,8 +14,9 @@ const COLUMNS: readonly { readonly stage: Stage; readonly hint: string }[] = [
   { stage: 'draft', hint: 'Brief ready for a script' },
   { stage: 'script', hint: 'Gate 1: script approval' },
   { stage: 'storyboard', hint: 'Gate 2: storyboard approval' },
-  { stage: 'images', hint: 'Gate 3: one keyframe per scene' },
-  { stage: 'done', hint: 'All gates approved' },
+  { stage: 'images', hint: 'Gates 3–4: keyframes, clips and voice-overs' },
+  { stage: 'render', hint: 'Gate 5: render review' },
+  { stage: 'done', hint: 'Approved or exported' },
 ];
 
 function Card({ item }: { readonly item: WorkspaceContent }) {

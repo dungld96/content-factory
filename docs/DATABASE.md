@@ -107,6 +107,19 @@ the asset cannot lose its approval while selected), `AC008` extended (a selected
 cannot be archived). The selection triggers read the asset `FOR SHARE`. Verified by
 `packages/database/test/media.integration.test.ts`.
 
+## 0.6 Implemented schema (M6: renders)
+
+Migrations `m6_job_kinds` (enum value) and `m6_renders` (design: `docs/design/M6-design-review-package.md` §4, §9; ADR-0018):
+
+| Table / column | Purpose |
+|---|---|
+| `generation_job_kind` += `render` | One active render per content item (`active_key = {contentItemId}:render`); no scene, no result version, no ledger rows. Jobs name the registry model `local/ffmpeg-render` (provider `local`, kind `direct`, no capability or price), created on first use. |
+| `renders` | One render: frozen `manifest` (per scene: clip, voice-over, keyframe, durations, text, source models; music and its licence note) and `settings` (output spec, captions, loudness, renderer version), `execution_key` (reuse), outputs (`video_asset_id`, `subtitle_asset_id`, `thumbnail_asset_id`, `duration_ms`, set together and once), `qc` (set once, also on a failed QC), `upscaled_from`, gate-5 review (`review_status`, reviewer, time, note: once) and export (`exported_at`/`_by_id`: once, approved renders only). Never deleted (`AC012`). |
+| `content_items.approved_render_id` | Gate 5: the approved render of this item (composite FK to `renders(content_item_id, id)`; trigger `AC017`: the render must be approved). |
+| `asset_inputs.role` += `clip`, `voiceover`, `music` | A render's inputs; the thumbnail links its keyframe (`keyframe`). |
+
+Verified by `packages/database/test/renders.integration.test.ts`.
+
 ## 1. Entity groups
 
 ### Identity and workspace

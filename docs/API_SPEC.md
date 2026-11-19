@@ -483,18 +483,37 @@ Errors: `415 UNSUPPORTED_MEDIA` (not PNG/JPEG/WebP by its bytes), `415 MEDIA_TYP
 ASSET_CONTENT_MISSING` (a metadata-only asset registered before M4), `503 STORAGE_NOT_CONFIGURED`,
 `503 STORAGE_UNAVAILABLE` (retryable).
 
-Planned for later milestones:
+### Renders and export (implemented in M6)
 
-- `GET /content/:contentId/assets`
-- `GET /assets/:assetId`
-- `POST /assets/:assetId/approve`
-- `POST /assets/:assetId/reject`
-- `POST /content/:contentId/renders`
-- `GET /renders/:renderId`
-- `POST /renders/:renderId/approve`
-- `GET /renders/:renderId/download`
+Design: `docs/design/M6-design-review-package.md` §4–§11 (deviations §16), ADR-0018. Schemas:
+`packages/contracts/src/renders.ts`. A render assembles the chosen clip and voice-over of every
+scene of the approved storyboard into one 1080×1920 H.264/AAC MP4 with captions (burned in and
+SRT) and optional ducked music, normalised to −14 LUFS; the worker renders it locally with FFmpeg
+(no provider, no cost) and runs automated QC.
 
-Downloads should use short-lived signed URLs.
+| Endpoint | Viewer | Editor/Owner | Notes |
+|---|:-:|:-:|---|
+| `GET /content/:contentId/render-plan` | ✓ | ✓ | Preflight: scenes with chosen clip/voice-over/keyframe, `blockers` (empty = ready), `upscaledFrom`, approved music uploads, `renderInProgress` |
+| `POST /content/:contentId/renders` | 403 | 202 | `{ captions?: { burnIn }, music?: { assetId, volumeDb? }, regenerate? }` → `{ render, reused }`; an identical queued/running/succeeded render is returned (`reused: true`) |
+| `GET /content/:contentId/renders` | ✓ | ✓ | Newest first, with status, stage, QC, review, `isApproved` |
+| `GET /renders/:renderId` | ✓ | ✓ | Status (from the job), last stage, outputs (video, subtitles, thumbnail assets), QC report, review, export |
+| `POST /renders/:renderId/approve` | 403 | 200 | `{ note? }`: gate 5; the render becomes `content_items.approved_render_id`; status → `approved` |
+| `POST /renders/:renderId/reject` | 403 | 200 | `{ note }` required; status → `asset_review` |
+| `POST /renders/:renderId/export` | 403 | 200 | Approved renders only (idempotent); status → `exported` |
+| `GET /renders/:renderId/manifest` | ✓ | ✓ | Package manifest: frozen inputs (assets, models), settings, QC, output checksums, approved script |
+| `GET /renders/:renderId/cost-report` | ✓ | ✓ | Every AI call of the content item by stage, the subtotal behind this render's assets, `renderCostUsd: "0"`; unknown costs counted, never 0 |
+
+Package files are downloaded separately: the video, SRT and thumbnail through
+`GET /assets/:assetId/content` (Range), the manifest and cost report as JSON.
+
+Errors: `409 STORYBOARD_NOT_APPROVED`, `CLIPS_INCOMPLETE`, `VOICEOVERS_INCOMPLETE`,
+`VOICEOVER_EXCEEDS_SCENE`, `INPUT_FILE_MISSING`, `STORAGE_NOT_CONFIGURED` (the first preflight
+blocker; the plan is in `error.current`), `409 RENDER_IN_PROGRESS`, `409 INVALID_PIPELINE_STATE`,
+`422 MUSIC_INVALID` (not an approved `music` upload of the project), `409 RENDER_NOT_REVIEWABLE`
+(not finished, or already reviewed), `409 RENDER_NOT_APPROVED` (export before approval; AC017).
+Render job errors: `REFERENCE_MISSING`, `RENDER_INPUT_INVALID`, `RENDER_QC_FAILED` (the QC report is
+kept on the render), `MEDIA_TOOLS_MISSING`. Canceling the run (`POST /production-runs/:runId/cancel`)
+returns the item to the status the render started from.
 
 ## 8. Cost and model registry
 

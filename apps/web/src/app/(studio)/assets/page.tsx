@@ -19,6 +19,8 @@ const TYPES = [
   { value: 'image', label: 'Generated images' },
   { value: 'video', label: 'Clips' },
   { value: 'audio', label: 'Audio' },
+  { value: 'render', label: 'Renders' },
+  { value: 'subtitle', label: 'Subtitles' },
 ] as const;
 
 /** Reference images, generated images, clips and audio with their provenance (prototype "Asset library"). */

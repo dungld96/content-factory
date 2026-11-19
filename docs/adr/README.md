@@ -22,6 +22,7 @@ numbered sequentially. Never rewrite an accepted ADR — supersede it with a new
 | [0015](0015-content-masters-and-format-registries.md) | Content masters, variants and format/platform registries | Accepted (M3.5 review, R0) |
 | [0016](0016-scene-image-generation-and-keyframes.md) | Scene image generation, keyframes and the first image provider | Accepted (M4 package, rev. 1) |
 | [0017](0017-async-provider-jobs.md) | Asynchronous provider jobs (video) and text-to-speech | Accepted (M5 package, rev. 1) |
+| [0018](0018-local-rendering-and-export.md) | Local FFmpeg rendering, automated QC and render approval (gate 5) | Accepted (M6 package, rev. 1) |
 
 ## Template
 

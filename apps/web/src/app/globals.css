@@ -1814,6 +1814,37 @@ input.filter {
   }
 }
 
+/* --- Render & export (M6) ------------------------------------------------------------------ */
+.render-body {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.render-player {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  background: #000;
+  border-radius: 10px;
+  object-fit: contain;
+}
+
+.render-side h4 {
+  margin: 0 0 6px;
+  font: 700 12px var(--font-display);
+}
+
+.render-side > * + h4 {
+  margin-top: 14px;
+}
+
+@media (max-width: 720px) {
+  .render-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* --- Masters ------------------------------------------------------------------------------- */
 .master-hero {
   display: flex;

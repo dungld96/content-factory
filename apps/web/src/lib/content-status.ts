@@ -62,6 +62,7 @@ const GENERATING: ReadonlySet<ContentStatus> = new Set([
   'scripting',
   'storyboarding',
   'generating_assets',
+  'rendering',
 ]);
 
 export const isInProduction = (s: ContentStatus) => IN_PRODUCTION.has(s);

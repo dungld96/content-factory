@@ -147,6 +147,12 @@ Vision evaluation is not implemented yet.
 - User can replace voice or audio track.
 
 ### Stage 9 — Rendering
+
+*Implemented in M6* (`docs/design/M6-design-review-package.md`, ADR-0018): FFmpeg in the worker;
+1080×1920 30 fps H.264/AAC, hard cuts, captions from the voice-over text (burned in + SRT),
+optional ducked music, −14 LUFS; thumbnail from scene 1's keyframe. Publishing caption, hashtags
+and transitions are later (M8).
+
 - Normalize video dimensions, frame rate, codec, and audio.
 - Concatenate approved scenes.
 - Add subtitles and transitions.
@@ -155,6 +161,11 @@ Vision evaluation is not implemented yet.
 - Generate thumbnail and publishing metadata.
 
 ### Stage 10 — Quality control
+
+*Implemented in M6*: the automated checks below run after every render (FFprobe, `blackdetect`,
+`freezedetect`, `silencedetect`, `ebur128`); errors fail the render, warnings name the scene. The
+human checks are a checklist at gate 5 (render approval).
+
 Automated checks:
 - File readable.
 - Expected dimensions and aspect ratio.

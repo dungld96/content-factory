@@ -1,7 +1,7 @@
 # M6 Design Review Package — Rendering and Export
 
 - Status: **Revision 1, approved by the owner (2026-11-19)**: X1–X12 as proposed (questions 1–5
-  answered with the recommended defaults: X3–X7). Implemented in slices M6a–M6d (§15).
+  answered with the recommended defaults: X3–X7). Implemented in slices M6a–M6d (§15; deviations §16, ADR-0018).
 - Date: 2026-11-19
 - Baseline: M5 approved (`5f9aed6`); ADR-0006 (object storage), ADR-0012 (ledger), ADR-0013
   (jobs), ADR-0016 (keyframes), ADR-0017 (async provider jobs)
@@ -258,3 +258,24 @@ No paid calls: rendering uses only local FFmpeg; inputs in tests come from the M
 | M6b   | Migration (`render` job kind, `renders`, gate-5 pointer, asset roles); worker render processor; worker integration tests                          |
 | M6c   | API: render plan, render, list/detail, approve/reject, export, manifest and cost report; status transitions; permission matrix                    |
 | M6d   | Web: Render tab, render detail, package downloads; E2E; docs (API_SPEC, DATABASE, CONTENT_PIPELINE), ADR-0018                                     |
+
+## 16. Implementation deviations (recorded at delivery, M6a–M6d)
+
+X1–X12 hold. These details changed during implementation:
+
+| #   | Package said                                       | Implemented                                                                                                                                  | Why                                                                                                                      |
+| --- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Render jobs have no provider                       | Jobs name the registry model `local/ffmpeg-render` (provider `local`, kind `direct`, no capability, no price), created on first use          | `generation_jobs.model_id` is required; a named local model keeps every job traceable without making the column nullable |
+| 2   | Check every filter against the deploy image in M6a | `pnpm media:selftest` renders and QCs a synthetic video with all features; DEPLOYMENT.md runs it in the deploy image after each deploy       | The Debian mirror is not reachable from the build session (egress policy); the self-test runs where the image runs       |
+| 3   | Fonts in `packages/media/fonts/`                   | Font in `packages/media/fonts/caption/`, licence one level up                                                                                | libass loads every file in the fonts directory                                                                           |
+| 4   | `script.txt` in the package                        | The approved script is part of `manifest.json`                                                                                               | One machine-readable file; no archive dependency                                                                         |
+| 5   | Preflight blockers                                 | Plus `INPUT_FILE_MISSING` and `STORAGE_NOT_CONFIGURED`; `POST …/renders` answers 409 with the first blocker's code and the plan              | A render must not be queued for files that are not stored                                                                |
+| 6   | Reuse of succeeded renders                         | Also returns an identical queued/running render (`reused: true`); `regenerate` while one runs → `409 RENDER_IN_PROGRESS`                     | Avoids a second identical encode                                                                                         |
+| 7   | —                                                  | Scene media can be reworked from `quality_review`, `approved` and `exported`; the approved render stays the export until another is approved | Rework after review is normal                                                                                            |
+| 8   | Pipeline board columns already exist               | Added the "Render & quality" column; "Scene images" now covers gates 3–4                                                                     | Items in `rendering`/`quality_review` were not shown on the board                                                        |
+| 9   | Thumbnail = scene 1's keyframe                     | Falls back to the render's first frame when scene 1 has no keyframe                                                                          | Imported or legacy scenes                                                                                                |
+| 10  | —                                                  | Approving or exporting when the item moved on (e.g. new scene work) records the decision on the render and keeps the item's status           | Status reflects the current work                                                                                         |
+
+M6 status: all slices delivered and tested (unit, media with real FFmpeg, database, worker and API
+integration, permission matrix, Playwright E2E rendering the demo item with mock media and real
+FFmpeg). Awaiting owner review.

@@ -4,6 +4,9 @@ import { notFound, redirect } from 'next/navigation';
 
 import type {
   AiModelDto,
+  CostReportDto,
+  RenderListDto,
+  RenderPlanDto,
   ContentItemDto,
   ContentMasterDto,
   GenerationJobDto,
@@ -35,6 +38,7 @@ import {
   SceneEditor,
   ScriptEditor,
 } from './pipeline-controls';
+import { RenderPanel } from './render-panel';
 import { SceneClipsPanel } from './scene-clips';
 import { ResyncBriefButton, SceneImagesPanel } from './scene-images';
 import { SceneVoiceoversPanel } from './scene-voiceovers';
@@ -43,7 +47,7 @@ import { WorkspaceTabs } from './workspace-tabs';
 export const metadata: Metadata = { title: 'Content · Content Studio' };
 export const dynamic = 'force-dynamic';
 
-type TabId = 'script' | 'storyboard' | 'keyframes' | 'clips' | 'voiceover' | 'activity';
+type TabId = 'script' | 'storyboard' | 'keyframes' | 'clips' | 'voiceover' | 'render' | 'activity';
 
 interface Step {
   readonly label: string;
@@ -217,6 +221,8 @@ export default async function ContentPage({
     profiles,
     imageModels,
     videoModels,
+    renderPlan,
+    renderList,
   ] = await Promise.all([
     apiGet<ProjectDto>(`/projects/${content.projectId}`),
     apiGet<Page<ScriptVersionDto>>(`/content/${contentId}/scripts?limit=20`),
@@ -234,7 +240,17 @@ export default async function ContentPage({
     apiGet<VoiceProfileListDto>(`/projects/${content.projectId}/voice-profiles`),
     apiGet<Page<AiModelDto>>('/ai/models?capability=image_generation&status=enabled&limit=100'),
     apiGet<Page<AiModelDto>>('/ai/models?capability=video_generation&status=enabled&limit=100'),
+    apiGet<RenderPlanDto>(`/content/${contentId}/render-plan`),
+    apiGet<RenderListDto>(`/content/${contentId}/renders`),
   ]);
+  const plan = renderPlan.kind === 'ok' ? renderPlan.data : null;
+  const renders = renderList.kind === 'ok' ? renderList.data.items : [];
+  const latestRender = renders[0];
+  const costReport =
+    latestRender?.status === 'succeeded'
+      ? await apiGet<CostReportDto>(`/renders/${latestRender.id}/cost-report`)
+      : null;
+  const approvedRender = renders.find((r) => r.isApproved);
   const optionsOf = (list: typeof imageModels) =>
     list.kind === 'ok'
       ? list.data.data.map((m) => ({ modelKey: m.modelKey, label: m.displayName }))
@@ -317,15 +333,31 @@ export default async function ContentPage({
         ? 'Locked'
         : `${String(clipCount)} clip(s) · ${String(voiceCount)} voice-over(s)`,
     },
-    { label: 'Export', done: false, note: 'Not available yet' },
+    {
+      label: 'Export',
+      done: content.status === 'exported',
+      note:
+        content.status === 'exported'
+          ? 'Exported'
+          : approvedRender
+            ? 'Approved, ready to export'
+            : renders.length > 0
+              ? 'Render review'
+              : plan?.blockers.length === 0
+                ? 'Ready to render'
+                : 'Locked',
+    },
   ];
+  const mediaDone = (videoData?.clipsComplete ?? false) && (voiceData?.voiceoversComplete ?? false);
   const initialTab: TabId = !approvedScript
     ? 'script'
     : !content.approvedStoryboardVersionId
       ? 'storyboard'
       : !keyframesDone
         ? 'keyframes'
-        : 'clips';
+        : !mediaDone
+          ? 'clips'
+          : 'render';
   const keyframeByScene = new Map(
     board && imageData && board.id === imageData.storyboardVersionId
       ? imageData.scenes.flatMap((s) => (s.keyframe ? [[s.sceneId, s.keyframe] as const] : []))
@@ -649,6 +681,24 @@ export default async function ContentPage({
     </section>
   );
 
+  const renderPanel = (
+    <section className="card work-card">
+      {!plan ? (
+        <p className="notice error" role="alert">
+          The render plan could not be loaded.
+        </p>
+      ) : (
+        <RenderPanel
+          contentId={content.id}
+          plan={plan}
+          renders={renders}
+          cost={costReport?.kind === 'ok' ? costReport.data : null}
+          canEdit={canEdit}
+        />
+      )}
+    </section>
+  );
+
   const events = activityOf(scriptList, storyboardList, imageData, [
     { kind: 'clip', scenes: videoData?.scenes ?? [] },
     { kind: 'voice-over', scenes: voiceData?.scenes ?? [] },
@@ -718,7 +768,18 @@ export default async function ContentPage({
         ? `${String(voiceCount)} of ${String(voiceScenes.length)} scenes chosen`
         : 'Unlocks after storyboard approval',
     },
-    { label: 'Render & export', done: false, note: 'Not available yet' },
+    {
+      label: 'Render & export',
+      done: content.status === 'exported',
+      note:
+        content.status === 'exported'
+          ? 'Exported'
+          : approvedRender
+            ? 'Render approved'
+            : renders.length > 0
+              ? `${String(renders.length)} render(s), review required`
+              : 'Unlocks with every clip and voice-over',
+    },
   ];
   const costs = [scriptJobData, storyboardJobData, ...imageJobs, ...clipJobs, ...voiceJobs].flatMap(
     (j) => (j ? [j.cost] : []),
@@ -776,6 +837,12 @@ export default async function ContentPage({
                   ? `${String(voiceCount)}/${String(voiceScenes.length)}`
                   : undefined,
                 panel: voiceoverPanel,
+              },
+              {
+                id: 'render',
+                label: 'Render & export',
+                badge: renders.length > 0 ? String(renders.length) : undefined,
+                panel: renderPanel,
               },
               { id: 'activity', label: 'Activity', panel: activityPanel },
             ]}

@@ -37,18 +37,19 @@ test('owner: overview, search, filters, pipeline board, masters and asset lineag
   await expect(library).toContainText('5 useful desk gadgets');
   await expect(library).not.toContainText('Standing desk tips');
 
-  // Status filter (URL-backed): the demo item waits for asset review.
+  // Status filter (URL-backed): the pipeline spec exported the demo item.
   await page.goto('/content');
-  await page.getByLabel('Status').selectOption({ label: 'Needs review' });
-  await expect(page).toHaveURL(/status=needs_review/);
+  await page.getByLabel('Status').selectOption({ label: 'Approved or exported' });
+  await expect(page).toHaveURL(/status=approved/);
   await expect(library).toContainText('5 useful desk gadgets');
   await expect(library).not.toContainText('Standing desk tips');
 
   // Pipeline board groups items by stage.
   await nav(page, 'Production pipeline').click();
-  await expect(page.getByRole('region', { name: 'Scene images' })).toContainText(
+  await expect(page.getByRole('region', { name: 'Approved' })).toContainText(
     '5 useful desk gadgets',
   );
+  await expect(page.getByRole('region', { name: 'Render & quality' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Draft' })).toContainText('Standing desk tips');
 
   // Content masters list.
@@ -68,10 +69,20 @@ test('owner: overview, search, filters, pipeline board, masters and asset lineag
   await page.getByLabel('Asset type').selectOption({ label: 'Generated images' });
   await expect(page).toHaveURL(/type=image/);
   await expect(assets.getByRole('button', { name: /desk-reference\.png/ })).toHaveCount(0);
-  await assets.getByRole('button').first().click();
+  // A scene image (the render's thumbnail is also a generated image, made by the renderer).
+  await assets
+    .getByRole('button', { name: /^Scene 1/ })
+    .first()
+    .click();
   await expect(lineage).toContainText('Generated image');
   await expect(lineage).toContainText('mock/solid-image');
   await expect(lineage).toContainText('Open content workspace');
+
+  // Renders (M6) are listed with their lineage: the local renderer, no provider cost.
+  await page.getByLabel('Asset type').selectOption({ label: 'Renders' });
+  await assets.getByRole('button').first().click();
+  await expect(lineage).toContainText('local/ffmpeg-render');
+  await expect(lineage).toContainText('Job cost$0');
 });
 
 test('owner: project settings and a new project', async ({ page }) => {
