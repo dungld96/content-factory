@@ -1,8 +1,19 @@
-import { Controller, Get, HttpCode, Patch, Post, Req, Res, StreamableFile } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Patch,
+  Post,
+  Req,
+  Res,
+  StreamableFile,
+} from '@nestjs/common';
 import type { Request, Response } from 'express';
 import type { z } from 'zod';
 
 import {
+  ApiErrorCode,
   assetIdParamsSchema,
   assetSchema,
   assetUsageSchema,
@@ -12,8 +23,10 @@ import {
   listSchema,
   pageSchema,
   projectIdParamsSchema,
+  STREAMABLE_MEDIA_TYPES,
   registerAssetRequestSchema,
   updateAssetRequestSchema,
+  UPLOADABLE_AUDIO_TYPES,
   UPLOADABLE_IMAGE_TYPES,
   uploadAssetQuerySchema,
   type AssetDto,
@@ -26,8 +39,10 @@ import {
 } from '@acf/contracts';
 
 import { CurrentActor, type Actor } from '../auth/actor.js';
+import { ApiError } from '../common/api-error.js';
 import { Endpoint, ValidBody, ValidParams, ValidQuery } from '../common/http/endpoint.js';
 import { IfMatch } from '../common/http/etag.js';
+import { parseRange, type RangeRequest } from '../common/http/range.js';
 import { AssetsService } from './assets.service.js';
 
 type ProjectParams = z.infer<typeof projectIdParamsSchema>;
@@ -57,11 +72,12 @@ export class AssetsController {
 
   @Post('projects/:projectId/assets/upload')
   @Endpoint({
-    summary: 'Upload an image (editor): the raw image is the request body (≤ 25 MB, PNG/JPEG/WebP)',
+    summary:
+      'Upload an image or audio file (editor): the raw file is the request body (≤ 25 MB; PNG/JPEG/WebP, MP3/WAV/M4A)',
     tags,
     params: projectIdParamsSchema,
     query: uploadAssetQuerySchema,
-    binaryBody: UPLOADABLE_IMAGE_TYPES,
+    binaryBody: [...UPLOADABLE_IMAGE_TYPES, ...UPLOADABLE_AUDIO_TYPES],
     responses: { 201: { description: 'Stored and registered', schema: assetSchema } },
     errors: [400, 401, 403, 404, 409, 413, 415, 422, 503],
   })
@@ -76,11 +92,13 @@ export class AssetsController {
 
   @Get('assets/:assetId/content')
   @Endpoint({
-    summary: "Stream an asset's bytes (viewer)",
+    summary: "Stream an asset's bytes (viewer); single byte ranges for audio/video seeking",
     tags,
     params: assetIdParamsSchema,
-    responses: { 200: { description: 'The file', binary: UPLOADABLE_IMAGE_TYPES } },
-    errors: [400, 401, 404, 503],
+    responses: {
+      200: { description: 'The file (206 for a byte range)', binary: STREAMABLE_MEDIA_TYPES },
+    },
+    errors: [400, 401, 404, 416, 503],
   })
   async content(
     @CurrentActor() actor: Actor,
@@ -88,18 +106,46 @@ export class AssetsController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<StreamableFile | undefined> {
-    const { asset, body } = await this.assets.content(actor, params.assetId);
+    const header = request.headers.range;
+    // The range is resolved once the asset (and its size) is known.
+    const requested: { parsed: RangeRequest } = { parsed: { kind: 'none' } };
+    const { asset, body, range } = await this.assets.content(actor, params.assetId, (a) => {
+      requested.parsed = parseRange(header, Number(a.sizeBytes));
+      const p = requested.parsed;
+      return p.kind === 'range' ? { start: p.start, end: p.end } : undefined;
+    });
+    const size = Number(asset.sizeBytes);
     const etag = `"${asset.checksumSha256}"`;
     response.setHeader('ETag', etag);
     response.setHeader('Cache-Control', 'private, max-age=300');
-    if (request.headers['if-none-match'] === etag) {
+    response.setHeader('Accept-Ranges', 'bytes');
+    if (requested.parsed.kind === 'unsatisfiable') {
+      body.stream.destroy();
+      response.setHeader('Content-Range', `bytes */${String(size)}`);
+      throw new ApiError({
+        status: HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE,
+        code: ApiErrorCode.RangeNotSatisfiable,
+        message: 'The requested byte range is outside the file.',
+      });
+    }
+    if (!range && request.headers['if-none-match'] === etag) {
       body.stream.destroy();
       response.status(304);
       return undefined;
     }
     response.setHeader('Content-Type', asset.mimeType);
-    response.setHeader('Content-Length', String(body.sizeBytes));
     response.setHeader('Content-Disposition', 'inline');
+    if (range) {
+      const end = range.end ?? size - 1;
+      response.status(206);
+      response.setHeader(
+        'Content-Range',
+        `bytes ${String(range.start)}-${String(end)}/${String(size)}`,
+      );
+      response.setHeader('Content-Length', String(end - range.start + 1));
+    } else {
+      response.setHeader('Content-Length', String(body.sizeBytes));
+    }
     return new StreamableFile(body.stream);
   }
 

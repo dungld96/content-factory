@@ -234,4 +234,13 @@ describe('storage variables (M4a)', () => {
       EnvValidationError,
     );
   });
+  it('defaults the media tools and the audio upload limit (M5a)', () => {
+    expect(loadApiEnv(valid)).toMatchObject({
+      FFPROBE_PATH: 'ffprobe',
+      FFMPEG_PATH: 'ffmpeg',
+      MEDIA_TOOL_TIMEOUT_MS: 30_000,
+      UPLOAD_MAX_AUDIO_BYTES: 25 * 1024 * 1024,
+    });
+    expect(() => loadApiEnv({ ...valid, MEDIA_TOOL_TIMEOUT_MS: '10' })).toThrow(EnvValidationError);
+  });
 });

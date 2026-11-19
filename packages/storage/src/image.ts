@@ -118,11 +118,20 @@ export function inspectImage(
   return { mimeType, width, height, sizeBytes: bytes.byteLength, sha256Hex: sha256Hex(bytes) };
 }
 
-const EXTENSION: Readonly<Record<ImageMimeType, string>> = {
+/** File extensions of the media types the platform stores (images M4; audio and video M5). */
+const EXTENSION = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
-};
+  'audio/mpeg': 'mp3',
+  'audio/wav': 'wav',
+  'audio/mp4': 'm4a',
+  'audio/aac': 'aac',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
+} as const;
+export type StoredMimeType = keyof typeof EXTENSION;
 
 /**
  * Immutable, content-addressed key (M4 design §4.1):
@@ -132,7 +141,7 @@ export function assetObjectKey(input: {
   readonly projectId: string;
   readonly assetId: string;
   readonly sha256Hex: string;
-  readonly mimeType: ImageMimeType;
+  readonly mimeType: StoredMimeType;
 }): string {
   return `projects/${input.projectId}/assets/${input.assetId}/${input.sha256Hex}.${EXTENSION[input.mimeType]}`;
 }

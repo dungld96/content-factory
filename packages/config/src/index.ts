@@ -10,4 +10,5 @@ export {
   type StorageEnv,
   type StorageSettings,
 } from './storage-env.js';
+export { mediaEnvShape, mediaTools, type MediaEnv } from './media-env.js';
 export { loadWorkerEnv, workerEnvSchema, type WorkerEnv } from './worker-env.js';

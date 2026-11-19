@@ -53,6 +53,10 @@ describe('assetObjectKey', () => {
         mimeType: 'image/jpeg',
       }),
     ).toBe(`projects/p/assets/a/${'ab'.repeat(32)}.jpg`);
+    const key = (mimeType: 'video/mp4' | 'audio/mpeg') =>
+      assetObjectKey({ projectId: 'p', assetId: 'a', sha256Hex: 'cd'.repeat(32), mimeType });
+    expect(key('video/mp4')).toMatch(/\.mp4$/);
+    expect(key('audio/mpeg')).toMatch(/\.mp3$/);
   });
 });
 

@@ -98,6 +98,14 @@ export const ApiErrorCode = {
   ReferenceFileMissing: 'REFERENCE_FILE_MISSING',
   /** A keyframe must be an approved, active image of the scene's content item (AC015). */
   KeyframeInvalid: 'KEYFRAME_INVALID',
+
+  // --- M5a: media tools, audio upload, ranges (M5 design package §7.3, §8) ---
+  /** FFprobe/FFmpeg is not installed on this deployment. */
+  MediaToolsMissing: 'MEDIA_TOOLS_MISSING',
+  /** Music uploads need a licence note (source and terms of use). */
+  LicenseNoteRequired: 'LICENSE_NOTE_REQUIRED',
+  /** The requested byte range is outside the file. */
+  RangeNotSatisfiable: 'RANGE_NOT_SATISFIABLE',
   /** Only images and references can be reviewed. */
   AssetNotReviewable: 'ASSET_NOT_REVIEWABLE',
 

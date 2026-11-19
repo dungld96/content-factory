@@ -9,6 +9,12 @@ Exact commands to run the platform locally. Every command runs from the reposito
 | Node.js             | ≥ 22.12 (see `.nvmrc`)                      | `node -v`                        |
 | pnpm                | 10.x (pinned via `packageManager`: 10.28.0) | `pnpm -v` (or `corepack enable`) |
 | Docker + Compose v2 | recent                                      | `docker compose version`         |
+| FFmpeg (+ FFprobe)  | ≥ 5.1, with libx264 and libmp3lame (M5)     | `ffprobe -version`               |
+
+FFmpeg validates every audio and video file (M5) and the mock video/TTS providers use it to
+make real test files. Install it from your package manager (`apt-get install ffmpeg`,
+`brew install ffmpeg`). Without it, audio uploads and video/audio generation answer
+`503 MEDIA_TOOLS_MISSING`; set `FFPROBE_PATH`/`FFMPEG_PATH` if the binaries are not on `PATH`.
 
 ## First-time setup
 

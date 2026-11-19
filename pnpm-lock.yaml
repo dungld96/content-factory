@@ -74,6 +74,9 @@ importers:
       '@acf/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@acf/media':
+        specifier: workspace:*
+        version: link:../../packages/media
       '@acf/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -208,6 +211,9 @@ importers:
       '@acf/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@acf/media':
+        specifier: workspace:*
+        version: link:../../packages/media
       '@acf/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -281,6 +287,12 @@ importers:
       prisma:
         specifier: 7.10.1
         version: 7.10.1(@types/node@22.20.5)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(magicast@0.5.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3)
+
+  packages/media:
+    dependencies:
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
   packages/storage:
     dependencies:

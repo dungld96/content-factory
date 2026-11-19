@@ -154,7 +154,7 @@ Deliverables:
 - Scene-level retries.
 - Usage/cost records.
 
-Design: `docs/design/M5-design-review-package.md` (revision 1, proposed; decisions V1–V12),
+Design: `docs/design/M5-design-review-package.md` (revision 1, approved 2026-11-19; decisions V1–V12),
 provider facts in `docs/design/m5/openrouter-video-tts-verification.md`.
 
 Acceptance:

@@ -14,12 +14,19 @@ import {
   type UpdateAssetRequest,
   type UploadAssetQuery,
 } from '@acf/contracts';
-import type { ApiEnv } from '@acf/config';
+import { mediaTools, type ApiEnv } from '@acf/config';
+import {
+  inspectAudio,
+  MediaToolsMissingError,
+  MediaValidationError,
+  type InspectedAudio,
+} from '@acf/media';
 import {
   assetObjectKey,
   ImageValidationError,
   inspectImage,
   uuidv7,
+  type ByteRange,
   type ObjectBody,
 } from '@acf/storage';
 import { Prisma, type Asset } from '@acf/database';
@@ -223,9 +230,9 @@ export class AssetsService {
   }
 
   /**
-   * Raw-body image upload (M4 design §4.2): validate the bytes (magic bytes decide the type),
-   * write them write-once under a content-addressed key, then insert the asset. A failed insert
-   * leaves a private orphan object (swept in M7).
+   * Raw-body upload (M4 design §4.2, M5 §7.3): validate the bytes (magic bytes decide the type;
+   * FFprobe for audio), write them write-once under a content-addressed key, then insert the
+   * asset. A failed insert leaves a private orphan object (swept in M7).
    */
   async upload(
     actor: Actor,
@@ -243,32 +250,72 @@ export class AssetsService {
       if (!item) throw referenceNotFound('content item');
       if (item.archivedAt) throw archived('content item');
     }
-    const limit = this.env.UPLOAD_MAX_IMAGE_BYTES;
+    if (query.assetType === 'audio' && query.purpose === 'music' && !query.licenseNote) {
+      throw new ApiError({
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        code: ApiErrorCode.LicenseNoteRequired,
+        message: 'Music needs a licence note: where it comes from and its terms of use.',
+      });
+    }
+    const audio = query.assetType === 'audio';
+    const limit = audio ? this.env.UPLOAD_MAX_AUDIO_BYTES : this.env.UPLOAD_MAX_IMAGE_BYTES;
+    const kind = audio ? 'audio' : 'image';
     const declaredLength = Number(request.headers['content-length']);
     if (Number.isFinite(declaredLength) && declaredLength > limit)
-      throw mediaError('MEDIA_TOO_LARGE');
-    const bytes = await readBody(request, limit);
-    const contentType = request.headers['content-type'];
-    let image;
-    try {
-      image = inspectImage(bytes, typeof contentType === 'string' ? contentType : null, {
-        maxBytes: limit,
-      });
-    } catch (error) {
-      if (error instanceof ImageValidationError) throw mediaError(error.code, error.message);
-      throw error;
+      throw mediaError('MEDIA_TOO_LARGE', kind);
+    const bytes = await readBody(request, limit, kind);
+    const header = request.headers['content-type'];
+    const contentType = typeof header === 'string' ? header : null;
+
+    let file: {
+      mimeType: Parameters<typeof assetObjectKey>[0]['mimeType'];
+      sizeBytes: number;
+      sha256Hex: string;
+      width: number | null;
+      height: number | null;
+      durationMs: number | null;
+      metadata: Prisma.InputJsonObject;
+    };
+    if (audio) {
+      const inspected = await this.inspectAudio(bytes, contentType, limit);
+      file = {
+        ...inspected,
+        width: null,
+        height: null,
+        metadata: {
+          purpose: query.purpose ?? null,
+          audio: {
+            codec: inspected.codec,
+            sampleRate: inspected.sampleRate,
+            channels: inspected.channels,
+            bitRate: inspected.bitRate,
+          },
+        },
+      };
+    } else {
+      let image;
+      try {
+        image = inspectImage(bytes, contentType, { maxBytes: limit });
+      } catch (error) {
+        if (error instanceof ImageValidationError) {
+          throw mediaError(error.code, 'image', error.message);
+        }
+        throw error;
+      }
+      file = { ...image, durationMs: null, metadata: {} };
     }
+
     const id = uuidv7();
     const storageKey = assetObjectKey({
       projectId,
       assetId: id,
-      sha256Hex: image.sha256Hex,
-      mimeType: image.mimeType,
+      sha256Hex: file.sha256Hex,
+      mimeType: file.mimeType,
     });
     try {
       await store.putIfAbsent(storageKey, bytes, {
-        contentType: image.mimeType,
-        sha256Hex: image.sha256Hex,
+        contentType: file.mimeType,
+        sha256Hex: file.sha256Hex,
       });
     } catch (error) {
       storageFailure(error);
@@ -279,33 +326,58 @@ export class AssetsService {
         projectId,
         assetType: query.assetType,
         sourceType: 'upload',
+        sourceNote: query.licenseNote ?? null,
         storageKey,
-        mimeType: image.mimeType,
-        sizeBytes: BigInt(image.sizeBytes),
-        checksumSha256: image.sha256Hex,
-        width: image.width,
-        height: image.height,
+        mimeType: file.mimeType,
+        sizeBytes: BigInt(file.sizeBytes),
+        checksumSha256: file.sha256Hex,
+        width: file.width,
+        height: file.height,
+        durationMs: file.durationMs,
         originalFilename: query.filename ?? null,
         contentItemId: query.contentItemId ?? null,
         label: query.label ?? null,
-        metadata: {},
+        metadata: file.metadata,
         createdById: actor.userId,
       },
     });
     return toAssetDto(asset);
   }
 
-  /** The asset's bytes, for streaming (viewer+). `null` range = whole object. */
+  private async inspectAudio(
+    bytes: Uint8Array,
+    contentType: string | null,
+    limit: number,
+  ): Promise<InspectedAudio> {
+    try {
+      return await inspectAudio(bytes, contentType, {
+        maxBytes: limit,
+        tools: mediaTools(this.env),
+      });
+    } catch (error) {
+      if (error instanceof MediaValidationError)
+        throw mediaError(error.code, 'audio', error.message);
+      if (error instanceof MediaToolsMissingError) throw mediaToolsMissing();
+      throw error;
+    }
+  }
+
+  /**
+   * The asset's bytes, for streaming (viewer+). `range` = one satisfiable byte range of the file
+   * (resolved by the controller against `asset.sizeBytes`); absent = the whole object.
+   */
   async content(
     actor: Actor,
     assetId: string,
-  ): Promise<{ readonly asset: Asset; readonly body: ObjectBody }> {
+    range?: (asset: Asset) => ByteRange | undefined,
+  ): Promise<{ readonly asset: Asset; readonly body: ObjectBody; readonly range?: ByteRange }> {
     const asset = await this.load(assetId);
     await this.access.require(actor, asset.projectId, 'viewer');
     const store = this.storage.require();
+    const wanted = range?.(asset);
     let body: ObjectBody | null;
     try {
-      body = await store.get(asset.storageKey);
+      body = await store.get(asset.storageKey, wanted);
     } catch (error) {
       storageFailure(error);
     }
@@ -316,7 +388,7 @@ export class AssetsService {
         message: 'The asset is registered, but its file is not in storage.',
       });
     }
-    return { asset, body };
+    return wanted ? { asset, body, range: wanted } : { asset, body };
   }
 
   async list(
@@ -519,16 +591,22 @@ const MEDIA_ERRORS = {
   },
 } as const;
 
-function mediaError(code: keyof typeof MEDIA_ERRORS, detail?: string): ApiError {
+function mediaError(
+  code: keyof typeof MEDIA_ERRORS,
+  kind: 'image' | 'audio',
+  detail?: string,
+): ApiError {
   const { status, code: apiCode } = MEDIA_ERRORS[code];
   const message =
     code === 'MEDIA_TOO_LARGE'
-      ? 'The image is too large.'
+      ? `The ${kind} is too large.`
       : code === 'UNSUPPORTED_MEDIA'
-        ? 'Only PNG, JPEG and WebP images are accepted.'
+        ? kind === 'image'
+          ? 'Only PNG, JPEG and WebP images are accepted.'
+          : 'Only MP3, WAV and M4A/AAC audio is accepted.'
         : code === 'MEDIA_TYPE_MISMATCH'
           ? 'The Content-Type does not match the file.'
-          : 'The image cannot be read.';
+          : `The ${kind} cannot be read.`;
   return new ApiError({
     status,
     code: apiCode,
@@ -536,8 +614,21 @@ function mediaError(code: keyof typeof MEDIA_ERRORS, detail?: string): ApiError 
   });
 }
 
+/** FFprobe/FFmpeg is not installed (CLAUDE.md §8; M5 design §8). */
+export function mediaToolsMissing(): ApiError {
+  return new ApiError({
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    code: ApiErrorCode.MediaToolsMissing,
+    message: 'Media tools (FFprobe/FFmpeg) are not installed on this server.',
+  });
+}
+
 /** Reads the raw request body, failing with 413 as soon as it exceeds `limit` bytes. */
-async function readBody(stream: Readable, limit: number): Promise<Uint8Array> {
+async function readBody(
+  stream: Readable,
+  limit: number,
+  kind: 'image' | 'audio',
+): Promise<Uint8Array> {
   const chunks: Buffer[] = [];
   let total = 0;
   for await (const chunk of stream) {
@@ -545,7 +636,7 @@ async function readBody(stream: Readable, limit: number): Promise<Uint8Array> {
     total += buf.length;
     if (total > limit) {
       stream.resume(); // drain without keeping the bytes
-      throw mediaError('MEDIA_TOO_LARGE');
+      throw mediaError('MEDIA_TOO_LARGE', kind);
     }
     chunks.push(buf);
   }

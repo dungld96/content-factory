@@ -39,14 +39,51 @@ export const assetIdParamsSchema = z.strictObject({ assetId: z.uuid() });
 
 /** Image types accepted by `POST /projects/:projectId/assets/upload` (M4a; magic bytes decide). */
 export const UPLOADABLE_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+/** Audio types accepted by the same upload (M5a; magic bytes and FFprobe decide). */
+export const UPLOADABLE_AUDIO_TYPES = [
+  'audio/mpeg',
+  'audio/wav',
+  'audio/mp4',
+  'audio/aac',
+] as const;
+/** Media types the content endpoint can stream. */
+export const STREAMABLE_MEDIA_TYPES = [
+  ...UPLOADABLE_IMAGE_TYPES,
+  ...UPLOADABLE_AUDIO_TYPES,
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
+] as const;
 
-/** Query of the raw-body image upload (M4 design §4.2); the body is the image itself. */
-export const uploadAssetQuerySchema = z.strictObject({
-  assetType: z.enum(['reference', 'image']),
-  filename: z.string().trim().min(1).max(255).optional(),
-  label: z.string().trim().min(1).max(200).optional(),
-  contentItemId: z.uuid().optional(),
-});
+/** What an uploaded audio file is for (M5 design §7.3). */
+export const audioPurposeSchema = z.enum(['voiceover', 'music']).meta({ id: 'AudioPurpose' });
+export type AudioPurpose = z.infer<typeof audioPurposeSchema>;
+
+/**
+ * Query of the raw-body upload (M4 design §4.2, M5 §7.3); the body is the file itself. Audio
+ * needs a `purpose`; music also needs a `licenseNote` (stored as the asset's `sourceNote`).
+ */
+export const uploadAssetQuerySchema = z
+  .strictObject({
+    assetType: z.enum(['reference', 'image', 'audio']),
+    filename: z.string().trim().min(1).max(255).optional(),
+    label: z.string().trim().min(1).max(200).optional(),
+    contentItemId: z.uuid().optional(),
+    purpose: audioPurposeSchema.optional(),
+    licenseNote: z.string().trim().min(3).max(1000).optional(),
+  })
+  .superRefine((q, ctx) => {
+    if (q.assetType === 'audio' && !q.purpose) {
+      ctx.addIssue({ code: 'custom', path: ['purpose'], message: 'is required for audio' });
+    }
+    if (q.assetType !== 'audio' && (q.purpose || q.licenseNote)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [q.purpose ? 'purpose' : 'licenseNote'],
+        message: 'is only allowed for audio',
+      });
+    }
+  });
 export type UploadAssetQuery = z.output<typeof uploadAssetQuerySchema>;
 
 /** Metadata-only registration (decision D8). */

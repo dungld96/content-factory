@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { aiProviderEnvShape, checkAiProviderEnv } from './ai-provider-env.js';
+import { mediaEnvShape } from './media-env.js';
 import { checkStorageEnv, storageEnvShape } from './storage-env.js';
 import { EnvValidationError, toEnvIssues } from './errors.js';
 import {
@@ -111,6 +112,15 @@ export const apiEnvSchema = z.object({
   ...storageEnvShape,
   /** Largest accepted image upload, in bytes (M4 design §4.2: 25 MB). */
   UPLOAD_MAX_IMAGE_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1024)
+    .max(100 * 1024 * 1024)
+    .default(25 * 1024 * 1024),
+  // --- Media tools (M5a), shared with the worker ---
+  ...mediaEnvShape,
+  /** Largest accepted audio upload, in bytes (M5 design §7.3: 25 MB). */
+  UPLOAD_MAX_AUDIO_BYTES: z.coerce
     .number()
     .int()
     .min(1024)

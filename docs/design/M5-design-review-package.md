@@ -1,6 +1,7 @@
 # M5 Design Review Package — Video and Audio Generation
 
-- Status: **Revision 1, proposed (2026-11-19). No code.** Awaiting the owner's decisions V1–V12.
+- Status: **Revision 1, approved by the owner (2026-11-19)**: V1–V12 as proposed, data-governance
+  risk R1 acknowledged. Implemented in slices M5a–M5e (§14).
 - Date: 2026-11-19
 - Baseline: M4 approved, M4.5 approved (`0d67d7d`); ADR-0006 (object storage), ADR-0012 (AI
   ledger), ADR-0013 (jobs), ADR-0015 (masters and variants), ADR-0016 (scene images, keyframes)

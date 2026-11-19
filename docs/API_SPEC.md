@@ -434,7 +434,8 @@ Design: `docs/design/M4-design-review-package.md` §4, ADR-0006 (amended).
 | Endpoint | Role | Notes |
 |---|---|---|
 | `POST /projects/:projectId/assets/upload?assetType=reference\|image&filename=&label=&contentItemId=` | editor | The **raw image is the request body** (`Content-Type: image/png\|jpeg\|webp`, ≤ 25 MB). The server detects the type from the bytes, reads dimensions, computes SHA-256, stores the file write-once at `projects/{projectId}/assets/{assetId}/{sha256}.{ext}` and returns `201` with the asset (`sourceType: upload`). |
-| `GET /assets/:assetId/content` | viewer | Streams the file with `ETag: "<sha256>"` (`If-None-Match` → `304`) and `Cache-Control: private, max-age=300`. |
+| `POST /projects/:projectId/assets/upload?assetType=audio&purpose=voiceover\|music&licenseNote=` | editor | M5a. The **raw audio file is the body** (MP3, WAV, M4A/AAC, ≤ 25 MB). Magic bytes and FFprobe decide the type; the measured duration is stored (`durationMs`), codec details in `metadata.audio`, `purpose` in `metadata.purpose`. `purpose` is required; `music` also needs `licenseNote` (`422 LICENSE_NOTE_REQUIRED`), stored as `sourceNote`. Without FFprobe: `503 MEDIA_TOOLS_MISSING`. |
+| `GET /assets/:assetId/content` | viewer | Streams the file with `ETag: "<sha256>"` (`If-None-Match` → `304`) and `Cache-Control: private, max-age=300`. M5a: `Accept-Ranges: bytes`; one byte range (`Range: bytes=a-b`, `a-`, `-n`) answers `206` with `Content-Range`; a range outside the file answers `416 RANGE_NOT_SATISFIABLE` with `Content-Range: bytes */size`. |
 
 Errors: `415 UNSUPPORTED_MEDIA` (not PNG/JPEG/WebP by its bytes), `415 MEDIA_TYPE_MISMATCH`
 (`Content-Type` disagrees with the bytes), `413 MEDIA_TOO_LARGE` (file over the limit, or over

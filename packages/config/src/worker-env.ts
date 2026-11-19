@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { aiProviderEnvShape, checkAiProviderEnv } from './ai-provider-env.js';
+import { mediaEnvShape } from './media-env.js';
 import { checkStorageEnv, storageEnvShape } from './storage-env.js';
 import { EnvValidationError, toEnvIssues } from './errors.js';
 import {
@@ -33,6 +34,7 @@ export const workerEnvSchema = z
       .default('acf'),
     ...aiProviderEnvShape,
     ...storageEnvShape,
+    ...mediaEnvShape,
     /** Image generation jobs processed in parallel (separate from text jobs; M4 design S4). */
     WORKER_IMAGE_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
   })

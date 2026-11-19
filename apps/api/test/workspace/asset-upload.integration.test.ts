@@ -1,8 +1,13 @@
 // M4a: image upload through the API and authenticated streaming reads (M4 design §4.2–§4.3),
 // against the real object storage server (SeaweedFS locally and in CI).
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { AssetDto } from '@acf/contracts';
+import { synthTone } from '@acf/media';
 import { sha256Hex } from '@acf/storage';
 import { solidPng } from '@acf/storage/testing';
 
@@ -144,5 +149,108 @@ describe('POST /projects/:projectId/assets/upload', () => {
     const f = await ctx.fixture();
     const missing = await ctx.as('viewer', 'GET', `/assets/${f.assetId}/content`);
     expect([missing.status, codeOf(missing)]).toEqual([404, 'ASSET_CONTENT_MISSING']);
+  });
+});
+
+// M5a: audio upload (FFprobe-validated) and byte-range streaming for playback.
+describe('audio upload and byte ranges (M5a)', () => {
+  let tone: Uint8Array;
+  beforeAll(async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'acf-audio-test-'));
+    const out = path.join(dir, 'tone.mp3');
+    await synthTone({ out, durationSec: 1.2 });
+    tone = new Uint8Array(await readFile(out));
+    await rm(dir, { recursive: true, force: true });
+  });
+  const uploadAudio = (projectId: string, bytes: Uint8Array, query: string, type = 'audio/mpeg') =>
+    ctx.as('editor', 'POST', `/projects/${projectId}/assets/upload?assetType=audio${query}`, {
+      rawBody: bytes,
+      headers: { 'content-type': type },
+    });
+
+  it('stores a voice-over with its measured duration and streams byte ranges', async () => {
+    const f = await ctx.fixture();
+    const res = await uploadAudio(f.projectId, tone, '&purpose=voiceover&filename=vo.mp3');
+    expect(res.status).toBe(201);
+    const asset = bodyOf<AssetDto>(res);
+    expect(asset).toMatchObject({
+      assetType: 'audio',
+      sourceType: 'upload',
+      mimeType: 'audio/mpeg',
+      sizeBytes: tone.byteLength,
+      checksumSha256: sha256Hex(tone),
+      width: null,
+      metadata: { purpose: 'voiceover', audio: { codec: 'mp3', channels: 1 } },
+    });
+    expect(asset.durationMs).toBeGreaterThan(1000);
+    expect(asset.storageKey).toMatch(/\.mp3$/);
+
+    const whole = await ctx.as('viewer', 'GET', `/assets/${asset.id}/content`);
+    expect(whole.status).toBe(200);
+    expect(whole.headers.get('accept-ranges')).toBe('bytes');
+    expect(whole.bytes).toEqual(tone);
+
+    const part = await ctx.as('viewer', 'GET', `/assets/${asset.id}/content`, {
+      headers: { range: 'bytes=10-109' },
+    });
+    expect(part.status).toBe(206);
+    expect(part.headers.get('content-range')).toBe(`bytes 10-109/${String(tone.byteLength)}`);
+    expect(part.headers.get('content-length')).toBe('100');
+    expect(part.bytes).toEqual(tone.subarray(10, 110));
+
+    const tail = await ctx.as('viewer', 'GET', `/assets/${asset.id}/content`, {
+      headers: { range: 'bytes=-16' },
+    });
+    expect([tail.status, tail.bytes]).toEqual([206, tone.subarray(tone.byteLength - 16)]);
+
+    const outside = await ctx.as('viewer', 'GET', `/assets/${asset.id}/content`, {
+      headers: { range: `bytes=${String(tone.byteLength)}-` },
+    });
+    expect([outside.status, codeOf(outside)]).toEqual([416, 'RANGE_NOT_SATISFIABLE']);
+    expect(outside.headers.get('content-range')).toBe(`bytes */${String(tone.byteLength)}`);
+  });
+
+  it('requires a purpose, a licence note for music, and real audio', async () => {
+    const f = await ctx.fixture();
+    expect((await uploadAudio(f.projectId, tone, '')).status).toBe(400);
+    const noLicense = await uploadAudio(f.projectId, tone, '&purpose=music');
+    expect([noLicense.status, codeOf(noLicense)]).toEqual([422, 'LICENSE_NOTE_REQUIRED']);
+    const music = await uploadAudio(
+      f.projectId,
+      tone,
+      `&purpose=music&licenseNote=${encodeURIComponent('Own recording, all rights')}`,
+    );
+    expect(music.status).toBe(201);
+    expect(bodyOf<AssetDto>(music)).toMatchObject({
+      sourceNote: 'Own recording, all rights',
+      metadata: { purpose: 'music' },
+    });
+    const notAudio = await uploadAudio(f.projectId, png, '&purpose=voiceover', 'image/png');
+    expect([notAudio.status, codeOf(notAudio)]).toEqual([415, 'UNSUPPORTED_MEDIA']);
+    const broken = await uploadAudio(
+      f.projectId,
+      new TextEncoder().encode('ID3 this is not decodable audio data'),
+      '&purpose=voiceover',
+    );
+    expect([broken.status, codeOf(broken)]).toEqual([422, 'MEDIA_INVALID']);
+    const imageWithPurpose = await upload(f.projectId, png, 'image/png', '&purpose=music');
+    expect(imageWithPurpose.status).toBe(400);
+  });
+
+  it('answers 503 MEDIA_TOOLS_MISSING without FFprobe', async () => {
+    const noTools = await startAuthApp({ FFPROBE_PATH: '/nonexistent/ffprobe' });
+    try {
+      const as = actAs(noTools.baseUrl, await signInAll(noTools.baseUrl, ctx.ids));
+      const f = await ctx.fixture();
+      const res = await as(
+        'editor',
+        'POST',
+        `/projects/${f.projectId}/assets/upload?assetType=audio&purpose=voiceover`,
+        { rawBody: tone, headers: { 'content-type': 'audio/mpeg' } },
+      );
+      expect([res.status, codeOf(res)]).toEqual([503, 'MEDIA_TOOLS_MISSING']);
+    } finally {
+      await noTools.close();
+    }
   });
 });
