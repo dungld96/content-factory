@@ -10,6 +10,7 @@ import type {
   StoryboardImagesDto,
 } from '@acf/contracts';
 
+import { ModelSelect, type ModelOption } from '@/components/model-select';
 import { ApprovalPill, Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { mutate } from '@/lib/api-client';
@@ -23,10 +24,14 @@ import { formatUsd } from '@/lib/money';
 export function SceneImagesPanel(props: {
   readonly images: StoryboardImagesDto;
   readonly canEdit: boolean;
+  /** Enabled image models the editor may pick instead of the task route. */
+  readonly models?: readonly ModelOption[];
 }) {
   const router = useRouter();
   const { images, canEdit } = props;
   const [count, setCount] = useState(1);
+  const [modelKey, setModelKey] = useState('');
+  const model = modelKey ? { modelKey } : {};
   const [estimate, setEstimate] = useState<ImageEstimateDto | null>(null);
   const [acceptUnknown, setAcceptUnknown] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -50,7 +55,7 @@ export function SceneImagesPanel(props: {
     const plan = await run<ImageEstimateDto>(
       'POST',
       `/storyboards/${images.storyboardVersionId}/images/estimate`,
-      { count },
+      { count, ...model },
     );
     if (plan) setEstimate(plan);
   }
@@ -59,7 +64,7 @@ export function SceneImagesPanel(props: {
     const result = await run<ImageGenerateResponseDto>(
       'POST',
       `/storyboards/${images.storyboardVersionId}/images/generate`,
-      { count, ...(acceptUnknown ? { acceptUnknownCost: true } : {}), ...extra },
+      { count, ...model, ...(acceptUnknown ? { acceptUnknownCost: true } : {}), ...extra },
     );
     if (result) {
       setEstimate(result.estimate);
@@ -107,6 +112,15 @@ export function SceneImagesPanel(props: {
               ))}
             </select>
           </label>
+          <ModelSelect
+            models={props.models ?? []}
+            value={modelKey}
+            disabled={busy}
+            onChange={(key) => {
+              setModelKey(key);
+              setEstimate(null);
+            }}
+          />
           <button type="button" className="btn" disabled={busy} onClick={() => void estimateCost()}>
             Estimate cost
           </button>

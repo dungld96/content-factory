@@ -158,6 +158,10 @@ test('editor: voice profile → clips → voice-over (gate 4)', async ({ page })
   const clips = page.getByLabel('Scene clip controls');
   await expect(clips).toBeVisible();
 
+  // The editor may pick any enabled video model; the default is the task route.
+  const modelSelect = clips.getByLabel('Model');
+  await expect(modelSelect).toHaveValue('');
+  await expect(modelSelect).toContainText('Mock video clips');
   // Generate is enabled only once the estimate (billed seconds, limit) has been shown.
   await expect(clips.getByRole('button', { name: 'Generate clips' })).toBeDisabled();
   await clips.getByRole('button', { name: 'Estimate cost' }).click();

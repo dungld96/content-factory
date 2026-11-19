@@ -11,6 +11,7 @@ import type {
   VideoGenerateResponseDto,
 } from '@acf/contracts';
 
+import { ModelSelect, type ModelOption } from '@/components/model-select';
 import { ApprovalPill, Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { mutate } from '@/lib/api-client';
@@ -38,10 +39,14 @@ const ACTION_LABEL: Readonly<Record<VideoEstimateDto['scenes'][number]['action']
 export function SceneClipsPanel(props: {
   readonly videos: StoryboardVideosDto;
   readonly canEdit: boolean;
+  /** Enabled video models the editor may pick instead of the task route. */
+  readonly models?: readonly ModelOption[];
 }) {
   const router = useRouter();
   const { videos, canEdit } = props;
   const [resolution, setResolution] = useState<Resolution>('720p');
+  const [modelKey, setModelKey] = useState('');
+  const model = modelKey ? { modelKey } : {};
   const [estimate, setEstimate] = useState<VideoEstimateDto | null>(null);
   /** The scene selection the shown estimate was made for; generate sends the same. */
   const [scope, setScope] = useState<Record<string, unknown>>({});
@@ -66,7 +71,7 @@ export function SceneClipsPanel(props: {
     const plan = await run<VideoEstimateDto>(
       'POST',
       `/storyboards/${videos.storyboardVersionId}/videos/estimate`,
-      { resolution, ...extra },
+      { resolution, ...model, ...extra },
     );
     if (plan) {
       setEstimate(plan);
@@ -81,6 +86,7 @@ export function SceneClipsPanel(props: {
       `/storyboards/${videos.storyboardVersionId}/videos/generate`,
       {
         resolution,
+        ...model,
         ...scope,
         confirmedEstimateUsd: estimate.totalEstimatedUsd,
         ...(acceptUnknown ? { acceptUnknownCost: true } : {}),
@@ -144,6 +150,15 @@ export function SceneClipsPanel(props: {
               <option value="1080p">1080p</option>
             </select>
           </label>
+          <ModelSelect
+            models={props.models ?? []}
+            value={modelKey}
+            disabled={busy}
+            onChange={(key) => {
+              setModelKey(key);
+              setEstimate(null);
+            }}
+          />
           <button type="button" className="btn" disabled={busy} onClick={() => void estimateCost()}>
             Estimate cost
           </button>

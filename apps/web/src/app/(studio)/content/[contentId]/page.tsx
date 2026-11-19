@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
 import type {
+  AiModelDto,
   ContentItemDto,
   ContentMasterDto,
   GenerationJobDto,
@@ -205,23 +206,39 @@ export default async function ContentPage({
   }
   const content = item.data;
   const approvedBoard = content.approvedStoryboardVersionId;
-  const [project, scripts, storyboards, master, images, videos, voiceovers, profiles] =
-    await Promise.all([
-      apiGet<ProjectDto>(`/projects/${content.projectId}`),
-      apiGet<Page<ScriptVersionDto>>(`/content/${contentId}/scripts?limit=20`),
-      apiGet<Page<StoryboardVersionDto>>(`/content/${contentId}/storyboards?limit=20`),
-      apiGet<ContentMasterDto>(`/content-masters/${content.contentMasterId}`),
-      approvedBoard
-        ? apiGet<StoryboardImagesDto>(`/storyboards/${approvedBoard}/images`)
-        : Promise.resolve(null),
-      approvedBoard
-        ? apiGet<StoryboardVideosDto>(`/storyboards/${approvedBoard}/videos`)
-        : Promise.resolve(null),
-      approvedBoard
-        ? apiGet<StoryboardVoiceoversDto>(`/storyboards/${approvedBoard}/voiceovers`)
-        : Promise.resolve(null),
-      apiGet<VoiceProfileListDto>(`/projects/${content.projectId}/voice-profiles`),
-    ]);
+  const [
+    project,
+    scripts,
+    storyboards,
+    master,
+    images,
+    videos,
+    voiceovers,
+    profiles,
+    imageModels,
+    videoModels,
+  ] = await Promise.all([
+    apiGet<ProjectDto>(`/projects/${content.projectId}`),
+    apiGet<Page<ScriptVersionDto>>(`/content/${contentId}/scripts?limit=20`),
+    apiGet<Page<StoryboardVersionDto>>(`/content/${contentId}/storyboards?limit=20`),
+    apiGet<ContentMasterDto>(`/content-masters/${content.contentMasterId}`),
+    approvedBoard
+      ? apiGet<StoryboardImagesDto>(`/storyboards/${approvedBoard}/images`)
+      : Promise.resolve(null),
+    approvedBoard
+      ? apiGet<StoryboardVideosDto>(`/storyboards/${approvedBoard}/videos`)
+      : Promise.resolve(null),
+    approvedBoard
+      ? apiGet<StoryboardVoiceoversDto>(`/storyboards/${approvedBoard}/voiceovers`)
+      : Promise.resolve(null),
+    apiGet<VoiceProfileListDto>(`/projects/${content.projectId}/voice-profiles`),
+    apiGet<Page<AiModelDto>>('/ai/models?capability=image_generation&status=enabled&limit=100'),
+    apiGet<Page<AiModelDto>>('/ai/models?capability=video_generation&status=enabled&limit=100'),
+  ]);
+  const optionsOf = (list: typeof imageModels) =>
+    list.kind === 'ok'
+      ? list.data.data.map((m) => ({ modelKey: m.modelKey, label: m.displayName }))
+      : [];
   const canEdit =
     project.kind === 'ok' && project.data.role !== 'viewer' && content.archivedAt === null;
   const scriptList = scripts.kind === 'ok' ? scripts.data.data : [];
@@ -578,7 +595,7 @@ export default async function ContentPage({
           The scene images could not be loaded.
         </p>
       ) : (
-        <SceneImagesPanel images={imageData} canEdit={canEdit} />
+        <SceneImagesPanel images={imageData} canEdit={canEdit} models={optionsOf(imageModels)} />
       )}
     </section>
   );
@@ -600,7 +617,7 @@ export default async function ContentPage({
           The scene clips could not be loaded.
         </p>
       ) : (
-        <SceneClipsPanel videos={videoData} canEdit={canEdit} />
+        <SceneClipsPanel videos={videoData} canEdit={canEdit} models={optionsOf(videoModels)} />
       )}
     </section>
   );
