@@ -392,6 +392,6 @@ The approved decisions V1–V12 hold. These details changed during implementatio
 | 13  | E2E plays clips                                                                 | E2E checks the clip stream over HTTP (`206`, `video/mp4`, `ftyp`) and plays the MP3 voice-overs                                                                                                | Playwright's Chromium has no H.264 decoder                                                                                          |
 | 14  | —                                                                               | Canceling a run with a submitted video records the invocation as `outcome_unknown` (`CANCELED_BY_USER`)                                                                                        | No cancel endpoint at the provider: it may still charge                                                                             |
 
-M5 status: all slices delivered and tested (unit, contract, database, worker and API integration,
+M5 status (approved by the owner, 2026-11-19): all slices delivered and tested (unit, contract, database, worker and API integration,
 permission matrix, Playwright E2E with mock providers and real FFmpeg). The paid benchmark (V12)
 still waits for an OpenRouter API key; no video or TTS model is enabled until it has run.
