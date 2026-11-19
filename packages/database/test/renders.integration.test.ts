@@ -104,9 +104,7 @@ describe('render jobs', () => {
 
 describe('renders', () => {
   it('are created unreviewed and never deleted', async () => {
-    expect(
-      await fails(render('66000000-0000-7000-8000-000000000003', CI, RJ2)),
-    ).not.toBeNull(); // the job belongs to another item (composite FK)
+    expect(await fails(render('66000000-0000-7000-8000-000000000003', CI, RJ2))).not.toBeNull(); // the job belongs to another item (composite FK)
     expect(await fails(`DELETE FROM renders WHERE id = '${R}'`)).toBe('AC012');
   });
 
