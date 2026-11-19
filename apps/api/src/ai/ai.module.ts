@@ -1,19 +1,23 @@
 import { Module } from '@nestjs/common';
 
-import type { ImageProvider, LlmProvider } from '@acf/ai-core';
+import type { ImageProvider, LlmProvider, TtsProvider, VideoProvider } from '@acf/ai-core';
 import {
   createImageProviders,
   createLlmProviders,
+  createTtsProviders,
+  createVideoProviders,
   ImageService,
   LlmService,
   ModelCatalog,
+  TtsService,
+  VideoService,
 } from '@acf/ai-runtime';
 import { inspectImage } from '@acf/storage';
 import type { ApiEnv } from '@acf/config';
 
 import { API_ENV } from '../config/api-config.module.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
-import { IMAGE_PROVIDERS, LLM_PROVIDERS } from './ai.tokens.js';
+import { IMAGE_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS, VIDEO_PROVIDERS } from './ai.tokens.js';
 import { RegistryController } from './registry/registry.controller.js';
 import { RegistryService } from './registry/registry.service.js';
 
@@ -35,13 +39,44 @@ import { RegistryService } from './registry/registry.service.js';
       useFactory: (env: ApiEnv) => createImageProviders(env),
     },
     {
+      provide: VIDEO_PROVIDERS,
+      inject: [API_ENV],
+      useFactory: (env: ApiEnv) => createVideoProviders(env),
+    },
+    {
+      provide: TTS_PROVIDERS,
+      inject: [API_ENV],
+      useFactory: (env: ApiEnv) => createTtsProviders(env),
+    },
+    {
       provide: ModelCatalog,
-      inject: [PrismaService, LLM_PROVIDERS, IMAGE_PROVIDERS],
+      inject: [PrismaService, LLM_PROVIDERS, IMAGE_PROVIDERS, VIDEO_PROVIDERS, TTS_PROVIDERS],
       useFactory: (
         prisma: PrismaService,
         providers: ReadonlyMap<string, LlmProvider>,
         imageProviders: ReadonlyMap<string, ImageProvider>,
-      ) => new ModelCatalog(prisma.client, providers, imageProviders),
+        videoProviders: ReadonlyMap<string, VideoProvider>,
+        ttsProviders: ReadonlyMap<string, TtsProvider>,
+      ) => new ModelCatalog(prisma.client, providers, imageProviders, videoProviders, ttsProviders),
+    },
+    {
+      // Routing and estimates only (M5 design §5): the worker submits, polls and downloads.
+      provide: VideoService,
+      inject: [PrismaService, ModelCatalog, VIDEO_PROVIDERS],
+      useFactory: (
+        prisma: PrismaService,
+        catalog: ModelCatalog,
+        providers: ReadonlyMap<string, VideoProvider>,
+      ) => new VideoService(prisma.client, catalog, providers),
+    },
+    {
+      provide: TtsService,
+      inject: [PrismaService, ModelCatalog, TTS_PROVIDERS],
+      useFactory: (
+        prisma: PrismaService,
+        catalog: ModelCatalog,
+        providers: ReadonlyMap<string, TtsProvider>,
+      ) => new TtsService(prisma.client, catalog, providers),
     },
     {
       // Routing and estimates in the API; the worker makes the calls (M4 design §5).
@@ -78,6 +113,6 @@ import { RegistryService } from './registry/registry.service.js';
     },
     RegistryService,
   ],
-  exports: [LlmService, ModelCatalog, ImageService, RegistryService],
+  exports: [LlmService, ModelCatalog, ImageService, VideoService, TtsService, RegistryService],
 })
 export class AiModule {}

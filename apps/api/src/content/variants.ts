@@ -61,6 +61,7 @@ export function toContentItemDto(c: ContentItemRow): ContentItemDto {
     masterBriefStale: isMasterBriefStale(c.masterBriefRevision, c.contentMaster.briefRevision),
     approvedScriptVersionId: c.approvedScriptVersionId,
     approvedStoryboardVersionId: c.approvedStoryboardVersionId,
+    voiceProfileId: c.voiceProfileId,
     archivedAt: c.archivedAt?.toISOString() ?? null,
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),

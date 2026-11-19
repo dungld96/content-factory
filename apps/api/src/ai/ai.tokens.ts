@@ -7,3 +7,7 @@ export const LLM_PROVIDERS = Symbol('LLM_PROVIDERS');
 
 /** DI token for the image adapters (`ReadonlyMap<string, ImageProvider>`, M4). */
 export const IMAGE_PROVIDERS = Symbol('IMAGE_PROVIDERS');
+/** Video adapters (M5); the API only routes and prices, the worker calls them. */
+export const VIDEO_PROVIDERS = Symbol('VIDEO_PROVIDERS');
+/** TTS adapters (M5). */
+export const TTS_PROVIDERS = Symbol('TTS_PROVIDERS');

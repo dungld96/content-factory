@@ -126,6 +126,14 @@ export const apiEnvSchema = z.object({
     .min(1024)
     .max(100 * 1024 * 1024)
     .default(25 * 1024 * 1024),
+  /**
+   * Spend guard until M7 budgets (M5 design §9.2): the largest video estimate one request may
+   * queue, in USD. Unknown estimates count as above it unless accepted explicitly.
+   */
+  VIDEO_MAX_ESTIMATED_USD_PER_REQUEST: z
+    .string()
+    .regex(/^\d{1,6}(\.\d{1,6})?$/)
+    .default('5'),
 });
 
 /** The validated environment, with environment-dependent defaults resolved. */

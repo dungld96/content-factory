@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 
 import { Capability, filterCandidates, LlmParameter, type QualityTier } from '@acf/ai-core';
-import { ModelCatalog } from '@acf/ai-runtime';
+import { ModelCatalog, VideoService } from '@acf/ai-runtime';
 import {
   activeJobKey,
   executionKey,
@@ -32,6 +32,7 @@ import {
   PostgresSqlState,
   type ContentItem,
   type GenerationJob,
+  type GenerationJobKind,
   type TransactionClient,
 } from '@acf/database';
 
@@ -48,6 +49,15 @@ const RATIO: Readonly<Record<string, string>> = {
   ratio_16_9: '16:9',
   ratio_1_1: '1:1',
 };
+
+/** Scene-scoped media job kinds (settled together; M4/M5). */
+const SCENE_KIND_LIST: GenerationJobKind[] = [
+  'image_generation',
+  'video_generation',
+  'tts_generation',
+];
+const SCENE_KINDS: ReadonlySet<string> = new Set(SCENE_KIND_LIST);
+
 /** Parameters every generation sends (strict structured output, M3 design §5.3). */
 const REQUIRED_PARAMETERS = new Set<string>([
   LlmParameter.MAX_TOKENS,
@@ -77,6 +87,7 @@ export class GenerationService {
     private readonly access: ProjectAccess,
     private readonly catalog: ModelCatalog,
     private readonly queue: GenerationQueue,
+    private readonly videos: VideoService,
   ) {}
 
   async validateBrief(actor: Actor, contentId: string): Promise<BriefValidationDto> {
@@ -245,6 +256,7 @@ export class GenerationService {
     const run = await this.prisma.client.productionRun.findUnique({ where: { id: runId } });
     if (!run) throw notFound('production run');
     await this.access.require(actor, run.projectId, 'editor', { mutation: true });
+    const submitted: string[] = [];
     const canceled = await this.prisma.client.$transaction(async (tx) => {
       await lockContent(tx, run.contentItemId);
       const active = await tx.generationJob.findMany({
@@ -258,6 +270,7 @@ export class GenerationService {
         });
         if (changed !== 1) continue;
         count += 1;
+        if (job.kind === 'video_generation' && job.invocationId) submitted.push(job.invocationId);
         await tx.jobEvent.create({
           data: {
             projectId: job.projectId,
@@ -268,20 +281,21 @@ export class GenerationService {
             detail: { type: 'canceled', by: actor.userId },
           },
         });
-        if (job.kind !== 'image_generation') {
+        if (!SCENE_KINDS.has(job.kind)) {
           await transitionContent(tx, job.contentItemId, {
             type: 'job_ended_without_result',
             previous: job.previousContentStatus,
           });
         }
       }
-      // Image jobs (M4): the item leaves generating_assets once none of its image jobs is active.
-      const imageJob = active.find((j) => j.kind === 'image_generation');
+      // Scene media jobs (M4 images, M5 clips and voice-overs): the item leaves
+      // generating_assets once none of them is active.
+      const imageJob = active.find((j) => SCENE_KINDS.has(j.kind));
       if (imageJob) {
         const stillActive = await tx.generationJob.count({
           where: {
             contentItemId: run.contentItemId,
-            kind: 'image_generation',
+            kind: { in: SCENE_KIND_LIST },
             status: { in: ['queued', 'running'] },
           },
         });
@@ -290,7 +304,7 @@ export class GenerationService {
             where: {
               contentItemId: run.contentItemId,
               sourceType: 'generated',
-              assetType: 'image',
+              assetType: { in: ['image', 'video', 'audio'] },
               archivedAt: null,
             },
           });
@@ -309,6 +323,13 @@ export class GenerationService {
       }
       return count;
     });
+    // A submitted video keeps running at the provider (no cancel endpoint) and may be charged:
+    // its invocation ends as outcome_unknown, never as free (M5 design §5.3).
+    for (const invocationId of submitted) {
+      await this.videos
+        .abandon(invocationId, 'CANCELED_BY_USER', 'canceled; the provider may still charge')
+        .catch(() => undefined);
+    }
     if (canceled === 0) {
       throw new ApiError({
         status: HttpStatus.CONFLICT,

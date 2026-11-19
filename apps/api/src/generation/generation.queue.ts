@@ -3,7 +3,14 @@ import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 
 import type { ApiEnv } from '@acf/config';
-import { generationJobOptions, queueForKind, type GenerationJobPayload } from '@acf/content-domain';
+import {
+  generationJobOptions,
+  queueForKind,
+  VIDEO_GENERATION_QUEUE,
+  VIDEO_POLL_JOB_NAME,
+  videoPollOptions,
+  type GenerationJobPayload,
+} from '@acf/content-domain';
 
 import { API_ENV } from '../config/api-config.module.js';
 
@@ -45,6 +52,26 @@ export class GenerationQueue implements OnModuleDestroy {
       });
       return false;
     }
+  }
+
+  /**
+   * "Check again" for a running video job (M5 design §5.3): runs its pending status read now, or
+   * adds one when none is waiting. Throws when Redis is unavailable (the user may retry).
+   */
+  async pollNow(jobId: string, pollCount: number): Promise<void> {
+    const queue = this.getQueue(VIDEO_GENERATION_QUEUE);
+    const options = videoPollOptions(jobId, pollCount, 0);
+    const existing = await queue.getJob(options.jobId);
+    if (existing) {
+      const state = await existing.getState();
+      if (state === 'delayed') {
+        await existing.promote();
+        return;
+      }
+      if (state !== 'completed' && state !== 'failed') return; // waiting or running already
+      await existing.remove();
+    }
+    await queue.add(VIDEO_POLL_JOB_NAME, { jobId }, options);
   }
 
   private getQueue(name: string): Queue<GenerationJobPayload> {

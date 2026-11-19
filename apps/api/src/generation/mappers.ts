@@ -143,3 +143,10 @@ export function toSceneDto(
     acceptanceChecks: s.acceptanceChecks,
   };
 }
+
+/** A string field of an asset's `metadata` JSON, if present. */
+export function metaString(metadata: unknown, key: string): string | undefined {
+  if (typeof metadata !== 'object' || metadata === null) return undefined;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === 'string' ? value : undefined;
+}

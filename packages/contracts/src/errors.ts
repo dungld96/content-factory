@@ -99,6 +99,14 @@ export const ApiErrorCode = {
   /** A keyframe must be an approved, active image of the scene's content item (AC015). */
   KeyframeInvalid: 'KEYFRAME_INVALID',
   SceneSelectionInvalid: 'SCENE_SELECTION_INVALID',
+  KeyframeRequired: 'KEYFRAME_REQUIRED',
+  ExceedsModelMaximum: 'EXCEEDS_MODEL_MAXIMUM',
+  EstimateChanged: 'ESTIMATE_CHANGED',
+  SpendGuard: 'SPEND_GUARD',
+  VoiceProfileRequired: 'VOICE_PROFILE_REQUIRED',
+  ClipInvalid: 'CLIP_INVALID',
+  VoiceoverInvalid: 'VOICEOVER_INVALID',
+  JobNotRecheckable: 'JOB_NOT_RECHECKABLE',
 
   // --- M5a: media tools, audio upload, ranges (M5 design package §7.3, §8) ---
   /** FFprobe/FFmpeg is not installed on this deployment. */

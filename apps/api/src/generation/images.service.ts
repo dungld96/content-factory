@@ -334,6 +334,23 @@ export class ImagesService {
     if (!asset) throw referenceNotFound('asset');
     await this.prisma.client.$transaction(async (tx) => {
       const now = new Date();
+      // A clip starts from the keyframe: a new keyframe clears the scene's clip (M5 design §6.4).
+      const previous = await tx.sceneKeyframe.findUnique({ where: { storyboardSceneId: sceneId } });
+      if (previous && previous.assetId !== assetId) {
+        const clip = await tx.sceneClip.findUnique({ where: { storyboardSceneId: sceneId } });
+        if (clip) {
+          await tx.sceneClip.delete({ where: { storyboardSceneId: sceneId } });
+          await tx.sceneClipEvent.create({
+            data: {
+              projectId: scene.projectId,
+              storyboardSceneId: sceneId,
+              assetId: clip.assetId,
+              selectedById: actor.userId,
+              reason: 'cleared',
+            },
+          });
+        }
+      }
       await tx.sceneKeyframe.upsert({
         where: { storyboardSceneId: sceneId },
         create: {
@@ -358,7 +375,7 @@ export class ImagesService {
     return this.view(actor, scene.storyboardVersionId);
   }
 
-  /** Candidate/upload review (editor): images and references only. */
+  /** Candidate/upload review (editor): images, references, clips and audio (M5). */
   async review(
     actor: Actor,
     assetId: string,
@@ -367,11 +384,11 @@ export class ImagesService {
     const asset = await this.prisma.client.asset.findUnique({ where: { id: assetId } });
     if (!asset) throw notFound('asset');
     await this.access.require(actor, asset.projectId, 'editor', { mutation: true });
-    if (asset.assetType !== 'image' && asset.assetType !== 'reference') {
+    if (!REVIEWABLE.has(asset.assetType)) {
       throw error(
         HttpStatus.UNPROCESSABLE_ENTITY,
         ApiErrorCode.AssetNotReviewable,
-        'Only images and reference images are reviewed.',
+        'Only images, reference images, clips and audio are reviewed.',
       );
     }
     if (asset.archivedAt) throw archived('asset');
@@ -630,6 +647,8 @@ export class ImagesService {
     );
   }
 }
+
+const REVIEWABLE: ReadonlySet<string> = new Set(['image', 'reference', 'video', 'audio']);
 
 const ASPECT: Readonly<Record<string, '9:16' | '1:1' | '16:9'>> = {
   ratio_9_16: '9:16',

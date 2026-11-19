@@ -11,7 +11,12 @@ import { INITIAL_BRIEF_REVISION } from '@acf/content-domain';
 
 import type { Actor } from '../auth/actor.js';
 import { definedOnly } from '../common/defined-only.js';
-import { archived, guardedUpdateFailure, notFound } from '../common/domain-errors.js';
+import {
+  archived,
+  guardedUpdateFailure,
+  notFound,
+  referenceNotFound,
+} from '../common/domain-errors.js';
 import { keysetAfter, NEWEST_FIRST, toPage } from '../common/http/pagination.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
 import { TransactionRunner } from '../infrastructure/transaction-runner.js';
@@ -129,6 +134,13 @@ export class ContentService {
     const channelPlatform = input.channelId
       ? await usableChannelPlatform(this.prisma.client, item.projectId, input.channelId)
       : null;
+    if (input.voiceProfileId) {
+      const profile = await this.prisma.client.voiceProfile.findFirst({
+        where: { id: input.voiceProfileId, projectId: item.projectId, archivedAt: null },
+        select: { id: true },
+      });
+      if (!profile) throw referenceNotFound('voice profile');
+    }
     const { aspectRatio, targetPlatform, ...rest } = input;
     const platformTouched = input.channelId !== undefined || targetPlatform !== undefined;
     const storedPlatform = platformTouched

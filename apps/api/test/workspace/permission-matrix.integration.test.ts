@@ -49,7 +49,7 @@ interface Row {
   readonly expect: readonly [number, number, number, number, number];
 }
 
-type MatrixFixture = Fixture & GenerationFixture;
+type MatrixFixture = Fixture & GenerationFixture & { readonly voiceProfileId: string };
 
 const slug = () => `s-${randomUUID().slice(0, 12)}`;
 
@@ -289,6 +289,82 @@ const ROWS: Record<string, Row> = {
     path: (f) => `/assets/${f.spareAssetId}/reject`,
     expect: [401, 404, 403, 200, 200],
   },
+  // Clips, voice-overs and voice profiles (M5d). The fixture storyboard is pending, so plans
+  // answer 409 STORYBOARD_NOT_APPROVED once authorized; the spare asset is no clip or voice-over
+  // candidate (409); the fixture job is a finished script job, not a running video (409).
+  'POST /storyboards/:storyboardVersionId/videos/estimate': {
+    method: 'POST',
+    path: (f) => `/storyboards/${f.storyboardId}/videos/estimate`,
+    body: () => ({}),
+    expect: [401, 404, 409, 409, 409],
+  },
+  'POST /storyboards/:storyboardVersionId/videos/generate': {
+    method: 'POST',
+    path: (f) => `/storyboards/${f.storyboardId}/videos/generate`,
+    body: () => ({ confirmedEstimateUsd: '0' }),
+    expect: [401, 404, 403, 409, 409],
+  },
+  'GET /storyboards/:storyboardVersionId/videos': {
+    method: 'GET',
+    path: (f) => `/storyboards/${f.storyboardId}/videos`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'PUT /scenes/:sceneId/clip': {
+    method: 'PUT',
+    path: (f) => `/scenes/${f.sceneId}/clip`,
+    body: (f) => ({ assetId: f.spareAssetId }),
+    expect: [401, 404, 403, 409, 409],
+  },
+  'POST /generation-jobs/:jobId/recheck': {
+    method: 'POST',
+    path: (f) => `/generation-jobs/${f.jobId}/recheck`,
+    expect: [401, 404, 403, 409, 409],
+  },
+  'POST /storyboards/:storyboardVersionId/voiceovers/estimate': {
+    method: 'POST',
+    path: (f) => `/storyboards/${f.storyboardId}/voiceovers/estimate`,
+    body: () => ({}),
+    expect: [401, 404, 409, 409, 409],
+  },
+  'POST /storyboards/:storyboardVersionId/voiceovers/generate': {
+    method: 'POST',
+    path: (f) => `/storyboards/${f.storyboardId}/voiceovers/generate`,
+    body: () => ({}),
+    expect: [401, 404, 403, 409, 409],
+  },
+  'GET /storyboards/:storyboardVersionId/voiceovers': {
+    method: 'GET',
+    path: (f) => `/storyboards/${f.storyboardId}/voiceovers`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'PUT /scenes/:sceneId/voiceover': {
+    method: 'PUT',
+    path: (f) => `/scenes/${f.sceneId}/voiceover`,
+    body: (f) => ({ assetId: f.spareAssetId }),
+    expect: [401, 404, 403, 409, 409],
+  },
+  'GET /projects/:projectId/voice-profiles': {
+    method: 'GET',
+    path: (f) => `/projects/${f.projectId}/voice-profiles`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'POST /projects/:projectId/voice-profiles': {
+    method: 'POST',
+    path: (f) => `/projects/${f.projectId}/voice-profiles`,
+    body: () => ({ name: 'Narrator', modelKey: 'mock/tone-tts', voice: 'mock-a', language: 'vi' }),
+    expect: [401, 404, 403, 201, 201],
+  },
+  'PATCH /voice-profiles/:voiceProfileId': {
+    method: 'PATCH',
+    path: (f) => `/voice-profiles/${f.voiceProfileId}`,
+    body: () => ({ name: 'Renamed' }),
+    expect: [401, 404, 403, 200, 200],
+  },
+  'POST /voice-profiles/:voiceProfileId/archive': {
+    method: 'POST',
+    path: (f) => `/voice-profiles/${f.voiceProfileId}/archive`,
+    expect: [401, 404, 403, 200, 200],
+  },
   // Object storage (M4a). Upload needs editor; any member reads bytes. The fixture asset is
   // metadata-only, so reading it is 404 ASSET_CONTENT_MISSING once authorized.
   'POST /projects/:projectId/assets/upload': {
@@ -511,7 +587,18 @@ describe.each(Object.entries(ROWS))('%s', (_route, row) => {
     'as %s -> %i',
     async (caller, expected) => {
       const base = await createFixture(db, ids);
-      const fixture: MatrixFixture = { ...base, ...(await addGenerationFixture(db, ids, base)) };
+      const voiceProfileId = randomUUID();
+      await db.query(
+        `INSERT INTO voice_profiles (id, project_id, name, model_id, voice, language, created_by_id, updated_at)
+         SELECT $1, $2, 'Narrator', m.id, 'mock-a', 'vi', $3, now() FROM ai_models m
+         WHERE m.model_key = 'mock/tone-tts'`,
+        [voiceProfileId, base.projectId, ids['owner']],
+      );
+      const fixture: MatrixFixture = {
+        ...base,
+        ...(await addGenerationFixture(db, ids, base)),
+        voiceProfileId,
+      };
       const body = row.body?.(fixture);
       const raw = row.rawBody?.();
       const res = await as(

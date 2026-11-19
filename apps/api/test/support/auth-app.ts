@@ -18,9 +18,14 @@ import { inject } from 'vitest';
 import { loadApiEnv, type ApiEnv } from '@acf/config';
 import { createPrismaClient, type PrismaClient } from '@acf/database';
 
-import type { ImageProvider, LlmProvider } from '@acf/ai-core';
+import type { ImageProvider, LlmProvider, TtsProvider, VideoProvider } from '@acf/ai-core';
 
-import { IMAGE_PROVIDERS, LLM_PROVIDERS } from '../../src/ai/ai.tokens.js';
+import {
+  IMAGE_PROVIDERS,
+  LLM_PROVIDERS,
+  TTS_PROVIDERS,
+  VIDEO_PROVIDERS,
+} from '../../src/ai/ai.tokens.js';
 import { configureApp, createLogger } from '../../src/app.factory.js';
 import { AppModule } from '../../src/app.module.js';
 import { Public } from '../../src/auth/public.decorator.js';
@@ -128,6 +133,9 @@ export interface StartAuthAppOptions {
   readonly llmProviders?: ReadonlyMap<string, LlmProvider>;
   /** Replaces the configured image adapters (e.g. with MockImageProvider, M4). */
   readonly imageProviders?: ReadonlyMap<string, ImageProvider>;
+  /** Replaces the configured video and TTS adapters (M5). */
+  readonly videoProviders?: ReadonlyMap<string, VideoProvider>;
+  readonly ttsProviders?: ReadonlyMap<string, TtsProvider>;
 }
 
 export async function startAuthApp(
@@ -152,6 +160,12 @@ export async function startAuthApp(
     });
   if (options.imageProviders) {
     builder = builder.overrideProvider(IMAGE_PROVIDERS).useValue(options.imageProviders);
+  }
+  if (options.videoProviders) {
+    builder = builder.overrideProvider(VIDEO_PROVIDERS).useValue(options.videoProviders);
+  }
+  if (options.ttsProviders) {
+    builder = builder.overrideProvider(TTS_PROVIDERS).useValue(options.ttsProviders);
   }
   if (options.llmProviders) {
     builder = builder.overrideProvider(LLM_PROVIDERS).useValue(options.llmProviders);

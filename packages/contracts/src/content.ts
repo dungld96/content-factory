@@ -77,6 +77,10 @@ export type CreateContentRequest = z.output<typeof createContentRequestSchema>;
 /** `status` and `format` are not client-writable. */
 export const updateContentRequestSchema = createContentRequestSchema
   .omit({ format: true })
+  .extend({
+    /** Voice profile of the same project for voice-overs (M5 §7.1); null clears it. */
+    voiceProfileId: z.uuid().nullable(),
+  })
   .partial()
   .refine((value) => Object.keys(value).length > 0, { message: 'at least one field is required' })
   .meta({ id: 'UpdateContentRequest' });
@@ -106,6 +110,8 @@ export const contentItemSchema = z
     approvedScriptVersionId: z.uuid().nullable(),
     /** Gate 2: the approved storyboard (M3). */
     approvedStoryboardVersionId: z.uuid().nullable(),
+    /** Voice profile used for voice-overs (M5). */
+    voiceProfileId: z.uuid().nullable(),
     archivedAt: isoDateTimeSchema.nullable(),
     createdAt: isoDateTimeSchema,
     updatedAt: isoDateTimeSchema,

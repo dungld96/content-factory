@@ -34,6 +34,9 @@ export type {
   StoryboardScene,
   StoryboardSceneAsset,
   AiTaskRoute,
+  SceneClip,
+  SceneVoiceover,
+  VoiceProfile,
 } from './generated/prisma/client.js';
 export * from './generated/prisma/enums.js';
 export {

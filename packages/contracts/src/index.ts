@@ -12,3 +12,4 @@ export * from './brand.js';
 export * from './ai.js';
 export * from './generation.js';
 export * from './images.js';
+export * from './media.js';
