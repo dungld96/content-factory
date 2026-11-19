@@ -188,6 +188,10 @@ export function SceneClipsPanel(props: {
                 Scene {s.sceneNumber}: {ACTION_LABEL[s.action]}
                 {s.action === 'generate' && s.billedSeconds !== null
                   ? ` · ${String(s.sceneSeconds)} s scene billed as ${String(s.billedSeconds)} s${
+                      s.requestedSeconds !== null && s.billedSeconds > s.requestedSeconds
+                        ? ` (${String(s.requestedSeconds)} s clip; model minimum)`
+                        : ''
+                    }${
                       s.estimatedUsd === null
                         ? ' (price unknown)'
                         : ` · ${formatUsd(s.estimatedUsd)}`

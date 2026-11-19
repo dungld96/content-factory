@@ -3,6 +3,7 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import {
   activePrices,
   Capability,
+  billedVideoSeconds,
   chooseVideoDuration,
   estimateVideoCost,
   UsdAmount,
@@ -63,6 +64,9 @@ interface ScenePlan {
   readonly scene: StoryboardScene;
   readonly videoScene: VideoScene;
   readonly action: Action;
+  /** Clip length sent to the provider (a supported duration ≥ the scene). */
+  readonly requestedSeconds: number | null;
+  /** Seconds billed: the requested length, or the model's minimum billed seconds if higher. */
   readonly billedSeconds: number | null;
   readonly keyframeAssetId: string | null;
   readonly clipHash: string | null;
@@ -213,7 +217,7 @@ export class VideosService {
             sceneId: s.scene.id,
             scene: s.videoScene,
             keyframeAssetId: s.keyframeAssetId ?? '',
-            durationSeconds: s.billedSeconds ?? 0,
+            durationSeconds: s.requestedSeconds ?? 0,
             resolution: plan.resolution,
             aspectRatio: plan.aspectRatio,
             generateAudio: plan.generateAudio,
@@ -538,11 +542,14 @@ export class VideosService {
       const vs = videoScene(scene);
       const keyframeAssetId =
         keyframes.find((k) => k.storyboardSceneId === scene.id)?.assetId ?? null;
-      const billedSeconds = chooseVideoDuration(vs.durationSeconds, durations);
+      const requestedSeconds = chooseVideoDuration(vs.durationSeconds, durations);
+      const billedSeconds =
+        requestedSeconds === null ? null : billedVideoSeconds(requestedSeconds, constraints);
       const skeleton = {
         scene,
         videoScene: vs,
         keyframeAssetId,
+        requestedSeconds,
         billedSeconds,
         clipHash: null,
         executionKey: null,
@@ -557,16 +564,16 @@ export class VideosService {
         scenes.push({ ...skeleton, action: 'skip_no_keyframe' });
         continue;
       }
-      if (billedSeconds === null) {
+      if (requestedSeconds === null || billedSeconds === null) {
         scenes.push({ ...skeleton, action: 'skip_exceeds_model_maximum' });
         continue;
       }
-      await routeFor(billedSeconds);
+      await routeFor(requestedSeconds);
       const clipHash = clipContentHash({
         scene: vs,
         keyframeAssetId,
         modelId,
-        durationSeconds: billedSeconds,
+        durationSeconds: requestedSeconds,
         resolution,
         aspectRatio,
         generateAudio,
@@ -712,6 +719,7 @@ export class VideosService {
         sceneNumber: s.scene.sceneNumber,
         action: s.action,
         sceneSeconds: s.videoScene.durationSeconds,
+        requestedSeconds: s.requestedSeconds,
         billedSeconds: s.billedSeconds,
         estimatedUsd:
           s.action !== 'generate' ? '0' : s.estimate === null ? null : s.estimate.toString(),

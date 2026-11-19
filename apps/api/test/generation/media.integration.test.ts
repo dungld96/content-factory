@@ -65,7 +65,7 @@ const statusOf = async (contentId: string) =>
   (await prisma.contentItem.findUniqueOrThrow({ where: { id: contentId } })).status;
 
 /** Supported durations of the seeded mock video model (the fixture scene lasts 30 s). */
-async function setDurations(durations: number[]): Promise<void> {
+async function setDurations(durations: number[], minBilledSeconds?: number): Promise<void> {
   const model = await prisma.aiModel.findFirstOrThrow({ where: { modelKey: 'mock/still-video' } });
   await prisma.aiModel.update({
     where: { id: model.id },
@@ -78,6 +78,7 @@ async function setDurations(durations: number[]): Promise<void> {
         frameImages: ['first_frame'],
         audio: false,
         seed: true,
+        ...(minBilledSeconds === undefined ? {} : { minBilledSeconds }),
       },
     },
   });
@@ -236,6 +237,7 @@ describe('clip plans and estimates', () => {
         sceneNumber: 1,
         action: 'skip_no_keyframe',
         sceneSeconds: 30,
+        requestedSeconds: null,
         billedSeconds: null,
         estimatedUsd: '0',
       },
@@ -249,6 +251,22 @@ describe('clip plans and estimates', () => {
       action: 'skip_exceeds_model_maximum',
       billedSeconds: null,
     });
+  });
+
+  it("bills at least the model's minimum billed seconds (benchmark: Kling)", async () => {
+    await setDurations([5, 10, 30], 40);
+    const w = await approvedWorld();
+    await withKeyframe(w);
+    const estimate = bodyOf<VideoEstimateDto>(
+      await as('viewer', 'POST', `/storyboards/${w.storyboardId}/videos/estimate`, { body: {} }),
+    );
+    expect(estimate.scenes[0]).toMatchObject({
+      action: 'generate',
+      sceneSeconds: 30,
+      requestedSeconds: 30,
+      billedSeconds: 40,
+    });
+    await setDurations([5, 10, 30]);
   });
 
   it('refuses unsupported parameters and an unapproved storyboard', async () => {

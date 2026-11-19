@@ -40,13 +40,16 @@ Quality of the Vietnamese voices needs a human listen.
 
 ## Findings to act on
 
-1. **Minimum billed duration (Kling).** The registry has no notion of a minimum billed duration,
-   so the estimate (and the spend guard) can be too low. Add a per-model minimum to the video
-   constraints (or record it from observed billing) before routing Kling.
+1. **Minimum billed duration (Kling).** _Fixed:_ video constraints carry an operator-set
+   `minBilledSeconds` (`pnpm ai:registry model set-min-billed-seconds <modelKey> <s|none>`, kept on
+   re-import); estimates, the spend guard and the ledger bill `max(requested, minimum)`, and the
+   plan shows `requestedSeconds` and `billedSeconds`. Kling v3.0 Std is recorded at 5 s (still
+   disabled).
 2. **Unrequested audio (Wan 3.0).** `generate_audio: false` still returned an AAC track. Harmless
    for M6 if the voice-over replaces the clip's audio, but the price variant may differ.
 3. **TTS reported cost not retrieved.** All three TTS calls recorded `estimated` cost: the
-   `/generation?id=` lookup returned nothing right after the call. Retry the lookup after a short
-   delay (or later reconciliation) so the ledger gets the reported cost.
+   `/generation?id=` lookup returned nothing right after the call; minutes later the records held
+   exactly the estimated amounts ($0.00904, $0.00904, $0.002486). _Fixed:_ the adapter retries the
+   lookup after 0.5 s, 1.5 s and 3 s before falling back to the estimate.
 4. **Network in this cloud environment:** Node's `fetch` needs `NODE_USE_ENV_PROXY=1` to use the
    session proxy (environment quirk, not an application change).

@@ -192,6 +192,24 @@ describe('model import-openrouter-videos / -tts', () => {
     ]);
     expect(again.out).toContain('unchanged, 0 new price row(s)');
 
+    // The operator's observed minimum billed duration survives a catalog re-import.
+    expect((await cli(['model', 'set-min-billed-seconds', 'google/veo-3.1-lite', '5'])).code).toBe(
+      0,
+    );
+    expect((await cli(['model', 'set-min-billed-seconds', 'google/veo-3.1-lite', '0'])).code).toBe(
+      2,
+    );
+    await cli(['model', 'import-openrouter-videos', 'google/veo-3.1-lite', '--apply']);
+    expect(
+      (await prisma.aiModel.findFirstOrThrow({ where: { modelKey: 'google/veo-3.1-lite' } }))
+        .mediaConstraints,
+    ).toMatchObject({ durations: [4, 6, 8], minBilledSeconds: 5 });
+    await cli(['model', 'set-min-billed-seconds', 'google/veo-3.1-lite', 'none']);
+    expect(
+      (await prisma.aiModel.findFirstOrThrow({ where: { modelKey: 'google/veo-3.1-lite' } }))
+        .mediaConstraints,
+    ).not.toHaveProperty('minBilledSeconds');
+
     const tts = await cli([
       'model',
       'import-openrouter-tts',

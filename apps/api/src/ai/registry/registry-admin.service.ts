@@ -1,9 +1,10 @@
-import { UsdAmount, type PriceMetric } from '@acf/ai-core';
+import { UsdAmount, videoConstraintsSchema, type PriceMetric } from '@acf/ai-core';
 import type {
   AiPriceSource,
   AiProviderStatus,
   AiQualityTier,
   GenerationJobKind,
+  Prisma,
   PrismaClient,
 } from '@acf/database';
 
@@ -56,6 +57,33 @@ export class RegistryAdminService {
       data: { status },
     });
     if (count === 0) throw new RegistryAdminError(`unknown model ${providerKey}/${modelKey}`);
+  }
+
+  /**
+   * Records a video model's minimum billed seconds (observed billing, not in the catalog), so
+   * estimates and the spend guard bill at least that much. `null` removes it.
+   */
+  async setMinBilledSeconds(
+    providerKey: string,
+    modelKey: string,
+    seconds: number | null,
+  ): Promise<void> {
+    const model = await this.prisma.aiModel.findFirst({
+      where: { modelKey, provider: { key: providerKey } },
+      select: { id: true, mediaConstraints: true },
+    });
+    const parsed = videoConstraintsSchema.safeParse(model?.mediaConstraints);
+    if (!model || !parsed.success) {
+      throw new RegistryAdminError(
+        `${providerKey}/${modelKey} is not a video model with constraints`,
+      );
+    }
+    const next: Record<string, unknown> = { ...parsed.data, minBilledSeconds: seconds };
+    if (seconds === null) delete next['minBilledSeconds'];
+    await this.prisma.aiModel.update({
+      where: { id: model.id },
+      data: { mediaConstraints: next as Prisma.InputJsonObject },
+    });
   }
 
   /**
@@ -427,7 +455,8 @@ export class RegistryAdminService {
         supportedParameters: [],
         inputModalities: m.kind === 'video' ? ['text', 'image'] : ['text'],
         outputModalities: [m.kind === 'video' ? 'video' : 'speech'],
-        mediaConstraints: { ...m.constraints },
+        // An operator-set minimum billed duration is not in the catalog: keep it on re-import.
+        mediaConstraints: { ...m.constraints, ...keptMinimum(existing?.mediaConstraints) },
         dataPolicyNotes:
           m.kind === 'video'
             ? 'Requests send data_collection=deny. No video endpoint offers ZDR: the provider retains inputs and outputs briefly (verification record §1).'
@@ -479,4 +508,12 @@ export class RegistryAdminService {
       return { modelKey: m.modelKey, action, newPrices, detail };
     });
   }
+}
+
+/** `{ minBilledSeconds }` of stored video constraints, if set. */
+function keptMinimum(stored: unknown): { minBilledSeconds?: number } {
+  const parsed = videoConstraintsSchema.safeParse(stored);
+  return parsed.success && parsed.data.minBilledSeconds !== undefined
+    ? { minBilledSeconds: parsed.data.minBilledSeconds }
+    : {};
 }

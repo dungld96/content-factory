@@ -62,7 +62,9 @@ export const sceneVideoPlanSchema = z
       'skip_exceeds_model_maximum',
     ]),
     sceneSeconds: z.number(),
-    /** The model duration billed for this scene (≥ the scene); null when none fits. */
+    /** Clip length requested: a supported duration ≥ the scene; null when none fits. */
+    requestedSeconds: z.number().int().nullable(),
+    /** Seconds billed: the requested length, or the model's minimum billed seconds if higher. */
     billedSeconds: z.number().int().nullable(),
     /** Null when the price is unknown. */
     estimatedUsd: usdAmountSchema.nullable(),

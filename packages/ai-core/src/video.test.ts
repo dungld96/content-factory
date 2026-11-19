@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import type { GenerationContext } from './capability.js';
 import { ProviderError, ProviderErrorCode, ProviderErrorOutcome } from './errors.js';
 import {
+  billedVideoSeconds,
   chooseVideoDuration,
+  videoConstraintsSchema,
   ttsConstraintIssues,
   videoConstraintIssues,
   type VideoConstraints,
@@ -40,6 +42,29 @@ describe('chooseVideoDuration (decision V5)', () => {
   it('returns null when the scene is longer than the model maximum', () => {
     expect(chooseVideoDuration(9, [4, 6, 8])).toBeNull();
     expect(chooseVideoDuration(5, [])).toBeNull();
+  });
+});
+
+describe('billedVideoSeconds (benchmark: Kling bills 5 s for a 4 s clip)', () => {
+  it('bills at least the model minimum, otherwise the requested length', () => {
+    expect(billedVideoSeconds(4, { minBilledSeconds: 5 })).toBe(5);
+    expect(billedVideoSeconds(8, { minBilledSeconds: 5 })).toBe(8);
+    expect(billedVideoSeconds(4, {})).toBe(4);
+    expect(billedVideoSeconds(4, null)).toBe(4);
+  });
+  it('accepts the minimum in stored constraints and rejects nonsense', () => {
+    const base = {
+      kind: 'video',
+      durations: [3, 4, 5],
+      resolutions: ['720p'],
+      aspectRatios: ['9:16'],
+      frameImages: ['first_frame'],
+      audio: true,
+      seed: false,
+    };
+    expect(videoConstraintsSchema.safeParse({ ...base, minBilledSeconds: 5 }).success).toBe(true);
+    expect(videoConstraintsSchema.safeParse(base).success).toBe(true);
+    expect(videoConstraintsSchema.safeParse({ ...base, minBilledSeconds: 0 }).success).toBe(false);
   });
 });
 

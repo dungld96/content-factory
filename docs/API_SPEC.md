@@ -420,8 +420,10 @@ Video request body (estimate and generate):
 ```
 
 Defaults: every scene with a keyframe and no clip, 720p, no native audio, the model routed to
-`video_generation` (`pnpm ai:registry route set video_generation <modelKey>`). The billed duration
-is the smallest supported duration ≥ the scene. Plan actions: `generate`, `reuse_clip`,
+`video_generation` (`pnpm ai:registry route set video_generation <modelKey>`). The clip length
+requested from the provider (`requestedSeconds`) is the smallest supported duration ≥ the scene;
+`billedSeconds` is that or the model's minimum billed seconds, if higher (estimates and the spend
+guard use it). Plan actions: `generate`, `reuse_clip`,
 `skip_has_clip`, `skip_existing_result`, `skip_in_progress`, `skip_no_keyframe`,
 `skip_exceeds_model_maximum`. Voice-over actions: `generate`, `reuse_voiceover`,
 `skip_has_voiceover`, `skip_existing_result`, `skip_in_progress`, `skip_no_text`.

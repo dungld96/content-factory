@@ -302,8 +302,12 @@ const tts = (over: Partial<TtsRequest> = {}): TtsRequest => ({
   dataPolicy: { zeroDataRetention: true },
   ...over,
 });
-const ttsProvider = (pcmOnly = false) =>
-  new OpenRouterTtsProvider({ apiKey: API_KEY, baseUrl, timeoutMs: 2000 }, () => pcmOnly);
+const ttsProvider = (pcmOnly = false, costLookupDelaysMs: readonly number[] = [0]) =>
+  new OpenRouterTtsProvider(
+    { apiKey: API_KEY, baseUrl, timeoutMs: 2000 },
+    () => pcmOnly,
+    costLookupDelaysMs,
+  );
 const mp3 = new Uint8Array([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0, 9, 9, 9]);
 
 describe('OpenRouter TTS', () => {
@@ -346,6 +350,27 @@ describe('OpenRouter TTS', () => {
       { status: 404, body: { error: { code: 404, message: 'not found' } } },
     );
     expect((await ttsProvider().synthesize(tts(), context, signal())).reportedCost).toBeNull();
+  });
+
+  it('retries the cost lookup until the generation record appears', async () => {
+    script.push(
+      {
+        status: 200,
+        body: mp3,
+        headers: { 'content-type': 'audio/mpeg', 'x-generation-id': 'gen-3' },
+      },
+      { status: 404, body: { error: { code: 404, message: 'not found' } } },
+      { status: 200, body: { data: { id: 'gen-3', total_cost: null } } },
+      { status: 200, body: { data: { id: 'gen-3', total_cost: 0.002486 } } },
+    );
+    const result = await ttsProvider(false, [0, 0, 0]).synthesize(tts(), context, signal());
+    expect(result.reportedCost?.toString()).toBe('0.002486');
+    expect(received.map((r) => r.url)).toEqual([
+      '/api/v1/audio/speech',
+      '/api/v1/generation?id=gen-3',
+      '/api/v1/generation?id=gen-3',
+      '/api/v1/generation?id=gen-3',
+    ]);
   });
 
   it('wraps PCM-only output as WAV', async () => {

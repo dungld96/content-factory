@@ -15,6 +15,7 @@
 //                              [--count <1-10>] [--resolution 2K] [--out <dir>]   (M4 benchmark)
 //   pnpm ai:registry model import-openrouter-videos <modelKey>... [--tier <tier>] [--apply]   (M5)
 //   pnpm ai:registry model import-openrouter-tts <modelKey>... [--tier <tier>] [--apply]      (M5)
+//   pnpm ai:registry model set-min-billed-seconds <modelKey> <seconds|none> [--provider openrouter]
 //   ACF_PAID_SMOKE=1 pnpm ai:registry smoke-video <modelKey> --project <slug> --max-cost-usd <usd>
 //                              [--frame <png|jpg>] [--duration <s>] [--resolution 720p] [--count n] [--out <dir>]
 //   ACF_PAID_SMOKE=1 pnpm ai:registry smoke-tts <modelKey> --voice <id> --project <slug> --max-cost-usd <usd>
@@ -220,6 +221,24 @@ export async function runAiRegistryCli(
         return usage('model set-status <modelKey> <enabled|disabled|degraded>');
       await admin.setModelStatus(values.provider, modelKey, status as AiProviderStatus);
       io.out(`✔ model ${values.provider}/${modelKey} is ${status}`);
+      return 0;
+    }
+    if (group === 'model' && command === 'set-min-billed-seconds') {
+      const [modelKey, raw] = positionals;
+      const seconds = raw === 'none' ? null : Number(raw);
+      if (
+        !modelKey ||
+        raw === undefined ||
+        (seconds !== null && (!Number.isInteger(seconds) || seconds < 1 || seconds > 600))
+      ) {
+        return usage('model set-min-billed-seconds <modelKey> <seconds 1-600|none>');
+      }
+      await admin.setMinBilledSeconds(values.provider, modelKey, seconds);
+      io.out(
+        seconds === null
+          ? `✔ ${values.provider}/${modelKey}: no minimum billed duration`
+          : `✔ ${values.provider}/${modelKey}: bills at least ${String(seconds)} s per clip`,
+      );
       return 0;
     }
     if (group === 'model' && command === 'import-openrouter') {

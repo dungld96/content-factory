@@ -313,6 +313,8 @@ export interface VideoConstraints {
   /** Whether the model can generate audio; null = not declared. */
   readonly audio: boolean | null;
   readonly seed: boolean;
+  /** Seconds billed at least per clip (operator-set from observed billing); absent = none. */
+  readonly minBilledSeconds?: number | undefined;
 }
 
 export const videoConstraintsSchema = z
@@ -324,6 +326,11 @@ export const videoConstraintsSchema = z
     frameImages: z.array(z.string().max(32)).max(4),
     audio: z.boolean().nullable(),
     seed: z.boolean(),
+    /**
+     * Seconds the provider bills at least, whatever the requested duration (observed in the
+     * benchmark, e.g. 5 s for Kling v3.0; not in the catalog). Set by the operator; absent = none.
+     */
+    minBilledSeconds: z.number().int().positive().max(600).optional(),
   })
   .strict();
 
@@ -331,6 +338,14 @@ export const videoConstraintsSchema = z
  * Billed clip length for a scene (decision V5): the smallest supported duration that covers the
  * scene, or `null` when the scene is longer than the model's maximum.
  */
+/** Seconds billed for a clip of `durationSeconds` under the model's minimum, if any. */
+export function billedVideoSeconds(
+  durationSeconds: number,
+  constraints: Pick<VideoConstraints, 'minBilledSeconds'> | null,
+): number {
+  return Math.max(durationSeconds, constraints?.minBilledSeconds ?? 0);
+}
+
 export function chooseVideoDuration(
   sceneSeconds: number,
   supported: readonly number[],

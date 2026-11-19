@@ -2,12 +2,14 @@ import {
   activePrices,
   assessTtsCost,
   assessVideoCost,
+  billedVideoSeconds,
   Capability,
   filterCandidates,
   parseTtsRequest,
   parseVideoRequest,
   ttsConstraintIssues,
   videoConstraintIssues,
+  videoConstraintsSchema,
   type CostAssessment,
   type GenerationContext,
   type RoutingDecision,
@@ -18,6 +20,7 @@ import {
   type VideoDownload,
   type VideoJobState,
   type VideoProvider,
+  type VideoConstraints,
   type VideoRequest,
 } from '@acf/ai-core';
 import type { Prisma, PrismaClient } from '@acf/database';
@@ -177,7 +180,7 @@ export class VideoService {
       videoSummary(request, decision),
     );
     const estimate = assessVideoCost({
-      usage: videoUsage(request),
+      usage: videoUsage(request, row.videoConstraints),
       prices: activePrices(row.prices, invocation.startedAt),
       reportedCost: null,
     }).estimatedCost;
@@ -243,10 +246,11 @@ export class VideoService {
   ): Promise<CostAssessment> {
     const invocation = await this.prisma.aiInvocation.findUniqueOrThrow({
       where: { id: invocationId },
-      select: { startedAt: true, model: { select: { prices: true } } },
+      select: { startedAt: true, model: { select: { prices: true, mediaConstraints: true } } },
     });
+    const constraints = videoConstraintsSchema.safeParse(invocation.model.mediaConstraints);
     const cost = assessVideoCost({
-      usage: videoUsage(request),
+      usage: videoUsage(request, constraints.success ? constraints.data : null),
       prices: activePrices(toPriceComponents(invocation.model.prices), invocation.startedAt),
       reportedCost: state.reportedCost,
     });
@@ -371,8 +375,8 @@ export class TtsService {
   }
 }
 
-const videoUsage = (request: VideoRequest) => ({
-  seconds: request.durationSeconds,
+const videoUsage = (request: VideoRequest, constraints: VideoConstraints | null) => ({
+  seconds: billedVideoSeconds(request.durationSeconds, constraints),
   inputImages: request.firstFrame ? 1 : 0,
   resolution: request.resolution,
   audio: request.generateAudio,

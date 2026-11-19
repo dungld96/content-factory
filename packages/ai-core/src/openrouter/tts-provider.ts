@@ -77,6 +77,12 @@ export class OpenRouterTtsProvider implements TtsProvider {
   constructor(
     private readonly config: OpenRouterConfig,
     private readonly pcmOnly: (modelKey: string) => boolean = () => false,
+    /**
+     * Waits before each cost lookup. The generation record appears a moment after the response
+     * (benchmark 2026-11-19: absent right after the call, present seconds later), so a few
+     * bounded retries recover the reported cost; after the last one the estimate is used.
+     */
+    private readonly costLookupDelaysMs: readonly number[] = [500, 1500, 3000],
   ) {
     this.base = config.baseUrl.replace(/\/+$/, '');
   }
@@ -141,8 +147,19 @@ export class OpenRouterTtsProvider implements TtsProvider {
     };
   }
 
-  /** The generation's reported cost; null when the record is not available (yet). */
+  /** The generation's reported cost, retried while the record is not available yet. */
   private async cost(id: string, signal: AbortSignal): Promise<UsdAmount | null> {
+    for (const delayMs of this.costLookupDelaysMs) {
+      if (signal.aborted) return null;
+      if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+      const cost = await this.lookupCost(id, signal);
+      if (cost !== null) return cost;
+    }
+    return null;
+  }
+
+  /** One lookup; null when the record (or its cost) is not available (yet). */
+  private async lookupCost(id: string, signal: AbortSignal): Promise<UsdAmount | null> {
     try {
       const response = await fetch(`${this.base}/generation?id=${encodeURIComponent(id)}`, {
         headers: this.headers({ Accept: 'application/json' }),

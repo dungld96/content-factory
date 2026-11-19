@@ -91,7 +91,7 @@ new enum value in the transaction that adds it) and `m5_media` (design:
 | Table / column | Purpose |
 |---|---|
 | `ai_price_metric` += `output_video_seconds`, `input_characters`, `output_video_tokens` | Video prices per billed second (variant `720p-silent`, `720p`, `audio`, …: most specific first), TTS prices per input character, video tokens (recorded only). |
-| `ai_models.media_constraints` | Video limits (`durations`, `resolutions`, `aspectRatios`, `frameImages`, `audio`, `seed`) or TTS limits (`voices`, `mp3`), tagged by `kind`. |
+| `ai_models.media_constraints` | Video limits (`durations`, `resolutions`, `aspectRatios`, `frameImages`, `audio`, `seed`, optional operator-set `minBilledSeconds`) or TTS limits (`voices`, `mp3`), tagged by `kind`. |
 | `generation_job_kind` += `video_generation`, `tts_generation` | Scene-scoped like images: one active job per scene and kind (`active_key = {sceneId}:{kind}`). |
 | `generation_jobs.provider_key`, `invocation_id`, `submitted_at` | The submission intent, recorded **before** the paid submit (decision V3). Cleared only when the provider refused the submit. |
 | `generation_jobs.provider_job_id` (unique), `provider_status`, `provider_expires_at`, `poll_count`, `last_polled_at`, `next_poll_at` | The provider's async job and how it is being followed. Once `provider_job_id` is set, it and the intent are frozen (`AC011`); `poll_count` never decreases. Video jobs only (CHECK). |
