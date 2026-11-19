@@ -7,10 +7,10 @@ export default function ErrorBoundary({
   readonly reset: () => void;
 }) {
   return (
-    <section className="card" role="alert">
+    <section className="card card-pad" role="alert">
       <h2>Something went wrong</h2>
       <p className="muted">The page failed to render. Please try again.</p>
-      <button type="button" onClick={reset}>
+      <button type="button" className="btn primary" onClick={reset}>
         Try again
       </button>
     </section>

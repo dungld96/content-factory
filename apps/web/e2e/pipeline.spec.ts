@@ -12,15 +12,22 @@ async function openDemoContent(page: Page, email: string, password: string) {
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/projects$/);
+  await expect(page).toHaveURL(/:\d+\/$/);
+  await page.goto('/projects');
   await page.getByRole('link', { name: 'Demo Studio' }).click();
   await page
-    .getByRole('list', { name: 'Content items' })
+    .getByRole('table', { name: 'Content items' })
     .getByRole('link', { name: '5 useful desk gadgets' })
     .click();
   await expect(
     page.getByRole('heading', { level: 1, name: '5 useful desk gadgets' }),
   ).toBeVisible();
+}
+
+/** Opens a tab of the content workspace (script & brief, storyboard, keyframes, activity). */
+async function openTab(page: Page, name: RegExp) {
+  await page.getByRole('tab', { name }).click();
+  await expect(page.getByRole('tab', { name })).toHaveAttribute('aria-selected', 'true');
 }
 
 test.describe.configure({ mode: 'serial' });
@@ -37,7 +44,7 @@ test('editor: brief → script → edit → approve → storyboard → scene edi
   const v1 = page.getByRole('article', { name: 'Script version 1' });
   await expect(v1).toBeVisible({ timeout: GENERATION_TIMEOUT });
   await expect(v1).toContainText('Pending review');
-  await expect(page.getByLabel('Content status')).toHaveText('script_review');
+  await expect(page.getByLabel('Content status')).toHaveText('Script review');
 
   // An edit never changes v1: it creates v2.
   await page.getByRole('button', { name: 'Edit script' }).click();
@@ -52,14 +59,15 @@ test('editor: brief → script → edit → approve → storyboard → scene edi
   await v2.getByRole('button', { name: 'Approve script' }).click();
   await expect(v2).toContainText('Approved');
   await expect(v2).toContainText('In use');
-  await expect(page.getByLabel('Content status')).toHaveText('script_review');
+  await expect(page.getByLabel('Content status')).toHaveText('Script review');
 
   // Storyboard from the approved script.
+  await openTab(page, /^Storyboard/);
   await page.getByRole('button', { name: 'Generate storyboard' }).click();
   const s1 = page.getByRole('article', { name: 'Storyboard version 1' });
   await expect(s1).toBeVisible({ timeout: GENERATION_TIMEOUT });
-  await expect(s1.getByRole('table', { name: 'Scenes' }).getByRole('row')).not.toHaveCount(1);
-  await expect(page.getByLabel('Content status')).toHaveText('storyboard_review');
+  await expect(s1.getByRole('list', { name: 'Scenes' }).getByRole('listitem')).not.toHaveCount(0);
+  await expect(page.getByLabel('Content status')).toHaveText('Storyboard review');
 
   // A scene edit creates storyboard v2.
   await s1.getByRole('button', { name: 'Edit scene 1' }).click();
@@ -72,16 +80,22 @@ test('editor: brief → script → edit → approve → storyboard → scene edi
   // Gate 2: approve the storyboard.
   await s2.getByRole('button', { name: 'Approve storyboard' }).click();
   await expect(s2).toContainText('Approved');
-  await expect(page.getByLabel('Content status')).toHaveText('storyboard_review');
+  await expect(page.getByLabel('Content status')).toHaveText('Storyboard review');
 
-  // A reload shows the persisted state.
+  // A reload shows the persisted state (the tab is kept in the URL hash).
   await page.reload();
+  await openTab(page, /^Storyboard/);
   await expect(page.getByRole('article', { name: 'Storyboard version 2' })).toContainText('In use');
 });
 
 test('editor: scene images → review → keyframes (gate 3)', async ({ page }) => {
   test.setTimeout(120_000);
   await openDemoContent(page, EDITOR, passwordOf('EDITOR'));
+  // With an approved storyboard the workspace opens on the keyframes tab.
+  await expect(page.getByRole('tab', { name: /^Keyframes/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
   const panel = page.getByLabel('Scene image controls');
   await expect(panel).toBeVisible();
 
@@ -92,10 +106,12 @@ test('editor: scene images → review → keyframes (gate 3)', async ({ page }) 
 
   // One job per scene; the worker generates, validates and stores the images.
   await panel.getByRole('button', { name: 'Generate images' }).click();
-  await expect(page.getByLabel('Content status')).toHaveText('asset_review', {
+  await expect(page.getByLabel('Content status')).toHaveText('Asset review', {
     timeout: GENERATION_TIMEOUT,
   });
   await page.reload();
+  // Pages stream behind a loading state: wait for the panel before counting its scenes.
+  await expect(page.getByLabel('Scene image controls')).toBeVisible();
   const scenes = page.getByRole('article', { name: /^Scene \d+ images$/ });
   const sceneCount = await scenes.count();
   expect(sceneCount).toBeGreaterThan(0);
@@ -115,15 +131,30 @@ test('editor: scene images → review → keyframes (gate 3)', async ({ page }) 
     await expect(scene).toContainText('Keyframe chosen');
   }
   await expect(page.getByLabel('Keyframe gate')).toHaveText('All scenes have a keyframe');
+  await expect(page.getByRole('tab', { name: /^Keyframes/ })).toContainText(
+    `${String(sceneCount)}/${String(sceneCount)}`,
+  );
 });
 
 test('viewer: sees the versions but no generate, edit or review controls', async ({ page }) => {
   await openDemoContent(page, VIEWER, passwordOf('VIEWER'));
+  const noControls = async () => {
+    await expect(page.getByRole('button', { name: /Generate/ })).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: /Edit|Approve|Reject|keyframe|Regenerate|Resync/ }),
+    ).toHaveCount(0);
+  };
+  await openTab(page, /^Script/);
   await expect(page.getByRole('article', { name: 'Script version 2' })).toBeVisible();
+  await noControls();
+  await openTab(page, /^Storyboard/);
   await expect(page.getByRole('article', { name: 'Storyboard version 2' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Generate/ })).toHaveCount(0);
-  await expect(
-    page.getByRole('button', { name: /Edit|Approve|Reject|keyframe|Regenerate/ }),
-  ).toHaveCount(0);
+  await noControls();
+  await openTab(page, /^Keyframes/);
   await expect(page.getByLabel('Keyframe gate')).toHaveText('All scenes have a keyframe');
+  await noControls();
+  await openTab(page, /^Activity/);
+  await expect(page.getByRole('list', { name: 'Version history' })).toContainText(
+    'Script v2 approved',
+  );
 });

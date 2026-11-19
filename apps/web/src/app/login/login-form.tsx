@@ -33,7 +33,7 @@ export function LoginForm() {
       }
       const body = (await res.json()) as { csrfToken: string };
       rememberCsrfToken(body.csrfToken);
-      router.replace('/projects');
+      router.replace('/');
       router.refresh();
     } catch {
       setState({ kind: 'error', message: 'The server could not be reached.' });
@@ -42,12 +42,12 @@ export function LoginForm() {
 
   const submitting = state.kind === 'submitting';
   return (
-    <form className="card form" onSubmit={(e) => void onSubmit(e)} noValidate={false}>
-      <label>
+    <form className="form" onSubmit={(e) => void onSubmit(e)} noValidate={false}>
+      <label className="field">
         Email
         <input name="email" type="email" autoComplete="username" required />
       </label>
-      <label>
+      <label className="field">
         Password
         <input name="password" type="password" autoComplete="current-password" required />
       </label>
@@ -56,7 +56,7 @@ export function LoginForm() {
           {state.message}
         </p>
       )}
-      <button type="submit" disabled={submitting}>
+      <button type="submit" className="btn primary" disabled={submitting}>
         {submitting ? 'Signing in…' : 'Sign in'}
       </button>
     </form>

@@ -7,6 +7,8 @@ Use a **monorepo with modular architecture**. Deploy API and workers as separate
 ## 2. Logical components
 
 ### Web app (`apps/web`)
+- Content Studio shell (M4.5, `docs/design/M4.5-ui-refinement.md`): overview, projects, content
+  library, production pipeline, content workspace, masters, asset library, settings.
 - Project and content management UI.
 - Script/storyboard editor.
 - Asset gallery and approval controls.

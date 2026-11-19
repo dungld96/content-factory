@@ -132,6 +132,20 @@ and its job's invocations carry the cost (`apps/api/test/generation/images.integ
 `apps/web/e2e/pipeline.spec.ts` (generate → approve → keyframes → gate 3) and
 `apps/web/e2e/masters.spec.ts` (content masters, variants, reference upload).
 
+### M4.5 — UI/UX refinement
+Deliverables:
+- Content Studio design system and shell from `docs/design/content-studio-ui-prototype.html`.
+- Overview, projects, content library, pipeline board, content workspace, masters, asset library
+  and settings pages on real API data (no mock data or non-functional controls).
+
+Acceptance:
+- Existing workflows (auth, content and variants, uploads, script → storyboard → images →
+  keyframes) work unchanged end to end; no API, schema or domain change.
+- Responsive at the prototype breakpoints; light and dark themes.
+
+Delivery and decisions: `docs/design/M4.5-ui-refinement.md`. Evidence: `apps/web/e2e/*.spec.ts`
+(11 tests, incl. `studio.spec.ts`).
+
 ### M5 — Video and audio generation
 Deliverables:
 - Video provider adapter.

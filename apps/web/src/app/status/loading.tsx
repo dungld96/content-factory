@@ -1,3 +1,9 @@
 export default function Loading() {
-  return <p className="muted">Checking system status…</p>;
+  return (
+    <div className="standalone">
+      <p className="muted" aria-busy="true">
+        Checking dependencies…
+      </p>
+    </div>
+  );
 }

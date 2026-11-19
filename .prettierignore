@@ -16,3 +16,6 @@ docs/*.md
 
 # Design verification scripts (reference only)
 docs/design/**/evidence/**
+
+# Design reference supplied as-is (M4.5); not reformatted.
+docs/design/content-studio-ui-prototype.html

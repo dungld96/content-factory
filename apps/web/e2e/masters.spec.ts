@@ -48,6 +48,8 @@ test('editor: new content → master page → add a variant; upload a reference 
   await page.getByLabel('Email').fill(EDITOR);
   await page.getByLabel('Password').fill(process.env['E2E_PASSWORD_EDITOR'] ?? '');
   await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page).toHaveURL(/:\d+\/$/);
+  await page.goto('/projects');
   await page.getByRole('link', { name: 'Demo Studio' }).click();
 
   // Create content: the API creates its master and the item as the first variant.
@@ -58,29 +60,35 @@ test('editor: new content → master page → add a variant; upload a reference 
   await form.getByLabel('Platform').selectOption('tiktok');
   await form.getByRole('button', { name: 'Create' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Standing desk tips' })).toBeVisible();
-  await expect(page.getByLabel('Content master')).toContainText('for tiktok');
+  await expect(page.getByLabel('Content master')).toContainText('for TikTok');
 
-  // The master page lists the variant; add a square YouTube variant.
+  // The master page lists the variant; add a square YouTube variant (in a dialog).
   await page.getByLabel('Content master').getByRole('link').click();
   await expect(page.getByRole('heading', { level: 1, name: 'Standing desk tips' })).toBeVisible();
   const variants = page.getByRole('table', { name: 'Variants' });
   await expect(variants.getByRole('row')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Add variant' }).click();
   const variantForm = page.getByRole('form', { name: 'New variant' });
   await variantForm.getByLabel('Title (optional)').fill('Standing desk tips (Shorts)');
   await variantForm.getByLabel('Aspect ratio').selectOption('1:1');
   await variantForm.getByLabel('Platform').selectOption('youtube_shorts');
   await variantForm.getByRole('button', { name: 'Add variant' }).click();
   await expect(variants.getByRole('row')).toHaveCount(3);
-  await expect(variants).toContainText('youtube_shorts');
+  await expect(variants).toContainText('YouTube Shorts');
 
-  // Upload a reference image from the project page.
+  // Upload a reference image from the project's asset library.
   await page.getByRole('link', { name: 'Demo Studio' }).click();
-  await page.getByLabel('Upload reference image').setInputFiles({
+  await page.getByRole('link', { name: 'Assets' }).click();
+  await page.getByRole('button', { name: 'Upload reference' }).click();
+  const upload = page.getByRole('form', { name: 'Upload asset' });
+  await expect(upload.getByLabel('Project')).toHaveValue(/.+/);
+  await upload.getByLabel('Reference image').setInputFiles({
     name: 'desk-reference.png',
     mimeType: 'image/png',
     buffer: png(40, 60),
   });
-  const refs = page.getByRole('list', { name: 'Reference images' });
+  await upload.getByRole('button', { name: 'Upload' }).click();
+  const refs = page.getByRole('list', { name: 'Assets' });
   await expect(refs).toContainText('desk-reference.png');
   const img = refs.getByRole('img', { name: 'desk-reference.png' });
   await expect

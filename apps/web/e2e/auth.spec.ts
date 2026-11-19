@@ -27,8 +27,16 @@ test('a wrong password shows a generic error and sets no session', async ({ page
   expect((await context.cookies()).some((c) => c.name === 'acf_sid')).toBe(false);
 });
 
+/** The Overview at the root (`/`) is where sign-in lands. */
+const OVERVIEW = /:\d+\/$/;
+
 test('login → project list → logout', async ({ page, context }) => {
   await signIn(page, OWNER, passwordOf('OWNER'));
+  await expect(page).toHaveURL(OVERVIEW);
+  await page
+    .getByRole('navigation', { name: 'Workspace' })
+    .getByRole('link', { name: 'Projects' })
+    .click();
   await expect(page).toHaveURL(/\/projects$/);
   const projects = page.getByRole('list', { name: 'Your projects' });
   await expect(projects.getByRole('heading', { name: 'Demo Studio' })).toBeVisible();
@@ -54,7 +62,8 @@ test('login → project list → logout', async ({ page, context }) => {
 
 test('sign out works after a reload (CSRF token re-fetched)', async ({ page }) => {
   await signIn(page, VIEWER, passwordOf('VIEWER'));
-  await expect(page).toHaveURL(/\/projects$/);
+  await expect(page).toHaveURL(OVERVIEW);
+  await page.goto('/projects');
   await expect(page.getByRole('list', { name: 'Your projects' })).toContainText('Viewer');
   await page.reload(); // drops the in-memory CSRF token
   await page.getByRole('button', { name: 'Sign out' }).click();
@@ -63,9 +72,10 @@ test('sign out works after a reload (CSRF token re-fetched)', async ({ page }) =
   await expect(page).toHaveURL(/\/login$/);
 });
 
-test('a signed-in user visiting /login goes to /projects', async ({ page }) => {
+test('a signed-in user visiting /login goes to the overview', async ({ page }) => {
   await signIn(page, OWNER, passwordOf('OWNER'));
-  await expect(page).toHaveURL(/\/projects$/);
+  await expect(page).toHaveURL(OVERVIEW);
   await page.goto('/login');
-  await expect(page).toHaveURL(/\/projects$/);
+  await expect(page).toHaveURL(OVERVIEW);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 });

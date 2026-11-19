@@ -82,6 +82,3 @@ export async function uploadImage<T>(
     return { ok: false, status: 0, data: null, message: 'The server could not be reached.' };
   }
 }
-
-/** Same-origin URL of an asset's bytes (streamed by the API; storage is never exposed). */
-export const assetContentUrl = (assetId: string) => `/api/v1/assets/${assetId}/content`;

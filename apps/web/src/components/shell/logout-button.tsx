@@ -26,7 +26,7 @@ export function LogoutButton() {
   }
 
   return (
-    <button type="button" className="secondary" onClick={() => void logout()} disabled={busy}>
+    <button type="button" className="signout" onClick={() => void logout()} disabled={busy}>
       {busy ? 'Signing out…' : 'Sign out'}
     </button>
   );
