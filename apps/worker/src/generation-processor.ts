@@ -66,6 +66,7 @@ import {
   MediaPermanentError,
   type MediaStepOutcome,
 } from './media-jobs.js';
+import { RenderJobs } from './render-jobs.js';
 
 export type ProcessOutcome =
   | { readonly type: 'succeeded'; readonly versionId: string }
@@ -93,6 +94,8 @@ export interface ProcessorDeps {
   readonly schedulePoll?: (jobId: string, pollCount: number, delayMs: number) => Promise<void>;
   /** FFprobe/FFmpeg locations (M5a). */
   readonly mediaTools?: MediaTools;
+  /** Ceiling per FFmpeg step of a render (M6, `RENDER_TIMEOUT_MS`). */
+  readonly renderStepTimeoutMs?: number;
   /** Factor applied to the video poll schedule (tests and E2E). */
   readonly videoPollScale?: number;
   /** Copies a finally failed job to the dead-letter queue (M3 Q8). */
@@ -138,6 +141,7 @@ interface Structured<T> {
  */
 export class GenerationProcessor {
   private readonly media: MediaJobs;
+  private readonly renders: RenderJobs;
 
   constructor(private readonly deps: ProcessorDeps) {
     this.media = new MediaJobs(
@@ -154,6 +158,14 @@ export class GenerationProcessor {
       },
       { failFinal: (job, code, message) => this.failFinal(job, code, message) },
     );
+    this.renders = new RenderJobs({
+      prisma: deps.prisma,
+      jobs: deps.jobs,
+      store: deps.store ?? null,
+      tools: deps.mediaTools,
+      stepTimeoutMs: deps.renderStepTimeoutMs,
+      logger: deps.logger,
+    });
   }
 
   /**
@@ -195,9 +207,11 @@ export class GenerationProcessor {
           ? await this.runImages(job)
           : job.kind === 'tts_generation'
             ? await this.media.runTts(job)
-            : job.kind === 'script_generation'
-              ? await this.runScript(job)
-              : await this.runStoryboard(job);
+            : job.kind === 'render'
+              ? await this.renders.run(job)
+              : job.kind === 'script_generation'
+                ? await this.runScript(job)
+                : await this.runStoryboard(job);
       logger.log('info', 'job_succeeded', { jobId, attempt: job.attempt, versionId });
       return { type: 'succeeded', versionId };
     } catch (error) {

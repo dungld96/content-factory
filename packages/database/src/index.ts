@@ -37,6 +37,7 @@ export type {
   SceneClip,
   SceneVoiceover,
   VoiceProfile,
+  Render,
 } from './generated/prisma/client.js';
 export * from './generated/prisma/enums.js';
 export {

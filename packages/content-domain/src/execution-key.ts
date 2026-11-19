@@ -7,7 +7,8 @@ export interface ExecutionKeyInput {
     | 'storyboard_generation'
     | 'image_generation'
     | 'video_generation'
-    | 'tts_generation';
+    | 'tts_generation'
+    | 'render';
   readonly contentItemId: string;
   /** The normalized brief and generation settings (duration, language, aspect ratio). */
   readonly brief: unknown;

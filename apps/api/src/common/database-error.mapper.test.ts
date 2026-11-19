@@ -30,6 +30,7 @@ describe('mapDatabaseError', () => {
     ['AC013', 409, 'STALE_STORYBOARD'],
     ['AC015', 409, 'KEYFRAME_INVALID'],
     ['AC016', 409, 'SCENE_SELECTION_INVALID'],
+    ['AC017', 409, 'RENDER_NOT_APPROVED'],
     ['23503', 422, 'REFERENCE_NOT_FOUND'],
     ['23514', 422, 'CONSTRAINT_VIOLATION'],
   ])('maps %s to %i %s', (sqlState, status, code) => {

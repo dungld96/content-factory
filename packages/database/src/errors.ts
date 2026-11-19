@@ -26,6 +26,8 @@ export const IntegritySqlState = {
   KEYFRAME_INVALID: 'AC015',
   /** M5: a selected scene clip or voice-over is an approved, active asset of its scene. */
   SCENE_SELECTION_INVALID: 'AC016',
+  /** M6 gate 5: the approved-render pointer names an approved render of the content item. */
+  RENDER_POINTER_INVALID: 'AC017',
 } as const;
 export type IntegritySqlState = (typeof IntegritySqlState)[keyof typeof IntegritySqlState];
 

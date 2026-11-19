@@ -35,7 +35,18 @@ export type PipelineEvent =
       readonly type: 'image_jobs_settled';
       readonly hasCandidates: boolean;
       readonly previous: ContentStatus;
-    };
+    }
+  /** M6: a render job was queued (gate 4 complete, checked separately). */
+  | { readonly type: 'render_queued' }
+  /** M6: the render succeeded and passed automated QC: ready for human review (gate 5). */
+  | { readonly type: 'render_succeeded' }
+  /** M6: the render failed (or failed QC) or was canceled: back to where it started. */
+  | { readonly type: 'render_ended_without_result'; readonly previous: ContentStatus }
+  /** M6 gate 5. */
+  | { readonly type: 'render_approved' }
+  | { readonly type: 'render_rejected' }
+  /** M6: the approved render's publishing package was exported. */
+  | { readonly type: 'render_exported' };
 
 export class InvalidTransitionError extends Error {
   override readonly name = 'InvalidTransitionError';
@@ -64,6 +75,17 @@ const IMAGES_START: ReadonlySet<ContentStatus> = new Set([
   'storyboard_review',
   'asset_review',
   'generating_assets', // more scenes while others are still generating
+  // M6: rework a scene after reviewing a render (the approved render stays what it was).
+  'quality_review',
+  'approved',
+  'exported',
+]);
+/** M6: a render starts once the scene media are chosen; re-rendering is allowed at any later step. */
+const RENDER_START: ReadonlySet<ContentStatus> = new Set([
+  'asset_review',
+  'quality_review',
+  'approved',
+  'exported',
 ]);
 /** Statuses M3 owns; later stages (M4+) are not touched by M3 events. */
 const M3_STATUSES: ReadonlySet<ContentStatus> = new Set([
@@ -108,6 +130,25 @@ export function nextContentStatus(from: ContentStatus, event: PipelineEvent): Co
         if (event.hasCandidates) return 'asset_review';
         return event.previous === 'generating_assets' ? 'storyboard_review' : event.previous;
       }
+      break;
+    case 'render_queued':
+      if (RENDER_START.has(from)) return 'rendering';
+      break;
+    case 'render_succeeded':
+      if (from === 'rendering') return 'quality_review';
+      break;
+    case 'render_ended_without_result':
+      if (from === 'rendering') return event.previous;
+      break;
+    case 'render_approved':
+      if (from === 'quality_review' || from === 'approved' || from === 'exported')
+        return 'approved';
+      break;
+    case 'render_rejected':
+      if (from === 'quality_review') return 'asset_review';
+      break;
+    case 'render_exported':
+      if (from === 'approved' || from === 'exported') return 'exported';
       break;
   }
   throw new InvalidTransitionError(from, event.type);

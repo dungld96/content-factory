@@ -107,6 +107,13 @@ export const ApiErrorCode = {
   ClipInvalid: 'CLIP_INVALID',
   VoiceoverInvalid: 'VOICEOVER_INVALID',
   JobNotRecheckable: 'JOB_NOT_RECHECKABLE',
+  ClipsIncomplete: 'CLIPS_INCOMPLETE',
+  VoiceoversIncomplete: 'VOICEOVERS_INCOMPLETE',
+  VoiceoverExceedsScene: 'VOICEOVER_EXCEEDS_SCENE',
+  MusicInvalid: 'MUSIC_INVALID',
+  RenderInProgress: 'RENDER_IN_PROGRESS',
+  RenderNotApproved: 'RENDER_NOT_APPROVED',
+  RenderNotReviewable: 'RENDER_NOT_REVIEWABLE',
 
   // --- M5a: media tools, audio upload, ranges (M5 design package §7.3, §8) ---
   /** FFprobe/FFmpeg is not installed on this deployment. */

@@ -44,6 +44,10 @@ export const workerEnvSchema = z
      * so mock clips finish in seconds; production keeps 1.
      */
     WORKER_VIDEO_POLL_SCALE: z.coerce.number().min(0.001).max(1).default(1),
+    /** Renders processed in parallel (M6): CPU-bound, 1 on the single staging VM. */
+    WORKER_RENDER_CONCURRENCY: z.coerce.number().int().min(1).max(4).default(1),
+    /** Ceiling per FFmpeg step of a render (M6). */
+    RENDER_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(1_800_000).default(600_000),
     /** TTS calls (M5). */
     WORKER_AUDIO_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
   })

@@ -30,6 +30,7 @@ export const generationJobKindSchema = z
     'image_generation',
     'video_generation',
     'tts_generation',
+    'render',
   ])
   .meta({ id: 'GenerationJobKind' });
 export const generationJobStatusSchema = z

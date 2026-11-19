@@ -113,6 +113,12 @@ export class JobStore {
       });
       if (SCENE_JOB_KINDS.has(current.kind)) {
         await this.settleImageWork(tx, current);
+      } else if (current.kind === 'render') {
+        await this.endRun(tx, current.productionRunId, 'failed');
+        await this.transitionContent(tx, current.contentItemId, {
+          type: 'render_ended_without_result',
+          previous: current.previousContentStatus,
+        });
       } else {
         await this.endRun(tx, current.productionRunId, 'failed');
         await this.restoreContent(tx, current);
@@ -332,6 +338,49 @@ export class JobStore {
     });
     await this.endRun(tx, job.productionRunId, 'succeeded');
     await this.transitionContent(tx, job.contentItemId, event);
+    return true;
+  }
+
+  // ------------------------------------------------------------------- renders (M6)
+
+  /** A render stage started (shown as job progress; M6 design §12). */
+  async recordProgress(job: GenerationJob, stage: string): Promise<void> {
+    await this.prisma.jobEvent.create({
+      data: {
+        projectId: job.projectId,
+        jobId: job.id,
+        fromStatus: 'running',
+        toStatus: 'running',
+        attempt: job.attempt,
+        detail: { type: 'render_stage', stage },
+      },
+    });
+  }
+
+  /**
+   * A render job succeeds inside the caller's transaction (which stored its outputs on the
+   * render row): run succeeded, content item ready for review (gate 5). False when the job is no
+   * longer this running attempt (canceled meanwhile): the caller rolls back.
+   */
+  async succeedRenderIn(
+    tx: TransactionClient,
+    job: GenerationJob,
+    renderId: string,
+  ): Promise<boolean> {
+    const { count } = await tx.generationJob.updateMany({
+      where: { id: job.id, status: 'running', attempt: job.attempt },
+      data: {
+        status: 'succeeded',
+        activeKey: null,
+        completedAt: new Date(),
+        errorCode: null,
+        errorMessage: null,
+      },
+    });
+    if (count !== 1) return false;
+    await this.event(tx, job, 'running', 'succeeded', job.attempt, { type: 'succeeded', renderId });
+    await this.endRun(tx, job.productionRunId, 'succeeded');
+    await this.transitionContent(tx, job.contentItemId, { type: 'render_succeeded' });
     return true;
   }
 

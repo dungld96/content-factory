@@ -13,6 +13,7 @@ import {
   RETRY_POLICY,
   VIDEO_GENERATION_QUEUE,
   VIDEO_POLL_JOB_NAME,
+  RENDER_QUEUE,
   videoPollOptions,
   type DeadLetterPayload,
   type GenerationJobPayload,
@@ -36,6 +37,8 @@ export interface Queues {
   readonly videos: Queue<GenerationJobPayload>;
   /** TTS jobs (M5). */
   readonly audio: Queue<GenerationJobPayload>;
+  /** Render jobs (M6): CPU-bound FFmpeg work. */
+  readonly renders: Queue<GenerationJobPayload>;
   readonly deadLetter: Queue<DeadLetterPayload>;
 }
 
@@ -45,6 +48,7 @@ export function createQueues(connection: Redis, prefix: string): Queues {
     images: new Queue<GenerationJobPayload>(IMAGE_GENERATION_QUEUE, { connection, prefix }),
     videos: new Queue<GenerationJobPayload>(VIDEO_GENERATION_QUEUE, { connection, prefix }),
     audio: new Queue<GenerationJobPayload>(AUDIO_GENERATION_QUEUE, { connection, prefix }),
+    renders: new Queue<GenerationJobPayload>(RENDER_QUEUE, { connection, prefix }),
     deadLetter: new Queue<DeadLetterPayload>(GENERATION_DLQ, { connection, prefix }),
   };
 }
@@ -58,6 +62,8 @@ export function queueOf(queues: Queues, kind: string): Queue<GenerationJobPayloa
       return queues.videos;
     case AUDIO_GENERATION_QUEUE:
       return queues.audio;
+    case RENDER_QUEUE:
+      return queues.renders;
     default:
       return queues.generation;
   }

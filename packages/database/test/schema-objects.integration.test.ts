@@ -42,6 +42,7 @@ const EXPECTED_TRIGGERS: readonly (readonly [string, string, boolean])[] = [
   ['content_items', 'content_items_master_link_guard', false],
   ['content_items', 'content_items_no_delete', false],
   ['content_items', 'content_items_pointer_guard', false],
+  ['content_items', 'content_items_render_pointer_guard', false],
   ['content_masters', 'content_masters_no_delete', false],
   ['environment_version_assets', 'environment_version_assets_guard', false],
   ['environment_versions', 'environment_versions_approval_sets_master', true],
@@ -54,6 +55,7 @@ const EXPECTED_TRIGGERS: readonly (readonly [string, string, boolean])[] = [
   ['project_members', 'project_members_keep_owner', true],
   ['projects', 'projects_created_with_owner', true],
   ['projects', 'projects_no_delete', false],
+  ['renders', 'renders_guard', false],
   ['scene_clip_events', 'scene_clip_events_append_only', false],
   ['scene_clips', 'scene_clips_guard', false],
   ['scene_keyframe_events', 'scene_keyframe_events_append_only', false],
@@ -130,6 +132,15 @@ const EXPECTED_CHECKS = [
   'job_events.job_events_attempt_nonnegative',
   'job_events.job_events_detail_object',
   'production_runs.production_runs_completion_consistent',
+  'renders.renders_duration_positive',
+  'renders.renders_execution_key_format',
+  'renders.renders_export_consistent',
+  'renders.renders_manifest_object',
+  'renders.renders_outputs_together',
+  'renders.renders_qc_object',
+  'renders.renders_review_consistent',
+  'renders.renders_review_note_nonempty',
+  'renders.renders_settings_object',
   'scene_clip_events.scene_clip_events_reason_known',
   'scene_keyframe_events.scene_keyframe_events_reason_known',
   'scene_voiceover_events.scene_voiceover_events_reason_known',
@@ -263,7 +274,7 @@ describe('role separation (U3)', () => {
       `SELECT tablename, has_table_privilege(current_user, 'public.' || tablename, 'SELECT, INSERT, UPDATE, DELETE') AS ok
        FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`,
     );
-    expect(rows.length).toBe(36); // M1–M3: 27; R0: content_masters; M4: 3 image tables; M5: 5 media tables
+    expect(rows.length).toBe(37); // M1–M3: 27; R0: content_masters; M4: 3 image tables; M5: 5 media tables; M6: renders
     expect(rows.filter((r) => !r.ok)).toEqual([]);
   });
 });

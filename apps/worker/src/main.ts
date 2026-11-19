@@ -24,6 +24,8 @@ import {
   AUDIO_JOB_LOCK_MS,
   IMAGE_GENERATION_QUEUE,
   IMAGE_JOB_LOCK_MS,
+  RENDER_JOB_LOCK_MS,
+  RENDER_QUEUE,
   VIDEO_GENERATION_QUEUE,
   VIDEO_JOB_LOCK_MS,
 } from '@acf/content-domain';
@@ -154,6 +156,7 @@ export async function startWorker(
       scheduleVideoPoll(queues, jobId, pollCount, delayMs),
     mediaTools: mediaTools(env),
     videoPollScale: env.WORKER_VIDEO_POLL_SCALE,
+    renderStepTimeoutMs: env.RENDER_TIMEOUT_MS,
     store,
     deadLetter: (payload) => addDeadLetter(queues, payload),
     logger,
@@ -194,6 +197,16 @@ export async function startWorker(
     queueName: AUDIO_GENERATION_QUEUE,
     lockDurationMs: AUDIO_JOB_LOCK_MS,
   });
+  // Renders (M6): FFmpeg in this process, one at a time by default; the lock covers a render.
+  const renderWorker = startGenerationWorker({
+    connection,
+    prefix: env.QUEUE_PREFIX,
+    concurrency: env.WORKER_RENDER_CONCURRENCY,
+    processor,
+    logger,
+    queueName: RENDER_QUEUE,
+    lockDurationMs: RENDER_JOB_LOCK_MS,
+  });
   const reconciler = new Reconciler(prisma, queues, logger);
   const reconcile = () => {
     reconciler.run().catch((error: unknown) => {
@@ -222,10 +235,12 @@ export async function startWorker(
       await imageWorker.close();
       await videoWorker.close();
       await audioWorker.close();
+      await renderWorker.close();
       await queues.generation.close();
       await queues.images.close();
       await queues.videos.close();
       await queues.audio.close();
+      await queues.renders.close();
       await queues.deadLetter.close();
       connection.disconnect();
       await prisma.$disconnect();

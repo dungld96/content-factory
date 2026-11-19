@@ -5,6 +5,7 @@ import { z } from 'zod';
  * ADR-0013. No BullMQ dependency here: only names, payloads and policy.
  */
 import { AUDIO_GENERATION_QUEUE, VIDEO_GENERATION_QUEUE } from './media.js';
+import { RENDER_QUEUE } from './render.js';
 
 export const GENERATION_QUEUE = 'generation';
 export const GENERATION_DLQ = 'generation-dlq';
@@ -24,7 +25,9 @@ export const queueForKind = (kind: string): string =>
       ? VIDEO_GENERATION_QUEUE
       : kind === 'tts_generation'
         ? AUDIO_GENERATION_QUEUE
-        : GENERATION_QUEUE;
+        : kind === 'render'
+          ? RENDER_QUEUE
+          : GENERATION_QUEUE;
 
 /** The BullMQ payload carries only the job id; PostgreSQL holds everything else. */
 export const generationJobPayloadSchema = z.strictObject({ jobId: z.uuid() });

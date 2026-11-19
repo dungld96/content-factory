@@ -178,6 +178,9 @@ model User {
   selectedVoiceovers SceneVoiceover[]
   voiceoverEvents    SceneVoiceoverEvent[]
   voiceProfiles      VoiceProfile[]
+  rendersReviewed    Render[]              @relation("RenderReviewedBy")
+  rendersExported    Render[]              @relation("RenderExportedBy")
+  rendersCreated     Render[]              @relation("RenderCreatedBy")
 
   @@map("users")
 }
@@ -234,6 +237,7 @@ model Project {
   productionRuns ProductionRun[]
   generationJobs GenerationJob[]
   voiceProfiles  VoiceProfile[]
+  renders        Render[]
 
   @@index([createdById])
   @@map("projects")
@@ -480,22 +484,25 @@ model Asset {
   createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  project         Project               @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  contentItem     ContentItem?          @relation(fields: [projectId, contentItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  sourceAsset     Asset?                @relation("AssetLineage", fields: [projectId, sourceAssetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  derived         Asset[]               @relation("AssetLineage")
-  createdBy       User                  @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  reviewedBy      User?                 @relation("AssetReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  generationJob   GenerationJob?        @relation("JobAssets", fields: [projectId, generationJobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  storyboardScene StoryboardScene?      @relation("SceneCandidates", fields: [projectId, storyboardSceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  inputs          AssetInput[]          @relation("AssetInputsOf")
-  usedAsInput     AssetInput[]          @relation("AssetInputsUsed")
-  keyframeOf      SceneKeyframe[]
-  keyframeEvents  SceneKeyframeEvent[]
-  clipOf          SceneClip[]
-  clipEvents      SceneClipEvent[]
-  voiceoverOf     SceneVoiceover[]
-  voiceoverEvents SceneVoiceoverEvent[]
+  project          Project               @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contentItem      ContentItem?          @relation(fields: [projectId, contentItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  sourceAsset      Asset?                @relation("AssetLineage", fields: [projectId, sourceAssetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  derived          Asset[]               @relation("AssetLineage")
+  createdBy        User                  @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reviewedBy       User?                 @relation("AssetReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  generationJob    GenerationJob?        @relation("JobAssets", fields: [projectId, generationJobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  storyboardScene  StoryboardScene?      @relation("SceneCandidates", fields: [projectId, storyboardSceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  inputs           AssetInput[]          @relation("AssetInputsOf")
+  renderVideos     Render[]              @relation("RenderVideo")
+  renderSubtitles  Render[]              @relation("RenderSubtitle")
+  renderThumbnails Render[]              @relation("RenderThumbnail")
+  usedAsInput      AssetInput[]          @relation("AssetInputsUsed")
+  keyframeOf       SceneKeyframe[]
+  keyframeEvents   SceneKeyframeEvent[]
+  clipOf           SceneClip[]
+  clipEvents       SceneClipEvent[]
+  voiceoverOf      SceneVoiceover[]
+  voiceoverEvents  SceneVoiceoverEvent[]
 
   characterVersionPrimary   CharacterVersion[]        @relation("CharacterVersionPrimaryAsset")
   characterVersionLinks     CharacterVersionAsset[]   @relation("CharacterVersionAssets")
@@ -591,8 +598,12 @@ model ContentItem {
   generationJobs              GenerationJob[]
 
   /// Narration voice for TTS (M5 design §7.1); a voice profile of the same project.
-  voiceProfileId String?       @map("voice_profile_id") @db.Uuid
-  voiceProfile   VoiceProfile? @relation(fields: [projectId, voiceProfileId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  voiceProfileId   String?       @map("voice_profile_id") @db.Uuid
+  voiceProfile     VoiceProfile? @relation(fields: [projectId, voiceProfileId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  /// M6 gate 5: the approved render (an approved render of this item; trigger AC017).
+  approvedRenderId String?       @map("approved_render_id") @db.Uuid
+  approvedRender   Render?       @relation("ContentApprovedRender", fields: [id, approvedRenderId], references: [contentItemId, id], onDelete: Restrict, onUpdate: Restrict)
+  renders          Render[]      @relation("ContentRenders")
 
   @@unique([projectId, id]) // composite-FK target
   @@index([projectId, createdAt(sort: Desc), id(sort: Desc)])
@@ -889,6 +900,8 @@ enum GenerationJobKind {
   video_generation
   /// M5: one voice-over per scene.
   tts_generation
+  /// M6: one render of a content item (FFmpeg in the worker; no provider call).
+  render
 
   @@map("generation_job_kind")
 }
@@ -1001,6 +1014,7 @@ model GenerationJob {
   storyboardScene  StoryboardScene?    @relation("SceneImageJobs", fields: [projectId, storyboardSceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   invocation       AiInvocation?       @relation("JobInFlightInvocation", fields: [projectId, invocationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   assets           Asset[]             @relation("JobAssets")
+  render           Render?
   events           JobEvent[]
   invocations      AiInvocation[]
   scripts          ScriptVersion[]     @relation("ScriptGeneratedBy")
@@ -1098,6 +1112,7 @@ model StoryboardVersion {
   createdBy     User?               @relation("StoryboardCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   reviewedBy    User?               @relation("StoryboardReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   scenes        StoryboardScene[]
+  renders       Render[]
   approvedFor   ContentItem[]       @relation("ContentApprovedStoryboard")
   jobResults    GenerationJob[]     @relation("JobResultStoryboard")
 
@@ -1345,4 +1360,72 @@ model VoiceProfile {
   @@index([modelId])
   @@index([createdById])
   @@map("voice_profiles")
+}
+
+// ----------------------------------------------------------------------------- renders (M6)
+
+enum RenderReviewStatus {
+  pending
+  approved
+  rejected
+
+  @@map("render_review_status")
+}
+
+/// One assembled render of a content item (M6 design §4): exactly what was used (manifest and
+/// settings frozen at creation), its outputs, QC report and gate-5 review. Never deleted; outputs,
+/// QC, review and export are each set once.
+model Render {
+  id                  String             @id @default(uuid(7)) @db.Uuid
+  projectId           String             @map("project_id") @db.Uuid
+  contentItemId       String             @map("content_item_id") @db.Uuid
+  storyboardVersionId String             @map("storyboard_version_id") @db.Uuid
+  generationJobId     String             @map("generation_job_id") @db.Uuid
+  /// Per scene: clip, voice-over, keyframe, durations, text; music; source models/jobs.
+  manifest            Json               @db.JsonB
+  /// Output spec, caption and loudness settings, renderer version.
+  settings            Json               @db.JsonB
+  /// sha256 of manifest + settings: identical requests reuse a succeeded render.
+  executionKey        String             @map("execution_key") @db.Char(64)
+  videoAssetId        String?            @map("video_asset_id") @db.Uuid
+  subtitleAssetId     String?            @map("subtitle_asset_id") @db.Uuid
+  thumbnailAssetId    String?            @map("thumbnail_asset_id") @db.Uuid
+  durationMs          Int?               @map("duration_ms")
+  /// Lowest source clip height when clips were scaled up (e.g. "720p"); null = native.
+  upscaledFrom        String?            @map("upscaled_from") @db.VarChar(16)
+  qc                  Json?              @db.JsonB
+  reviewStatus        RenderReviewStatus @default(pending) @map("review_status")
+  reviewedById        String?            @map("reviewed_by_id") @db.Uuid
+  reviewedAt          DateTime?          @map("reviewed_at") @db.Timestamptz(3)
+  reviewNote          String?            @map("review_note") @db.VarChar(2000)
+  exportedAt          DateTime?          @map("exported_at") @db.Timestamptz(3)
+  exportedById        String?            @map("exported_by_id") @db.Uuid
+  createdById         String             @map("created_by_id") @db.Uuid
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  project        Project           @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contentItem    ContentItem       @relation("ContentRenders", fields: [projectId, contentItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  storyboard     StoryboardVersion @relation(fields: [projectId, storyboardVersionId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  generationJob  GenerationJob     @relation(fields: [projectId, generationJobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  videoAsset     Asset?            @relation("RenderVideo", fields: [projectId, videoAssetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  subtitleAsset  Asset?            @relation("RenderSubtitle", fields: [projectId, subtitleAssetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  thumbnailAsset Asset?            @relation("RenderThumbnail", fields: [projectId, thumbnailAssetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  reviewedBy     User?             @relation("RenderReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  exportedBy     User?             @relation("RenderExportedBy", fields: [exportedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy      User              @relation("RenderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  approvedFor    ContentItem[]     @relation("ContentApprovedRender")
+
+  @@unique([projectId, id])
+  @@unique([contentItemId, id]) // gate-5 pointer target
+  @@unique([projectId, generationJobId])
+  @@index([contentItemId, createdAt(sort: Desc)])
+  @@index([storyboardVersionId])
+  @@index([videoAssetId])
+  @@index([subtitleAssetId])
+  @@index([thumbnailAssetId])
+  @@index([reviewedById])
+  @@index([exportedById])
+  @@index([createdById])
+  @@map("renders")
 }

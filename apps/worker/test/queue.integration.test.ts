@@ -102,7 +102,13 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await worker.close();
-  for (const queue of [queues.generation, queues.images, queues.videos, queues.audio]) {
+  for (const queue of [
+    queues.generation,
+    queues.images,
+    queues.videos,
+    queues.audio,
+    queues.renders,
+  ]) {
     await queue.obliterate({ force: true });
     await queue.close();
   }

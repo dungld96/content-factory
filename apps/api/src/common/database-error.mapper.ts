@@ -91,6 +91,11 @@ const SQLSTATE_MAP: Readonly<Record<string, Mapping>> = {
     code: ApiErrorCode.SceneSelectionInvalid,
     message: 'A selected clip or voice-over must be an approved, active asset of the scene.',
   },
+  [IntegritySqlState.RENDER_POINTER_INVALID]: {
+    status: CONFLICT,
+    code: ApiErrorCode.RenderNotApproved,
+    message: 'Only an approved render of this content item can be its approved export.',
+  },
   [IntegritySqlState.LEDGER_ROW_IMMUTABLE]: {
     status: CONFLICT,
     code: ApiErrorCode.LedgerImmutable,

@@ -118,7 +118,7 @@ export function inspectImage(
   return { mimeType, width, height, sizeBytes: bytes.byteLength, sha256Hex: sha256Hex(bytes) };
 }
 
-/** File extensions of the media types the platform stores (images M4; audio and video M5). */
+/** File extensions of the media types the platform stores (images M4; audio and video M5; SRT M6). */
 const EXTENSION = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
@@ -130,6 +130,8 @@ const EXTENSION = {
   'video/mp4': 'mp4',
   'video/quicktime': 'mov',
   'video/webm': 'webm',
+  // M6: render captions.
+  'application/x-subrip': 'srt',
 } as const;
 export type StoredMimeType = keyof typeof EXTENSION;
 

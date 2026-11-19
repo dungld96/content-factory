@@ -14,3 +14,4 @@ export * from './images.js';
 export * from './media.js';
 export * from './master.js';
 export * from './platforms.js';
+export * from './render.js';
