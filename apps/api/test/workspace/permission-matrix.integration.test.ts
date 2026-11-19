@@ -49,7 +49,8 @@ interface Row {
   readonly expect: readonly [number, number, number, number, number];
 }
 
-type MatrixFixture = Fixture & GenerationFixture & { readonly voiceProfileId: string };
+type MatrixFixture = Fixture &
+  GenerationFixture & { readonly voiceProfileId: string; readonly renderId: string };
 
 const slug = () => `s-${randomUUID().slice(0, 12)}`;
 
@@ -365,6 +366,56 @@ const ROWS: Record<string, Row> = {
     path: (f) => `/voice-profiles/${f.voiceProfileId}/archive`,
     expect: [401, 404, 403, 200, 200],
   },
+  // Renders (M6c). The fixture has a finished, unreviewed render; its storyboard is pending, so a
+  // new render is blocked (409); export needs an approved render (409).
+  'GET /content/:contentId/render-plan': {
+    method: 'GET',
+    path: (f) => `/content/${f.contentId}/render-plan`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'POST /content/:contentId/renders': {
+    method: 'POST',
+    path: (f) => `/content/${f.contentId}/renders`,
+    body: () => ({}),
+    expect: [401, 404, 403, 409, 409],
+  },
+  'GET /content/:contentId/renders': {
+    method: 'GET',
+    path: (f) => `/content/${f.contentId}/renders`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'GET /renders/:renderId': {
+    method: 'GET',
+    path: (f) => `/renders/${f.renderId}`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'POST /renders/:renderId/approve': {
+    method: 'POST',
+    path: (f) => `/renders/${f.renderId}/approve`,
+    body: () => ({}),
+    expect: [401, 404, 403, 200, 200],
+  },
+  'POST /renders/:renderId/reject': {
+    method: 'POST',
+    path: (f) => `/renders/${f.renderId}/reject`,
+    body: () => ({ note: 'Too dark' }),
+    expect: [401, 404, 403, 200, 200],
+  },
+  'POST /renders/:renderId/export': {
+    method: 'POST',
+    path: (f) => `/renders/${f.renderId}/export`,
+    expect: [401, 404, 403, 409, 409],
+  },
+  'GET /renders/:renderId/manifest': {
+    method: 'GET',
+    path: (f) => `/renders/${f.renderId}/manifest`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'GET /renders/:renderId/cost-report': {
+    method: 'GET',
+    path: (f) => `/renders/${f.renderId}/cost-report`,
+    expect: [401, 404, 200, 200, 200],
+  },
   // Object storage (M4a). Upload needs editor; any member reads bytes. The fixture asset is
   // metadata-only, so reading it is 404 ASSET_CONTENT_MISSING once authorized.
   'POST /projects/:projectId/assets/upload': {
@@ -538,6 +589,40 @@ function versionedRows(
   };
 }
 
+/** A succeeded, unreviewed render with its three outputs (what the M6 worker records). */
+async function addFinishedRender(f: Fixture, g: GenerationFixture): Promise<string> {
+  const [runId, jobId, renderId, video, srt, thumb] = Array.from({ length: 6 }, () => randomUUID());
+  const owner = ids['owner'] ?? '';
+  const asset = (id: string, type: string, mime: string) =>
+    `INSERT INTO assets (id, project_id, content_item_id, asset_type, source_type, storage_key, mime_type,
+       size_bytes, checksum_sha256, generation_job_id, created_by_id, updated_at)
+     VALUES ('${id}', '${f.projectId}', '${f.contentId}', '${type}', 'generated',
+       'projects/${f.projectId}/assets/${id}/x', '${mime}', 10, repeat('b', 64), '${jobId}', '${owner}', now());`;
+  await db.query(`BEGIN;
+    INSERT INTO production_runs (id, project_id, content_item_id, requested_by_id, updated_at)
+      VALUES ('${runId}', '${f.projectId}', '${f.contentId}', '${owner}', now());
+    INSERT INTO generation_jobs (id, project_id, content_item_id, production_run_id, kind, active_key,
+        idempotency_key, execution_key, input, previous_content_status, prompt_template_id, model_id,
+        requested_by_id, updated_at)
+      VALUES ('${jobId}', '${f.projectId}', '${f.contentId}', '${runId}', 'render', '${f.contentId}:render',
+        'render-${jobId}', repeat('c', 64), '{}', 'asset_review', 'render.v1', '${ids['aiModel'] ?? ''}',
+        '${owner}', now());
+    ${asset(video ?? '', 'render', 'video/mp4')}
+    ${asset(srt ?? '', 'subtitle', 'application/x-subrip')}
+    ${asset(thumb ?? '', 'image', 'image/jpeg')}
+    INSERT INTO renders (id, project_id, content_item_id, storyboard_version_id, generation_job_id, manifest,
+        settings, execution_key, created_by_id, updated_at)
+      VALUES ('${renderId}', '${f.projectId}', '${f.contentId}', '${g.storyboardId}', '${jobId}',
+        '{"storyboardVersionId":"${g.storyboardId}","scenes":[],"music":null}', '{"renderer":"render.v1"}',
+        repeat('c', 64), '${owner}', now());
+    UPDATE renders SET video_asset_id = '${video}', subtitle_asset_id = '${srt}', thumbnail_asset_id = '${thumb}',
+      duration_ms = 30000, qc = '{"passed":true,"findings":[],"measured":{}}' WHERE id = '${renderId}';
+    UPDATE generation_jobs SET status = 'succeeded', active_key = NULL, attempt = 1, completed_at = now()
+      WHERE id = '${jobId}';
+    COMMIT`);
+  return renderId ?? '';
+}
+
 /** Routes covered by their own suites (auth, health, OpenAPI), not by the role matrix. */
 const EXEMPT = new Set([
   'POST /auth/login',
@@ -594,10 +679,12 @@ describe.each(Object.entries(ROWS))('%s', (_route, row) => {
          WHERE m.model_key = 'mock/tone-tts'`,
         [voiceProfileId, base.projectId, ids['owner']],
       );
+      const generation = await addGenerationFixture(db, ids, base);
       const fixture: MatrixFixture = {
         ...base,
-        ...(await addGenerationFixture(db, ids, base)),
+        ...generation,
         voiceProfileId,
+        renderId: await addFinishedRender(base, generation),
       };
       const body = row.body?.(fixture);
       const raw = row.rawBody?.();

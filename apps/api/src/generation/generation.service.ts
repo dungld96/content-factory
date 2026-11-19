@@ -281,7 +281,12 @@ export class GenerationService {
             detail: { type: 'canceled', by: actor.userId },
           },
         });
-        if (!SCENE_KINDS.has(job.kind)) {
+        if (job.kind === 'render') {
+          await transitionContent(tx, job.contentItemId, {
+            type: 'render_ended_without_result',
+            previous: job.previousContentStatus,
+          });
+        } else if (!SCENE_KINDS.has(job.kind)) {
           await transitionContent(tx, job.contentItemId, {
             type: 'job_ended_without_result',
             previous: job.previousContentStatus,
