@@ -34,3 +34,6 @@ pnpm-debug.log*
 # Next.js-generated files (re-created by `next dev` / `next typegen`)
 apps/web/next-env.d.ts
 apps/web/AGENTS.md
+
+# Paid benchmark outputs (media; results are recorded in docs/design/m5/benchmark-results.md)
+benchmark/
