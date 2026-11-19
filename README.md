@@ -82,7 +82,8 @@ pnpm test:integration
 | M4 — Image and asset management | Done and approved |
 | M4.5 — UI/UX refinement | Done and approved (`docs/design/M4.5-ui-refinement.md`) |
 | M5 — Video and audio generation | Done and approved (2026-11-19); benchmark run, real models routed |
-| M6–M8 | Not started |
+| M6 — Rendering and export | Design package proposed (`docs/design/M6-design-review-package.md`), waiting for review |
+| M7–M8 | Not started |
 
 ## Decisions fixed for MVP
 
