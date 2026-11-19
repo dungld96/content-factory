@@ -11,5 +11,6 @@ export * from './storyboard.js';
 export * from './jobs.js';
 export * from './formats.js';
 export * from './images.js';
+export * from './media.js';
 export * from './master.js';
 export * from './platforms.js';

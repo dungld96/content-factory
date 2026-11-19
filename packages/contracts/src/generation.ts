@@ -24,7 +24,13 @@ export const briefValidationSchema = z
 export type BriefValidationDto = z.infer<typeof briefValidationSchema>;
 
 export const generationJobKindSchema = z
-  .enum(['script_generation', 'storyboard_generation', 'image_generation'])
+  .enum([
+    'script_generation',
+    'storyboard_generation',
+    'image_generation',
+    'video_generation',
+    'tts_generation',
+  ])
   .meta({ id: 'GenerationJobKind' });
 export const generationJobStatusSchema = z
   .enum(['queued', 'running', 'succeeded', 'failed', 'canceled'])

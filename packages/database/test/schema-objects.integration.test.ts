@@ -54,12 +54,17 @@ const EXPECTED_TRIGGERS: readonly (readonly [string, string, boolean])[] = [
   ['project_members', 'project_members_keep_owner', true],
   ['projects', 'projects_created_with_owner', true],
   ['projects', 'projects_no_delete', false],
+  ['scene_clip_events', 'scene_clip_events_append_only', false],
+  ['scene_clips', 'scene_clips_guard', false],
   ['scene_keyframe_events', 'scene_keyframe_events_append_only', false],
   ['scene_keyframes', 'scene_keyframes_guard', false],
+  ['scene_voiceover_events', 'scene_voiceover_events_append_only', false],
+  ['scene_voiceovers', 'scene_voiceovers_guard', false],
   ['script_versions', 'script_versions_guard', false],
   ['storyboard_scene_assets', 'storyboard_scene_assets_guard', false],
   ['storyboard_scenes', 'storyboard_scenes_guard', false],
   ['storyboard_versions', 'storyboard_versions_guard', false],
+  ['voice_profiles', 'voice_profiles_no_delete', false],
 ];
 
 const EXPECTED_CHECKS = [
@@ -117,12 +122,17 @@ const EXPECTED_CHECKS = [
   'generation_jobs.generation_jobs_error_consistent',
   'generation_jobs.generation_jobs_execution_key_format',
   'generation_jobs.generation_jobs_input_object',
+  'generation_jobs.generation_jobs_poll_count_nonnegative',
+  'generation_jobs.generation_jobs_provider_job_has_intent',
+  'generation_jobs.generation_jobs_provider_only_video',
   'generation_jobs.generation_jobs_result_consistent',
   'generation_jobs.generation_jobs_scene_consistent',
   'job_events.job_events_attempt_nonnegative',
   'job_events.job_events_detail_object',
   'production_runs.production_runs_completion_consistent',
+  'scene_clip_events.scene_clip_events_reason_known',
   'scene_keyframe_events.scene_keyframe_events_reason_known',
+  'scene_voiceover_events.scene_voiceover_events_reason_known',
   'script_versions.script_versions_content_object',
   'script_versions.script_versions_not_based_on_self',
   'script_versions.script_versions_review_consistent',
@@ -138,6 +148,11 @@ const EXPECTED_CHECKS = [
   'storyboard_versions.storyboard_versions_source_consistent',
   'storyboard_versions.storyboard_versions_version_positive',
   'users.users_email_normalized',
+  'voice_profiles.voice_profiles_instructions_nonempty',
+  'voice_profiles.voice_profiles_language_format',
+  'voice_profiles.voice_profiles_name_nonempty',
+  'voice_profiles.voice_profiles_speed_range',
+  'voice_profiles.voice_profiles_voice_nonempty',
 ];
 
 describe('integrity layer presence', () => {
@@ -248,7 +263,7 @@ describe('role separation (U3)', () => {
       `SELECT tablename, has_table_privilege(current_user, 'public.' || tablename, 'SELECT, INSERT, UPDATE, DELETE') AS ok
        FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`,
     );
-    expect(rows.length).toBe(31); // M1–M3: 27; R0: content_masters; M4: 3 image tables
+    expect(rows.length).toBe(36); // M1–M3: 27; R0: content_masters; M4: 3 image tables; M5: 5 media tables
     expect(rows.filter((r) => !r.ok)).toEqual([]);
   });
 });

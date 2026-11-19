@@ -4,14 +4,17 @@ import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { MockImageProvider } from '@acf/ai-core/testing';
+import { MockImageProvider, MockTtsProvider, MockVideoProvider } from '@acf/ai-core/testing';
 import { loadWorkerEnv } from '@acf/config';
 import { createFixtureLlmProvider } from '@acf/content-domain/testing';
 
 import type * as Main from '../../src/main.js';
+import type * as MockMedia from '../../src/mock-media.js';
 
-const main = pathToFileURL(path.resolve(import.meta.dirname, '../../dist/main.js')).href;
-const { startWorker } = (await import(main)) as typeof Main;
+const dist = (file: string) =>
+  pathToFileURL(path.resolve(import.meta.dirname, '../../dist', file)).href;
+const { startWorker } = (await import(dist('main.js'))) as typeof Main;
+const { audioRenderer, clipRenderer } = (await import(dist('mock-media.js'))) as typeof MockMedia;
 
 // Playwright starts web servers before global setup rebuilds the database: report readiness to
 // Playwright now, then wait for global setup's marker before connecting (apps/web/e2e/env.ts).
@@ -26,11 +29,17 @@ if (readyFile) {
   }
 }
 
-const running = await startWorker(
-  loadWorkerEnv(process.env),
-  new Map([['mock', createFixtureLlmProvider('mock')]]),
-  new Map([['mock', new MockImageProvider({ providerKey: 'mock' })]]),
-);
+const running = await startWorker(loadWorkerEnv(process.env), {
+  llm: new Map([['mock', createFixtureLlmProvider('mock')]]),
+  images: new Map([['mock', new MockImageProvider({ providerKey: 'mock' })]]),
+  // Real MP4/MP3 files (FFmpeg) so the browser plays them; clips finish after two polls.
+  videos: new Map([
+    ['mock', new MockVideoProvider({ providerKey: 'mock', renderClip: clipRenderer() })],
+  ]),
+  tts: new Map([
+    ['mock', new MockTtsProvider({ providerKey: 'mock', renderAudio: audioRenderer() })],
+  ]),
+});
 const stop = () => {
   running.stop().then(
     () => process.exit(0),

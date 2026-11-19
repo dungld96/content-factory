@@ -427,8 +427,8 @@ export async function seedAiRegistry(
     create: { task: 'image_generation', modelId: mockImage.id },
     update: {},
   });
-  // M5: video and TTS benchmark candidates (disabled) and the free mock models. Their routes come
-  // with the M5c job kinds (seeded there).
+  // M5: video and TTS benchmark candidates (disabled) and the free mock models, which are the
+  // default routes until an operator routes to a benchmarked model (`route set`).
   const mediaModels = await admin.applyOpenRouterMediaImport(
     [
       ...VIDEO_CATALOG_SNAPSHOT.map((r) => planVideoModel(r as unknown as VideoModelRecord)),
@@ -467,6 +467,20 @@ export async function seedAiRegistry(
     mediaConstraints: { kind: 'tts', voices: ['mock-a', 'mock-b'], mp3: true },
     metric: 'input_characters',
   });
+  for (const [task, modelKey] of [
+    ['video_generation', MOCK_VIDEO_MODEL_KEY],
+    ['tts_generation', MOCK_TTS_MODEL_KEY],
+  ] as const) {
+    const model = await prisma.aiModel.findUniqueOrThrow({
+      where: { providerId_modelKey: { providerId: mock.id, modelKey } },
+      select: { id: true },
+    });
+    await prisma.aiTaskRoute.upsert({
+      where: { task },
+      create: { task, modelId: model.id },
+      update: {},
+    });
+  }
   return {
     openrouterStatus: provider.status,
     models: [...models, ...imageModels, ...mediaModels],

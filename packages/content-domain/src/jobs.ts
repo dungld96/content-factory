@@ -4,6 +4,8 @@ import { z } from 'zod';
  * Contracts shared by the API (creates jobs) and the worker (runs them), M3 design §7–§8,
  * ADR-0013. No BullMQ dependency here: only names, payloads and policy.
  */
+import { AUDIO_GENERATION_QUEUE, VIDEO_GENERATION_QUEUE } from './media.js';
+
 export const GENERATION_QUEUE = 'generation';
 export const GENERATION_DLQ = 'generation-dlq';
 /**
@@ -16,7 +18,13 @@ export const IMAGE_JOB_LOCK_MS = 300_000;
 
 /** The queue a job of `kind` is delivered on. */
 export const queueForKind = (kind: string): string =>
-  kind === 'image_generation' ? IMAGE_GENERATION_QUEUE : GENERATION_QUEUE;
+  kind === 'image_generation'
+    ? IMAGE_GENERATION_QUEUE
+    : kind === 'video_generation'
+      ? VIDEO_GENERATION_QUEUE
+      : kind === 'tts_generation'
+        ? AUDIO_GENERATION_QUEUE
+        : GENERATION_QUEUE;
 
 /** The BullMQ payload carries only the job id; PostgreSQL holds everything else. */
 export const generationJobPayloadSchema = z.strictObject({ jobId: z.uuid() });
@@ -95,7 +103,8 @@ export function retryDelayMs(
 
 /** Text generation kinds (M3); image generation (M4) is scene-scoped. */
 export type TextJobKind = 'script_generation' | 'storyboard_generation';
-export type GenerationKind = TextJobKind | 'image_generation';
+export type GenerationKind =
+  TextJobKind | 'image_generation' | 'video_generation' | 'tts_generation';
 
 /** One active job per content item and kind (`generation_jobs.active_key`). */
 export const activeJobKey = (contentItemId: string, kind: TextJobKind) =>
@@ -115,4 +124,20 @@ export const generationJobOptions = (jobId: string) => ({
   backoff: { type: 'acf' },
   removeOnComplete: { age: 7 * 24 * 3600 },
   removeOnFail: { age: 30 * 24 * 3600 },
+});
+
+/** BullMQ job name of a video status read (the submit is named `generate`). */
+export const VIDEO_POLL_JOB_NAME = 'poll';
+
+/**
+ * BullMQ options of poll number `pollCount` of a video job (M5 design §5.2). The id is unique per
+ * poll, so a reconciler re-add of the same poll is a no-op; a poll is never retried by BullMQ
+ * (the processor schedules the next one itself).
+ */
+export const videoPollOptions = (jobId: string, pollCount: number, delayMs: number) => ({
+  jobId: `${jobId}-poll-${String(pollCount)}`,
+  delay: Math.max(0, delayMs),
+  attempts: 1,
+  removeOnComplete: { age: 24 * 3600 },
+  removeOnFail: { age: 7 * 24 * 3600 },
 });

@@ -7,6 +7,13 @@ import type {
   TransactionClient,
 } from '@acf/database';
 
+/** Scene-scoped media job kinds (M4 images, M5 video and TTS). */
+export const SCENE_JOB_KINDS: ReadonlySet<GenerationJob['kind']> = new Set([
+  'image_generation',
+  'video_generation',
+  'tts_generation',
+]);
+
 /**
  * Every job state transition the worker makes, each in one transaction with its `job_events` row
  * (CLAUDE.md §7: record state transitions). Guarded updates (`WHERE status = …`) make each
@@ -104,7 +111,7 @@ export class JobStore {
         errorCode,
         ...detail,
       });
-      if (current.kind === 'image_generation') {
+      if (SCENE_JOB_KINDS.has(current.kind)) {
         await this.settleImageWork(tx, current);
       } else {
         await this.endRun(tx, current.productionRunId, 'failed');
@@ -142,11 +149,124 @@ export class JobStore {
     return true;
   }
 
+  // ------------------------------------------------------------------- async video (M5, V3)
+
   /**
-   * After an image job ended (M4 design §5.5): its run ends once none of the run's jobs is
-   * active (succeeded if any job succeeded), and the content item leaves `generating_assets`
-   * once none of its image jobs is active. The content item is locked first, so two scene jobs
-   * ending together serialize here and the second one sees the first one's committed outcome.
+   * Records the submission intent right before the paid submit call: `submitted_at`, the ledger
+   * invocation and the adapter. Returns false when the job is no longer this running attempt
+   * (canceled meanwhile): nothing is sent then.
+   */
+  async markSubmitting(
+    job: GenerationJob,
+    invocationId: string,
+    providerKey: string,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.generationJob.updateMany({
+        where: { id: job.id, status: 'running', attempt: job.attempt, submittedAt: null },
+        data: { submittedAt: new Date(), invocationId, providerKey },
+      });
+      if (count !== 1) return false;
+      await this.event(tx, job, 'running', 'running', job.attempt, {
+        type: 'submit_started',
+        invocationId,
+      });
+      return true;
+    });
+  }
+
+  /** The provider refused the submit (not accepted, not charged): the intent is cleared. */
+  async clearSubmission(job: GenerationJob, errorCode: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.generationJob.updateMany({
+        where: { id: job.id, status: 'running', providerJobId: null },
+        data: { submittedAt: null, invocationId: null, providerKey: null },
+      });
+      if (count === 1) {
+        await this.event(tx, job, 'running', 'running', job.attempt, {
+          type: 'submit_refused',
+          errorCode,
+        });
+      }
+    });
+  }
+
+  /** The provider accepted the job: its id is recorded once and the first poll is scheduled. */
+  async recordProviderJob(
+    job: GenerationJob,
+    state: { providerJobId: string; status: string; expiresAt: Date | null },
+    nextPollAt: Date,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.generationJob.update({
+        where: { id: job.id },
+        data: {
+          providerJobId: state.providerJobId,
+          providerStatus: state.status,
+          nextPollAt,
+          providerExpiresAt: state.expiresAt,
+        },
+      });
+      await this.event(tx, job, 'running', 'running', job.attempt, {
+        type: 'provider_job_accepted',
+        providerJobId: state.providerJobId,
+      });
+    });
+  }
+
+  /**
+   * One status read. Returns the new poll count, or null when the job is no longer running (the
+   * poll is then dropped). Status changes are recorded as job events; plain polls are not.
+   */
+  async recordPoll(
+    job: GenerationJob,
+    state: { status: string; expiresAt: Date | null } | null,
+    nextPollAt: Date | null,
+  ): Promise<number | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.generationJob.findUnique({ where: { id: job.id } });
+      if (!current || current.status !== 'running') return null;
+      await tx.generationJob.update({
+        where: { id: job.id },
+        data: {
+          pollCount: current.pollCount + 1,
+          lastPolledAt: new Date(),
+          nextPollAt,
+          ...(state
+            ? {
+                providerStatus: state.status,
+                providerExpiresAt: state.expiresAt ?? current.providerExpiresAt,
+              }
+            : {}),
+        },
+      });
+      if (state && state.status !== current.providerStatus) {
+        await this.event(tx, current, 'running', 'running', current.attempt, {
+          type: 'provider_status',
+          providerStatus: state.status,
+        });
+      }
+      return current.pollCount + 1;
+    });
+  }
+
+  /**
+   * A media job (image, video, TTS) succeeds inside the caller's transaction (which inserted its
+   * assets). Returns false when the job is no longer running: the caller rolls back.
+   */
+  async succeedSceneJobIn(
+    tx: TransactionClient,
+    job: GenerationJob,
+    assetIds: readonly string[],
+  ): Promise<boolean> {
+    return this.succeedImageIn(tx, job, assetIds);
+  }
+
+  /**
+   * After a scene media job ended (M4 design §5.5, M5): its run ends once none of the run's jobs
+   * is active (succeeded if any job succeeded), and the content item leaves `generating_assets`
+   * once none of its image, video or TTS jobs is active. The content item is locked first, so two
+   * scene jobs ending together serialize here and the second one sees the first one's outcome.
    */
   async settleImageWork(tx: TransactionClient, job: GenerationJob): Promise<void> {
     await tx.$queryRaw`SELECT 1 FROM content_items WHERE id = ${job.contentItemId}::uuid FOR NO KEY UPDATE`;
@@ -162,7 +282,7 @@ export class JobStore {
     const itemActive = await tx.generationJob.count({
       where: {
         contentItemId: job.contentItemId,
-        kind: 'image_generation',
+        kind: { in: [...SCENE_JOB_KINDS] },
         status: { in: ['queued', 'running'] },
       },
     });
@@ -171,7 +291,7 @@ export class JobStore {
       where: {
         contentItemId: job.contentItemId,
         sourceType: 'generated',
-        assetType: 'image',
+        assetType: { in: ['image', 'video', 'audio'] },
         archivedAt: null,
       },
     });

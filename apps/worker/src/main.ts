@@ -3,26 +3,50 @@
 import {
   createImageProviders,
   createLlmProviders,
+  createTtsProviders,
+  createVideoProviders,
   ImageService,
   LlmService,
   ModelCatalog,
+  TtsService,
+  VideoService,
 } from '@acf/ai-runtime';
 import {
   EnvValidationError,
   loadWorkerEnv,
+  mediaTools,
   redactUrl,
   storageSettings,
   type WorkerEnv,
 } from '@acf/config';
-import { IMAGE_GENERATION_QUEUE, IMAGE_JOB_LOCK_MS } from '@acf/content-domain';
-import { createPrismaClient } from '@acf/database';
-import type { ImageProvider, LlmProvider } from '@acf/ai-core';
+import {
+  AUDIO_GENERATION_QUEUE,
+  AUDIO_JOB_LOCK_MS,
+  IMAGE_GENERATION_QUEUE,
+  IMAGE_JOB_LOCK_MS,
+  VIDEO_GENERATION_QUEUE,
+  VIDEO_JOB_LOCK_MS,
+} from '@acf/content-domain';
+import { createPrismaClient, type PrismaClient } from '@acf/database';
+import {
+  ttsConstraintsSchema,
+  type ImageProvider,
+  type LlmProvider,
+  type TtsProvider,
+  type VideoProvider,
+} from '@acf/ai-core';
 import { inspectImage, S3ObjectStore, type ObjectStore } from '@acf/storage';
 
 import { GenerationProcessor } from './generation-processor.js';
 import { JobStore } from './job-store.js';
 import { createLogger, type LogLevel } from './logger.js';
-import { addDeadLetter, createQueues, redisConnection, startGenerationWorker } from './queues.js';
+import {
+  addDeadLetter,
+  createQueues,
+  redisConnection,
+  scheduleVideoPoll,
+  startGenerationWorker,
+} from './queues.js';
 import { Reconciler } from './reconciler.js';
 
 const LEVELS: Readonly<Record<string, LogLevel>> = {
@@ -48,15 +72,35 @@ const pixelsOf = (bytes: Uint8Array): number | null => {
   }
 };
 
-/**
- * Starts a worker. `providers` defaults to the adapters configured in the environment; the E2E
- * harness passes fixture providers instead (apps/worker/test).
- */
+/** Provider overrides (the E2E harness passes fixture providers; apps/worker/test). */
+export interface WorkerOverrides {
+  readonly llm?: ReadonlyMap<string, LlmProvider>;
+  readonly images?: ReadonlyMap<string, ImageProvider>;
+  readonly videos?: ReadonlyMap<string, VideoProvider>;
+  readonly tts?: ReadonlyMap<string, TtsProvider>;
+  readonly store?: ObjectStore;
+}
+
+/** TTS models that return PCM only (wrapped as WAV by the adapter), from their constraints. */
+async function pcmOnlyModels(prisma: PrismaClient): Promise<Set<string>> {
+  const rows = await prisma.aiModel.findMany({
+    where: { mediaConstraints: { path: ['kind'], equals: 'tts' } },
+    select: { modelKey: true, mediaConstraints: true },
+  });
+  return new Set(
+    rows
+      .filter((r) => {
+        const parsed = ttsConstraintsSchema.safeParse(r.mediaConstraints);
+        return parsed.success && !parsed.data.mp3;
+      })
+      .map((r) => r.modelKey),
+  );
+}
+
+/** Starts a worker. Providers default to the adapters configured in the environment. */
 export async function startWorker(
   env: WorkerEnv,
-  providers: ReadonlyMap<string, LlmProvider> = createLlmProviders(env),
-  imageProviders: ReadonlyMap<string, ImageProvider> = createImageProviders(env),
-  storeOverride?: ObjectStore,
+  overrides: WorkerOverrides = {},
 ): Promise<RunningWorker> {
   const logger = createLogger(LEVELS[env.LOG_LEVEL] ?? 'info', env.LOG_JSON);
   const prisma = createPrismaClient({
@@ -65,11 +109,26 @@ export async function startWorker(
   });
   const connection = redisConnection(env.REDIS_URL);
   const queues = createQueues(connection, env.QUEUE_PREFIX);
-  const catalog = new ModelCatalog(prisma, providers, imageProviders);
+  const providers = overrides.llm ?? createLlmProviders(env);
+  const imageProviders = overrides.images ?? createImageProviders(env);
+  const videoProviders = overrides.videos ?? createVideoProviders(env);
+  let pcmOnly = new Set<string>();
+  if (!overrides.tts) {
+    try {
+      pcmOnly = await pcmOnlyModels(prisma);
+    } catch {
+      // Best effort: the adapter then requests MP3, which PCM-only models reject (not charged).
+    }
+  }
+  const ttsProviders = overrides.tts ?? createTtsProviders(env, (key) => pcmOnly.has(key));
+  const storeOverride = overrides.store;
+  const catalog = new ModelCatalog(prisma, providers, imageProviders, videoProviders, ttsProviders);
   const llm = new LlmService(prisma, catalog, providers, {
     providerTimeoutMs: Math.max(env.OPENROUTER_TIMEOUT_MS, env.OPENROUTER_IMAGE_TIMEOUT_MS),
   });
   const images = new ImageService(prisma, catalog, imageProviders, { pixelsOf });
+  const videos = new VideoService(prisma, catalog, videoProviders);
+  const tts = new TtsService(prisma, catalog, ttsProviders);
   const settings = storageSettings(env);
   const store: ObjectStore | null =
     storeOverride ?? (settings ? new S3ObjectStore(settings) : null);
@@ -89,6 +148,11 @@ export async function startWorker(
     jobs: new JobStore(prisma),
     llm,
     images,
+    videos,
+    tts,
+    schedulePoll: (jobId, pollCount, delayMs) =>
+      scheduleVideoPoll(queues, jobId, pollCount, delayMs),
+    mediaTools: mediaTools(env),
     store,
     deadLetter: (payload) => addDeadLetter(queues, payload),
     logger,
@@ -110,6 +174,25 @@ export async function startWorker(
     queueName: IMAGE_GENERATION_QUEUE,
     lockDurationMs: IMAGE_JOB_LOCK_MS,
   });
+  // Video (M5): submits, polls and downloads are short steps; the lock covers a 200 MB download.
+  const videoWorker = startGenerationWorker({
+    connection,
+    prefix: env.QUEUE_PREFIX,
+    concurrency: env.WORKER_VIDEO_CONCURRENCY,
+    processor,
+    logger,
+    queueName: VIDEO_GENERATION_QUEUE,
+    lockDurationMs: VIDEO_JOB_LOCK_MS,
+  });
+  const audioWorker = startGenerationWorker({
+    connection,
+    prefix: env.QUEUE_PREFIX,
+    concurrency: env.WORKER_AUDIO_CONCURRENCY,
+    processor,
+    logger,
+    queueName: AUDIO_GENERATION_QUEUE,
+    lockDurationMs: AUDIO_JOB_LOCK_MS,
+  });
   const reconciler = new Reconciler(prisma, queues, logger);
   const reconcile = () => {
     reconciler.run().catch((error: unknown) => {
@@ -126,6 +209,8 @@ export async function startWorker(
     redis: redactUrl(env.REDIS_URL),
     providers: [...providers.keys()].join(',') || '(none configured)',
     imageProviders: [...imageProviders.keys()].join(',') || '(none configured)',
+    videoProviders: [...videoProviders.keys()].join(',') || '(none configured)',
+    ttsProviders: [...ttsProviders.keys()].join(',') || '(none configured)',
     storage: store ? 'configured' : 'not configured',
   });
 
@@ -134,8 +219,12 @@ export async function startWorker(
       clearInterval(timer);
       await worker.close();
       await imageWorker.close();
+      await videoWorker.close();
+      await audioWorker.close();
       await queues.generation.close();
       await queues.images.close();
+      await queues.videos.close();
+      await queues.audio.close();
       await queues.deadLetter.close();
       connection.disconnect();
       await prisma.$disconnect();

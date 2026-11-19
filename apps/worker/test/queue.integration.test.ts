@@ -23,9 +23,12 @@ import {
   generationJobOptions,
   redisConnection,
   startGenerationWorker,
+  videoPollId,
   type Queues,
 } from '../src/queues.js';
 import { Reconciler } from '../src/reconciler.js';
+import { createImageWorld, testStore } from './support/images.js';
+import { createMediaJobs, createMediaModels, videoInput } from './support/media.js';
 import {
   appPrisma,
   createJob,
@@ -99,9 +102,11 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await worker.close();
-  await queues.generation.obliterate({ force: true });
+  for (const queue of [queues.generation, queues.images, queues.videos, queues.audio]) {
+    await queue.obliterate({ force: true });
+    await queue.close();
+  }
   await queues.deadLetter.obliterate({ force: true });
-  await queues.generation.close();
   await queues.deadLetter.close();
   connection.disconnect();
   await prisma.$disconnect();
@@ -191,6 +196,7 @@ describe('reconciler (outbox equivalent)', () => {
       enqueued: 0,
       requeued: 0,
       failed: 0,
+      pollsResumed: 0,
     });
   });
 
@@ -235,7 +241,67 @@ describe('reconciler (outbox equivalent)', () => {
       enqueued: 0,
       requeued: 0,
       failed: 0,
+      pollsResumed: 0,
     });
     await queues.generation.remove(jobId);
+  });
+
+  it('reschedules the lost poll of a submitted video job and never re-attempts it', async () => {
+    const store = testStore();
+    const iw = await createImageWorld(prisma, store, world);
+    const mw = await createMediaModels(prisma);
+    const input = await videoInput(prisma, iw, mw, iw.sceneIds[0] ?? '');
+    const [polled, unsent] = await createMediaJobs(
+      prisma,
+      world,
+      'video_generation',
+      mw.videoModelId,
+      [input, await videoInput(prisma, iw, mw, iw.sceneIds[1] ?? '')],
+    );
+    const provider = await prisma.aiProvider.findUniqueOrThrow({ where: { key: 'mock' } });
+    for (const [id, providerJobId] of [
+      [polled ?? '', 'mock-vid-1-2s-360x640'],
+      [unsent ?? '', null],
+    ] as const) {
+      const invocation = await prisma.aiInvocation.create({
+        data: {
+          projectId: world.projectId,
+          generationJobId: id,
+          correlationId: id,
+          capability: 'video_generation',
+          providerId: provider.id,
+          modelId: mw.videoModelId,
+          requestSummary: {},
+        },
+      });
+      await prisma.generationJob.update({
+        where: { id },
+        data: {
+          status: 'running',
+          attempt: 3, // the last attempt: the generic rule would fail it with WORKER_LOST
+          startedAt: new Date(),
+          submittedAt: new Date(),
+          invocationId: invocation.id,
+          providerKey: 'mock',
+          providerJobId,
+          pollCount: providerJobId ? 4 : 0,
+        },
+      });
+    }
+    const reconciler = new Reconciler(prisma, queues, silentLogger, { runningGraceMs: 0 });
+    expect(await reconciler.run(new Date(Date.now() + 1000))).toEqual({
+      enqueued: 0,
+      requeued: 0,
+      failed: 0,
+      pollsResumed: 2,
+    });
+    // Poll number 4 of the accepted job; the unsent one goes back to its submit step, where the
+    // processor records the unknown outcome instead of submitting.
+    const poll = await queues.videos.getJob(videoPollId(polled ?? '', 4));
+    expect(poll?.name).toBe('poll');
+    expect((await queues.videos.getJob(unsent ?? ''))?.name).toBe('generate');
+    // Running again while both are waiting in the queue adds nothing.
+    expect(await reconciler.run(new Date(Date.now() + 1000))).toMatchObject({ pollsResumed: 0 });
+    expect(await jobStatus(polled ?? '')).toMatchObject({ status: 'running', attempt: 3 });
   });
 });

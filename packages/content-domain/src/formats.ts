@@ -13,12 +13,24 @@ export const ASPECT_RATIOS = ['9:16', '16:9', '1:1'] as const;
 export type AspectRatio = (typeof ASPECT_RATIOS)[number];
 
 /** Gates a stage can require (ADR-0005; computed from approval pointers and keyframes). */
-export type GateKey = 'script_approved' | 'storyboard_approved' | 'keyframes_approved';
+export type GateKey =
+  | 'script_approved'
+  | 'storyboard_approved'
+  | 'keyframes_approved'
+  /** M5 gate 4 (design §2): every scene has an approved clip … */
+  | 'clips_approved'
+  /** … and every scene with voice-over text has an approved voice-over. */
+  | 'voiceovers_approved';
 
 /** One pipeline stage of a format (M3.5 review §2.3, R1). */
 export interface StageDefinition {
-  readonly key: 'script' | 'storyboard' | 'images';
-  readonly jobKind: 'script_generation' | 'storyboard_generation' | 'image_generation';
+  readonly key: 'script' | 'storyboard' | 'images' | 'clips' | 'voiceover';
+  readonly jobKind:
+    | 'script_generation'
+    | 'storyboard_generation'
+    | 'image_generation'
+    | 'video_generation'
+    | 'tts_generation';
   /** Gates that must hold before the stage may run. */
   readonly requires: readonly GateKey[];
   /** The gate this stage's approval satisfies. */
@@ -66,6 +78,22 @@ export const FORMAT_DEFINITIONS: Readonly<Record<ContentFormat, FormatDefinition
         jobKind: 'image_generation',
         requires: ['storyboard_approved'],
         produces: 'keyframes_approved',
+        scope: 'unit',
+      },
+      // M5: a scene's clip needs that scene's keyframe (checked per scene by the API); the
+      // voice-over needs only the approved storyboard, so it can run alongside images.
+      {
+        key: 'clips',
+        jobKind: 'video_generation',
+        requires: ['storyboard_approved'],
+        produces: 'clips_approved',
+        scope: 'unit',
+      },
+      {
+        key: 'voiceover',
+        jobKind: 'tts_generation',
+        requires: ['storyboard_approved'],
+        produces: 'voiceovers_approved',
         scope: 'unit',
       },
     ],

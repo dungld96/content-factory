@@ -170,9 +170,14 @@ model User {
   reviewedStoryboards StoryboardVersion[] @relation("StoryboardReviewedBy")
   updatedTaskRoutes   AiTaskRoute[]
 
-  reviewedAssets    Asset[]              @relation("AssetReviewedBy")
-  selectedKeyframes SceneKeyframe[]
-  keyframeEvents    SceneKeyframeEvent[]
+  reviewedAssets     Asset[]               @relation("AssetReviewedBy")
+  selectedKeyframes  SceneKeyframe[]
+  keyframeEvents     SceneKeyframeEvent[]
+  selectedClips      SceneClip[]
+  clipEvents         SceneClipEvent[]
+  selectedVoiceovers SceneVoiceover[]
+  voiceoverEvents    SceneVoiceoverEvent[]
+  voiceProfiles      VoiceProfile[]
 
   @@map("users")
 }
@@ -228,6 +233,7 @@ model Project {
   contentMasters ContentMaster[]
   productionRuns ProductionRun[]
   generationJobs GenerationJob[]
+  voiceProfiles  VoiceProfile[]
 
   @@index([createdById])
   @@map("projects")
@@ -474,18 +480,22 @@ model Asset {
   createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  project         Project              @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  contentItem     ContentItem?         @relation(fields: [projectId, contentItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  sourceAsset     Asset?               @relation("AssetLineage", fields: [projectId, sourceAssetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  derived         Asset[]              @relation("AssetLineage")
-  createdBy       User                 @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  reviewedBy      User?                @relation("AssetReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  generationJob   GenerationJob?       @relation("JobAssets", fields: [projectId, generationJobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  storyboardScene StoryboardScene?     @relation("SceneCandidates", fields: [projectId, storyboardSceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
-  inputs          AssetInput[]         @relation("AssetInputsOf")
-  usedAsInput     AssetInput[]         @relation("AssetInputsUsed")
+  project         Project               @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contentItem     ContentItem?          @relation(fields: [projectId, contentItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  sourceAsset     Asset?                @relation("AssetLineage", fields: [projectId, sourceAssetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  derived         Asset[]               @relation("AssetLineage")
+  createdBy       User                  @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reviewedBy      User?                 @relation("AssetReviewedBy", fields: [reviewedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  generationJob   GenerationJob?        @relation("JobAssets", fields: [projectId, generationJobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  storyboardScene StoryboardScene?      @relation("SceneCandidates", fields: [projectId, storyboardSceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  inputs          AssetInput[]          @relation("AssetInputsOf")
+  usedAsInput     AssetInput[]          @relation("AssetInputsUsed")
   keyframeOf      SceneKeyframe[]
   keyframeEvents  SceneKeyframeEvent[]
+  clipOf          SceneClip[]
+  clipEvents      SceneClipEvent[]
+  voiceoverOf     SceneVoiceover[]
+  voiceoverEvents SceneVoiceoverEvent[]
 
   characterVersionPrimary   CharacterVersion[]        @relation("CharacterVersionPrimaryAsset")
   characterVersionLinks     CharacterVersionAsset[]   @relation("CharacterVersionAssets")
@@ -580,11 +590,16 @@ model ContentItem {
   productionRuns              ProductionRun[]
   generationJobs              GenerationJob[]
 
+  /// Narration voice for TTS (M5 design §7.1); a voice profile of the same project.
+  voiceProfileId String?       @map("voice_profile_id") @db.Uuid
+  voiceProfile   VoiceProfile? @relation(fields: [projectId, voiceProfileId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+
   @@unique([projectId, id]) // composite-FK target
   @@index([projectId, createdAt(sort: Desc), id(sort: Desc)])
   @@index([channelId])
   @@index([createdById])
   @@index([contentMasterId])
+  @@index([voiceProfileId])
   @@map("content_items")
 }
 
@@ -737,8 +752,9 @@ model AiModel {
   prices       AiModelPrice[]
   invocations  AiInvocation[]
 
-  jobs       GenerationJob[]
-  taskRoutes AiTaskRoute[]
+  jobs          GenerationJob[]
+  taskRoutes    AiTaskRoute[]
+  voiceProfiles VoiceProfile[]
 
   @@unique([providerId, modelKey])
   @@unique([providerId, id]) // composite-FK target
@@ -823,7 +839,9 @@ model AiInvocation {
   usageRecords AiUsageRecord[]
 
   /// Job link (M3; nullable for calls outside jobs, e.g. the operator smoke test).
-  generationJob GenerationJob? @relation(fields: [projectId, generationJobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  generationJob GenerationJob?  @relation(fields: [projectId, generationJobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  /// Video jobs whose submission this invocation is (M5).
+  inFlightJobs  GenerationJob[] @relation("JobInFlightInvocation")
 
   @@unique([projectId, id]) // composite-FK target
   @@index([projectId, startedAt])
@@ -867,6 +885,10 @@ enum GenerationJobKind {
   script_generation
   storyboard_generation
   image_generation
+  /// M5: one clip per scene from its keyframe (async provider job).
+  video_generation
+  /// M5: one voice-over per scene.
+  tts_generation
 
   @@map("generation_job_kind")
 }
@@ -941,8 +963,24 @@ model GenerationJob {
   modelId                   String              @map("model_id") @db.Uuid
   attempt                   Int                 @default(0)
   maxAttempts               Int                 @default(3) @map("max_attempts")
-  /// The scene an image job generates for (M4); required iff kind = image_generation.
+  /// The scene an image/video/TTS job generates for (M4/M5); required iff scene-scoped kind.
   storyboardSceneId         String?             @map("storyboard_scene_id") @db.Uuid
+  // --- Async provider jobs (M5 design §5, decision V3); video only ---
+  /// Adapter that holds the provider job (e.g. `openrouter`).
+  providerKey               String?             @map("provider_key") @db.VarChar(64)
+  /// The provider's job id; once set it never changes (resume by polling, never resubmit).
+  providerJobId             String?             @unique @map("provider_job_id") @db.VarChar(200)
+  /// Last provider state seen (`pending`, `running`, `completed`, …).
+  providerStatus            String?             @map("provider_status") @db.VarChar(32)
+  /// The ledger invocation of the submission in flight (set before the submit call).
+  invocationId              String?             @map("invocation_id") @db.Uuid
+  /// Set before the paid submit call: with no provider job id, the outcome is unknown.
+  submittedAt               DateTime?           @map("submitted_at") @db.Timestamptz(3)
+  lastPolledAt              DateTime?           @map("last_polled_at") @db.Timestamptz(3)
+  nextPollAt                DateTime?           @map("next_poll_at") @db.Timestamptz(3)
+  pollCount                 Int                 @default(0) @map("poll_count")
+  /// When the provider's stored output stops being downloadable.
+  providerExpiresAt         DateTime?           @map("provider_expires_at") @db.Timestamptz(3)
   resultScriptVersionId     String?             @map("result_script_version_id") @db.Uuid
   resultStoryboardVersionId String?             @map("result_storyboard_version_id") @db.Uuid
   errorCode                 String?             @map("error_code") @db.VarChar(64)
@@ -961,6 +999,7 @@ model GenerationJob {
   resultScript     ScriptVersion?      @relation("JobResultScript", fields: [projectId, resultScriptVersionId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   resultStoryboard StoryboardVersion?  @relation("JobResultStoryboard", fields: [projectId, resultStoryboardVersionId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   storyboardScene  StoryboardScene?    @relation("SceneImageJobs", fields: [projectId, storyboardSceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  invocation       AiInvocation?       @relation("JobInFlightInvocation", fields: [projectId, invocationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   assets           Asset[]             @relation("JobAssets")
   events           JobEvent[]
   invocations      AiInvocation[]
@@ -1101,6 +1140,10 @@ model StoryboardScene {
   candidates         Asset[]                @relation("SceneCandidates")
   keyframe           SceneKeyframe?
   keyframeEvents     SceneKeyframeEvent[]
+  clip               SceneClip?
+  clipEvents         SceneClipEvent[]
+  voiceover          SceneVoiceover?
+  voiceoverEvents    SceneVoiceoverEvent[]
 
   @@unique([storyboardVersionId, sceneNumber])
   @@unique([projectId, id]) // composite-FK target
@@ -1196,4 +1239,110 @@ model SceneKeyframeEvent {
   @@index([assetId])
   @@index([selectedById])
   @@map("scene_keyframe_events")
+}
+
+/// The approved clip of a scene (M5 gate 4, decision V6): a selection pointer like keyframes.
+model SceneClip {
+  storyboardSceneId String   @id @map("storyboard_scene_id") @db.Uuid
+  projectId         String   @map("project_id") @db.Uuid
+  assetId           String   @map("asset_id") @db.Uuid
+  selectedById      String   @map("selected_by_id") @db.Uuid
+  selectedAt        DateTime @map("selected_at") @db.Timestamptz(3)
+
+  scene      StoryboardScene @relation(fields: [projectId, storyboardSceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  asset      Asset           @relation(fields: [projectId, assetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  selectedBy User            @relation(fields: [selectedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([projectId, storyboardSceneId])
+  @@index([assetId])
+  @@index([selectedById])
+  @@map("scene_clips")
+}
+
+/// Append-only history of clip selections (`selected`, `reused`, `cleared` on a keyframe change).
+model SceneClipEvent {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  projectId         String   @map("project_id") @db.Uuid
+  storyboardSceneId String   @map("storyboard_scene_id") @db.Uuid
+  assetId           String   @map("asset_id") @db.Uuid
+  selectedById      String   @map("selected_by_id") @db.Uuid
+  reason            String   @db.VarChar(16)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  scene      StoryboardScene @relation(fields: [projectId, storyboardSceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  asset      Asset           @relation(fields: [projectId, assetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  selectedBy User            @relation(fields: [selectedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([storyboardSceneId, createdAt])
+  @@index([assetId])
+  @@index([selectedById])
+  @@map("scene_clip_events")
+}
+
+/// The approved voice-over of a scene (M5, decision V7): generated or imported audio.
+model SceneVoiceover {
+  storyboardSceneId String   @id @map("storyboard_scene_id") @db.Uuid
+  projectId         String   @map("project_id") @db.Uuid
+  assetId           String   @map("asset_id") @db.Uuid
+  selectedById      String   @map("selected_by_id") @db.Uuid
+  selectedAt        DateTime @map("selected_at") @db.Timestamptz(3)
+
+  scene      StoryboardScene @relation(fields: [projectId, storyboardSceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  asset      Asset           @relation(fields: [projectId, assetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  selectedBy User            @relation(fields: [selectedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([projectId, storyboardSceneId])
+  @@index([assetId])
+  @@index([selectedById])
+  @@map("scene_voiceovers")
+}
+
+/// Append-only history of voice-over selections (`selected`, `reused`).
+model SceneVoiceoverEvent {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  projectId         String   @map("project_id") @db.Uuid
+  storyboardSceneId String   @map("storyboard_scene_id") @db.Uuid
+  assetId           String   @map("asset_id") @db.Uuid
+  selectedById      String   @map("selected_by_id") @db.Uuid
+  reason            String   @db.VarChar(16)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  scene      StoryboardScene @relation(fields: [projectId, storyboardSceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  asset      Asset           @relation(fields: [projectId, assetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  selectedBy User            @relation(fields: [selectedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([storyboardSceneId, createdAt])
+  @@index([assetId])
+  @@index([selectedById])
+  @@map("scene_voiceover_events")
+}
+
+/// A project's narration voice (M5 design §7.1): TTS model + provider voice + delivery settings.
+/// Jobs snapshot every parameter, so editing a profile never changes past outputs.
+model VoiceProfile {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  projectId    String    @map("project_id") @db.Uuid
+  name         String    @db.VarChar(120)
+  modelId      String    @map("model_id") @db.Uuid
+  /// Provider voice id (model-specific), e.g. `sarah` or `vi-VN-Harper:MAI-Voice-2.1`.
+  voice        String    @db.VarChar(200)
+  /// BCP 47 tag of the narration.
+  language     String    @db.VarChar(35)
+  speed        Decimal?  @db.Decimal(3, 2)
+  instructions String?   @db.VarChar(500)
+  archivedAt   DateTime? @map("archived_at") @db.Timestamptz(3)
+  createdById  String    @map("created_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  model        AiModel       @relation(fields: [modelId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy    User          @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contentItems ContentItem[]
+
+  @@unique([projectId, id])
+  @@index([projectId, archivedAt])
+  @@index([modelId])
+  @@index([createdById])
+  @@map("voice_profiles")
 }

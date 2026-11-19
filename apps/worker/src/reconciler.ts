@@ -1,13 +1,23 @@
 import type { PrismaClient } from '@acf/database';
 
 import type { Logger } from './logger.js';
-import { generationJobOptions, queueOf, type Queues } from './queues.js';
+import {
+  generationJobOptions,
+  queueOf,
+  scheduleVideoPoll,
+  videoPollId,
+  type Queues,
+} from './queues.js';
 
 export interface ReconcileResult {
   readonly enqueued: number;
   readonly requeued: number;
   readonly failed: number;
+  /** Video jobs whose next status read was missing and has been scheduled again (M5). */
+  readonly pollsResumed: number;
 }
+
+const LIVE = new Set(['active', 'waiting', 'delayed', 'prioritized', 'waiting-children']);
 
 export interface ReconcilerOptions {
   /** A `queued` job younger than this may still be on its way to Redis. */
@@ -22,6 +32,9 @@ export interface ReconcilerOptions {
  *   the BullMQ id is the DB id, so this is idempotent.
  * - `running` jobs whose BullMQ job is gone go back to `queued` for another attempt, or fail
  *   with `WORKER_LOST` when no attempt is left.
+ * - Video jobs whose submit started (M5 design §5.4) are never attempted again: with a provider
+ *   job id, a missing poll is scheduled again; without one, the job is delivered once more and
+ *   the processor fails it with `SUBMIT_OUTCOME_UNKNOWN` (never a second paid submission).
  */
 export class Reconciler {
   private readonly queuedGraceMs: number;
@@ -61,6 +74,7 @@ export class Reconciler {
       where: {
         status: 'running',
         updatedAt: { lt: new Date(now.getTime() - this.runningGraceMs) },
+        NOT: { kind: 'video_generation', submittedAt: { not: null } },
       },
       take: 500,
     });
@@ -107,10 +121,45 @@ export class Reconciler {
         failed += 1;
       }
     }
-    if (enqueued + requeued + failed > 0) {
-      this.logger.log('warn', 'reconciled', { enqueued, requeued, failed });
+    const pollsResumed = await this.videos(now);
+    if (enqueued + requeued + failed + pollsResumed > 0) {
+      this.logger.log('warn', 'reconciled', { enqueued, requeued, failed, pollsResumed });
     }
-    return { enqueued, requeued, failed };
+    return { enqueued, requeued, failed, pollsResumed };
+  }
+
+  /** Running video jobs past their submit (M5 design §5.4). */
+  private async videos(now: Date): Promise<number> {
+    const stale = new Date(now.getTime() - this.runningGraceMs);
+    const jobs = await this.prisma.generationJob.findMany({
+      where: {
+        kind: 'video_generation',
+        status: 'running',
+        submittedAt: { not: null },
+        updatedAt: { lt: stale },
+        OR: [{ nextPollAt: null }, { nextPollAt: { lt: stale } }],
+      },
+      select: { id: true, providerJobId: true, pollCount: true },
+      take: 500,
+    });
+    let resumed = 0;
+    for (const job of jobs) {
+      if (job.providerJobId) {
+        const poll = await this.queues.videos.getJob(videoPollId(job.id, job.pollCount));
+        if (poll && LIVE.has(await poll.getState())) continue;
+        await scheduleVideoPoll(this.queues, job.id, job.pollCount, 0);
+        resumed += 1;
+        continue;
+      }
+      // The submit call's worker stopped: deliver once more so the processor records the
+      // unknown outcome (it never resubmits).
+      const state = await this.state(job.id, 'video_generation');
+      if (LIVE.has(state)) continue;
+      if (state !== 'missing') await this.queues.videos.remove(job.id);
+      await this.queues.videos.add('generate', { jobId: job.id }, generationJobOptions(job.id));
+      resumed += 1;
+    }
+    return resumed;
   }
 
   private async state(jobId: string, kind: string): Promise<string> {

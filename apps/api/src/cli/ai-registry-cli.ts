@@ -8,7 +8,7 @@
 //                              [--effective-from <ISO>] [--min-prompt-tokens <n>] [--provider openrouter]
 //   pnpm ai:registry route list
 //   pnpm ai:registry model import-openrouter-images <modelKey>... [--tier <tier>] [--endpoint <slug>] [--apply]
-//   pnpm ai:registry route set <script_generation|storyboard_generation|image_generation> <modelKey> [--provider openrouter] [--zdr]
+//   pnpm ai:registry route set <script_generation|storyboard_generation|image_generation|video_generation|tts_generation> <modelKey> [--provider openrouter] [--zdr]
 //   pnpm ai:registry invocations mark-abandoned
 //   ACF_PAID_SMOKE=1 pnpm ai:registry smoke <modelKey> --project <slug> --max-cost-usd <usd>
 //   ACF_PAID_SMOKE=1 pnpm ai:registry smoke-image <modelKey> --project <slug> --max-cost-usd <usd>
@@ -75,6 +75,15 @@ const TIERS = new Set<string>(['economy', 'balanced', 'premium']);
 const SOURCES = new Set<string>(['official_api', 'official_page', 'manual_estimate']);
 const METRICS = new Set<string>(Object.values(PriceMetric));
 const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
+
+/** Job kinds an operator can route (`route set`). */
+const ROUTABLE_TASKS = [
+  'script_generation',
+  'storyboard_generation',
+  'image_generation',
+  'video_generation',
+  'tts_generation',
+] as const;
 
 /** Fixed smoke prompt: small and known, so the worst-case cost is bounded before sending. */
 export const SMOKE_MESSAGES = [
@@ -410,17 +419,15 @@ export async function runAiRegistryCli(
     }
     if (group === 'route' && command === 'set') {
       const [task, modelKey] = positionals;
-      if (
-        (task !== 'script_generation' &&
-          task !== 'storyboard_generation' &&
-          task !== 'image_generation') ||
-        !modelKey
-      ) {
-        return usage(
-          'route set <script_generation|storyboard_generation|image_generation> <modelKey> [--provider <key>]',
-        );
+      if (!task || !(ROUTABLE_TASKS as readonly string[]).includes(task) || !modelKey) {
+        return usage(`route set <${ROUTABLE_TASKS.join('|')}> <modelKey> [--provider <key>]`);
       }
-      const { enabled } = await admin.setRoute(task, values.provider, modelKey, values.zdr);
+      const { enabled } = await admin.setRoute(
+        task as (typeof ROUTABLE_TASKS)[number],
+        values.provider,
+        modelKey,
+        values.zdr,
+      );
       io.out(
         `✔ ${task} → ${values.provider}/${modelKey}${values.zdr ? ' (zero data retention)' : ''}`,
       );

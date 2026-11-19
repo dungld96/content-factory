@@ -75,7 +75,12 @@ export class RegistryAdminService {
       include: { capabilities: true, provider: true },
     });
     if (!model) throw new RegistryAdminError(`unknown model ${providerKey}/${modelKey}`);
-    const needed = task === 'image_generation' ? 'image_generation' : 'llm';
+    const needed =
+      task === 'image_generation' || task === 'video_generation'
+        ? task
+        : task === 'tts_generation'
+          ? 'tts'
+          : 'llm';
     if (!model.capabilities.some((c) => c.capability === needed)) {
       throw new RegistryAdminError(`${providerKey}/${modelKey} has no ${needed} capability`);
     }

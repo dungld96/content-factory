@@ -86,6 +86,11 @@ const SQLSTATE_MAP: Readonly<Record<string, Mapping>> = {
     code: ApiErrorCode.KeyframeInvalid,
     message: "A keyframe must be an approved, active image of the scene's content item.",
   },
+  [IntegritySqlState.SCENE_SELECTION_INVALID]: {
+    status: CONFLICT,
+    code: ApiErrorCode.SceneSelectionInvalid,
+    message: 'A selected clip or voice-over must be an approved, active asset of the scene.',
+  },
   [IntegritySqlState.LEDGER_ROW_IMMUTABLE]: {
     status: CONFLICT,
     code: ApiErrorCode.LedgerImmutable,

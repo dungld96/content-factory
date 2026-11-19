@@ -273,7 +273,7 @@ describe('task routes (M3 Q4)', () => {
     );
   });
 
-  it.each(['route set video_generation x', 'route set script_generation'])(
+  it.each(['route set music_generation x', 'route set script_generation'])(
     'rejects bad usage: %s',
     async (args) => {
       expect((await cli(args)).code).toBe(2);

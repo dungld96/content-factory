@@ -51,6 +51,15 @@ export interface MediaCallOptions {
   readonly allowDisabled?: boolean;
 }
 
+export interface VideoSubmitOptions extends MediaCallOptions {
+  /**
+   * Called after the invocation is recorded and right before the paid submit call: the job layer
+   * persists its submission intent here (decision V3). Throwing aborts before anything is sent;
+   * the invocation is then recorded as failed (not sent).
+   */
+  readonly beforeSubmit?: (invocationId: string, providerKey: string) => Promise<void>;
+}
+
 async function routeFor(
   catalog: ModelCatalog,
   capability: typeof Capability.VIDEO_GENERATION | typeof Capability.TTS,
@@ -153,7 +162,7 @@ export class VideoService {
   async submit(
     context: GenerationContext,
     input: VideoRequest,
-    options: MediaCallOptions = {},
+    options: VideoSubmitOptions = {},
   ): Promise<VideoSubmission> {
     const request = parseVideoRequest(input);
     const { row, decision } = await this.route(context, request, options);
@@ -174,6 +183,7 @@ export class VideoService {
     }).estimatedCost;
     let state: VideoJobState;
     try {
+      await options.beforeSubmit?.(invocation.id, row.candidate.providerKey);
       state = await provider.submit(
         request,
         context,

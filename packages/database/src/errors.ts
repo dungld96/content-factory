@@ -24,6 +24,8 @@ export const IntegritySqlState = {
   CONTENT_MASTER_LINK_IMMUTABLE: 'AC014',
   /** M4: a scene keyframe is an approved, active image of the scene's content item. */
   KEYFRAME_INVALID: 'AC015',
+  /** M5: a selected scene clip or voice-over is an approved, active asset of its scene. */
+  SCENE_SELECTION_INVALID: 'AC016',
 } as const;
 export type IntegritySqlState = (typeof IntegritySqlState)[keyof typeof IntegritySqlState];
 

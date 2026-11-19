@@ -7,8 +7,13 @@ import {
   GENERATION_QUEUE,
   generationJobOptions,
   IMAGE_GENERATION_QUEUE,
+  AUDIO_GENERATION_QUEUE,
   generationJobPayloadSchema,
+  queueForKind,
   RETRY_POLICY,
+  VIDEO_GENERATION_QUEUE,
+  VIDEO_POLL_JOB_NAME,
+  videoPollOptions,
   type DeadLetterPayload,
   type GenerationJobPayload,
 } from '@acf/content-domain';
@@ -27,6 +32,10 @@ export interface Queues {
   readonly generation: Queue<GenerationJobPayload>;
   /** Image jobs (M4): own concurrency and lock duration. */
   readonly images: Queue<GenerationJobPayload>;
+  /** Video jobs (M5): the submit (`generate`) and every status read (`poll`). */
+  readonly videos: Queue<GenerationJobPayload>;
+  /** TTS jobs (M5). */
+  readonly audio: Queue<GenerationJobPayload>;
   readonly deadLetter: Queue<DeadLetterPayload>;
 }
 
@@ -34,13 +43,50 @@ export function createQueues(connection: Redis, prefix: string): Queues {
   return {
     generation: new Queue<GenerationJobPayload>(GENERATION_QUEUE, { connection, prefix }),
     images: new Queue<GenerationJobPayload>(IMAGE_GENERATION_QUEUE, { connection, prefix }),
+    videos: new Queue<GenerationJobPayload>(VIDEO_GENERATION_QUEUE, { connection, prefix }),
+    audio: new Queue<GenerationJobPayload>(AUDIO_GENERATION_QUEUE, { connection, prefix }),
     deadLetter: new Queue<DeadLetterPayload>(GENERATION_DLQ, { connection, prefix }),
   };
 }
 
 /** The queue a job of `kind` lives on. */
-export const queueOf = (queues: Queues, kind: string): Queue<GenerationJobPayload> =>
-  kind === 'image_generation' ? queues.images : queues.generation;
+export function queueOf(queues: Queues, kind: string): Queue<GenerationJobPayload> {
+  switch (queueForKind(kind)) {
+    case IMAGE_GENERATION_QUEUE:
+      return queues.images;
+    case VIDEO_GENERATION_QUEUE:
+      return queues.videos;
+    case AUDIO_GENERATION_QUEUE:
+      return queues.audio;
+    default:
+      return queues.generation;
+  }
+}
+
+/** BullMQ id of poll number `pollCount` of a video job. */
+export const videoPollId = (jobId: string, pollCount: number): string =>
+  videoPollOptions(jobId, pollCount, 0).jobId;
+
+/**
+ * Adds poll number `pollCount` of video job `jobId`. A finished BullMQ job with the same id (a
+ * poll that ran but whose worker stopped before scheduling the next one) is replaced; a live one
+ * is kept, so scheduling the same poll twice is harmless.
+ */
+export async function scheduleVideoPoll(
+  queues: Queues,
+  jobId: string,
+  pollCount: number,
+  delayMs: number,
+): Promise<void> {
+  const options = videoPollOptions(jobId, pollCount, delayMs);
+  const existing = await queues.videos.getJob(options.jobId);
+  if (existing) {
+    const state = await existing.getState();
+    if (state !== 'completed' && state !== 'failed') return;
+    await existing.remove();
+  }
+  await queues.videos.add(VIDEO_POLL_JOB_NAME, { jobId }, options);
+}
 
 /** Thrown to BullMQ to schedule the next attempt; carries the delay the processor decided. */
 export class RetryLaterError extends Error {
@@ -86,7 +132,7 @@ export function startGenerationWorker(options: WorkerOptions): Worker<Generation
     async (job: Job<GenerationJobPayload>) => {
       const payload = generationJobPayloadSchema.safeParse(job.data);
       if (!payload.success) throw new UnrecoverableError('invalid payload');
-      const outcome = await options.processor.process(payload.data.jobId);
+      const outcome = await options.processor.process(payload.data.jobId, job.name);
       if (outcome.type === 'retry') throw new RetryLaterError(outcome.errorCode, outcome.delayMs);
       return outcome;
     },

@@ -7,10 +7,14 @@ import {
 } from '@acf/ai-core';
 import {
   ImageConstraintError,
+  MediaConstraintError,
   RoutingError,
   type ImageService,
   type LlmService,
+  type TtsService,
+  type VideoService,
 } from '@acf/ai-runtime';
+import type { MediaTools } from '@acf/media';
 import {
   assetObjectKey,
   ImageValidationError,
@@ -48,19 +52,30 @@ import {
   type RuleIssue,
   type ScriptContent,
   type TextJobKind,
+  VIDEO_POLL_JOB_NAME,
+  videoPollDelayMs,
 } from '@acf/content-domain';
 import type { GenerationJob, Prisma, PrismaClient } from '@acf/database';
 import { ZodError, type z } from 'zod';
 
 import type { JobStore } from './job-store.js';
 import type { Logger } from './logger.js';
+import {
+  MediaDiscardedError,
+  MediaJobs,
+  MediaPermanentError,
+  type MediaStepOutcome,
+} from './media-jobs.js';
 
 export type ProcessOutcome =
   | { readonly type: 'succeeded'; readonly versionId: string }
   | { readonly type: 'retry'; readonly errorCode: string; readonly delayMs: number }
   | { readonly type: 'failed'; readonly errorCode: string }
   | { readonly type: 'discarded' }
-  | { readonly type: 'skipped' };
+  | { readonly type: 'skipped' }
+  /** A video job was accepted by the provider; polls follow as separate BullMQ jobs (M5). */
+  | { readonly type: 'submitted'; readonly providerJobId: string }
+  | { readonly type: 'polling'; readonly pollCount: number };
 
 export interface ProcessorDeps {
   readonly prisma: PrismaClient;
@@ -70,6 +85,14 @@ export interface ProcessorDeps {
   readonly images?: ImageService;
   /** Object storage for references and results (M4); null → STORAGE_NOT_CONFIGURED. */
   readonly store?: ObjectStore | null;
+  /** Video generation (M5); absent → video jobs fail with NO_ELIGIBLE_MODEL. */
+  readonly videos?: VideoService;
+  /** Text-to-speech (M5); absent → TTS jobs fail with NO_ELIGIBLE_MODEL. */
+  readonly tts?: TtsService;
+  /** Adds poll number `pollCount` of a video job to the video queue after `delayMs`. */
+  readonly schedulePoll?: (jobId: string, pollCount: number, delayMs: number) => Promise<void>;
+  /** FFprobe/FFmpeg locations (M5a). */
+  readonly mediaTools?: MediaTools;
   /** Copies a finally failed job to the dead-letter queue (M3 Q8). */
   readonly deadLetter: (payload: DeadLetterPayload) => Promise<void>;
   readonly logger: Logger;
@@ -112,10 +135,44 @@ interface Structured<T> {
  * decision is recorded there; BullMQ only redelivers.
  */
 export class GenerationProcessor {
-  constructor(private readonly deps: ProcessorDeps) {}
+  private readonly media: MediaJobs;
 
-  async process(jobId: string): Promise<ProcessOutcome> {
+  constructor(private readonly deps: ProcessorDeps) {
+    this.media = new MediaJobs(
+      {
+        prisma: deps.prisma,
+        jobs: deps.jobs,
+        store: deps.store ?? null,
+        videos: deps.videos,
+        tts: deps.tts,
+        schedulePoll: deps.schedulePoll,
+        tools: deps.mediaTools,
+        logger: deps.logger,
+      },
+      { failFinal: (job, code, message) => this.failFinal(job, code, message) },
+    );
+  }
+
+  /**
+   * Runs the BullMQ job `name` of generation job `jobId`: `generate` (an attempt) or, for video
+   * jobs, `poll` (one status read, M5 design §5.2).
+   */
+  async process(jobId: string, name = 'generate'): Promise<ProcessOutcome> {
     const { jobs, logger } = this.deps;
+    if (name === VIDEO_POLL_JOB_NAME) return this.poll(jobId);
+    const current = await jobs.load(jobId);
+    if (
+      current?.kind === 'video_generation' &&
+      current.status === 'running' &&
+      current.submittedAt
+    ) {
+      // Delivered again after the submit started (worker restart, reconciler): never resubmit.
+      try {
+        return stepOutcome(await this.media.resumeVideo(current));
+      } catch (error) {
+        return this.handleError(current, error);
+      }
+    }
     const job = await jobs.startAttempt(jobId);
     if (!job) {
       const current = await jobs.load(jobId);
@@ -127,12 +184,17 @@ export class GenerationProcessor {
     }
     logger.log('info', 'job_attempt_started', { jobId, kind: job.kind, attempt: job.attempt });
     try {
+      if (job.kind === 'video_generation') {
+        return stepOutcome(await this.media.submitVideo(job));
+      }
       const versionId =
         job.kind === 'image_generation'
           ? await this.runImages(job)
-          : job.kind === 'script_generation'
-            ? await this.runScript(job)
-            : await this.runStoryboard(job);
+          : job.kind === 'tts_generation'
+            ? await this.media.runTts(job)
+            : job.kind === 'script_generation'
+              ? await this.runScript(job)
+              : await this.runStoryboard(job);
       logger.log('info', 'job_succeeded', { jobId, attempt: job.attempt, versionId });
       return { type: 'succeeded', versionId };
     } catch (error) {
@@ -569,11 +631,45 @@ export class GenerationProcessor {
     });
   }
 
+  // ------------------------------------------------------------------- video polls (M5)
+
+  /**
+   * One status read of a running video job. A poll is never retried by BullMQ: on an unexpected
+   * error (database, storage) the next poll is scheduled here, or by the reconciler if even that
+   * fails. Polls do not count as attempts: the provider job was submitted once.
+   */
+  private async poll(jobId: string): Promise<ProcessOutcome> {
+    try {
+      return stepOutcome(await this.media.pollVideo(jobId));
+    } catch (error) {
+      const job = await this.deps.jobs.load(jobId);
+      if (!job || job.status !== 'running') return { type: 'skipped' };
+      if (error instanceof MediaDiscardedError) return this.handleError(job, error);
+      if (error instanceof MediaPermanentError) {
+        if (job.invocationId && this.deps.videos) {
+          await this.deps.videos
+            .abandon(job.invocationId, error.code, error.message)
+            .catch(() => undefined);
+        }
+        return this.failFinal(job, error.code, error.message);
+      }
+      this.deps.logger.log('error', 'video_poll_error', {
+        jobId,
+        error: error instanceof Error ? error.name : 'unknown',
+      });
+      const delayMs = videoPollDelayMs(job.pollCount + 1);
+      const pollCount = await this.deps.jobs.recordPoll(job, null, new Date(Date.now() + delayMs));
+      if (pollCount === null || !this.deps.schedulePoll) return { type: 'skipped' };
+      await this.deps.schedulePoll(jobId, pollCount, delayMs);
+      return { type: 'polling', pollCount };
+    }
+  }
+
   // ------------------------------------------------------------------- errors
 
   private async handleError(job: GenerationJob, error: unknown): Promise<ProcessOutcome> {
     const { jobs, logger } = this.deps;
-    if (error instanceof DiscardedError) {
+    if (error instanceof DiscardedError || error instanceof MediaDiscardedError) {
       await jobs.noteDiscarded(job);
       logger.log('info', 'job_result_discarded', { jobId: job.id, attempt: job.attempt });
       return { type: 'discarded' };
@@ -591,10 +687,10 @@ export class GenerationProcessor {
     if (error instanceof RoutingError) {
       return this.failFinal(job, 'NO_ELIGIBLE_MODEL', error.message);
     }
-    if (error instanceof ImageConstraintError) {
+    if (error instanceof ImageConstraintError || error instanceof MediaConstraintError) {
       return this.failFinal(job, 'MODEL_LIMITS', error.message);
     }
-    if (error instanceof PermanentJobError) {
+    if (error instanceof PermanentJobError || error instanceof MediaPermanentError) {
       return this.failFinal(job, error.code, error.message);
     }
     if (error instanceof ImageOutputError) {
@@ -651,7 +747,7 @@ export class GenerationProcessor {
     errorCode: string,
     message: string,
     detail: Prisma.InputJsonObject = {},
-  ): Promise<ProcessOutcome> {
+  ): Promise<{ type: 'failed'; errorCode: string } | { type: 'skipped' }> {
     const changed = await this.deps.jobs.fail(job, errorCode, message, detail);
     if (!changed) return { type: 'skipped' };
     try {
@@ -672,6 +768,8 @@ export class GenerationProcessor {
     return { type: 'failed', errorCode };
   }
 }
+
+const stepOutcome = (step: MediaStepOutcome): ProcessOutcome => step;
 
 /** Next version number under a parent lock (same order as M1 edits: content item first). */
 async function nextVersion(

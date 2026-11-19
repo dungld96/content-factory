@@ -98,6 +98,7 @@ export const ApiErrorCode = {
   ReferenceFileMissing: 'REFERENCE_FILE_MISSING',
   /** A keyframe must be an approved, active image of the scene's content item (AC015). */
   KeyframeInvalid: 'KEYFRAME_INVALID',
+  SceneSelectionInvalid: 'SCENE_SELECTION_INVALID',
 
   // --- M5a: media tools, audio upload, ranges (M5 design package §7.3, §8) ---
   /** FFprobe/FFmpeg is not installed on this deployment. */

@@ -2,7 +2,12 @@ import { createHash } from 'node:crypto';
 
 /** Every input that determines a generation's result (CONTENT_PIPELINE §3, M3 design §7.5). */
 export interface ExecutionKeyInput {
-  readonly kind: 'script_generation' | 'storyboard_generation' | 'image_generation';
+  readonly kind:
+    | 'script_generation'
+    | 'storyboard_generation'
+    | 'image_generation'
+    | 'video_generation'
+    | 'tts_generation';
   readonly contentItemId: string;
   /** The normalized brief and generation settings (duration, language, aspect ratio). */
   readonly brief: unknown;

@@ -37,6 +37,10 @@ export const workerEnvSchema = z
     ...mediaEnvShape,
     /** Image generation jobs processed in parallel (separate from text jobs; M4 design S4). */
     WORKER_IMAGE_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
+    /** Video submit/poll/download steps (M5): short, so more in parallel. */
+    WORKER_VIDEO_CONCURRENCY: z.coerce.number().int().min(1).max(16).default(4),
+    /** TTS calls (M5). */
+    WORKER_AUDIO_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
   })
   .superRefine((env, ctx) => {
     checkAiProviderEnv(env, ctx);
