@@ -1,4 +1,4 @@
-import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
+import { DelayedError, Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
 import { Redis } from 'ioredis';
 
 import {
@@ -135,11 +135,16 @@ export interface WorkerOptions {
 export function startGenerationWorker(options: WorkerOptions): Worker<GenerationJobPayload> {
   const worker = new Worker<GenerationJobPayload>(
     options.queueName ?? GENERATION_QUEUE,
-    async (job: Job<GenerationJobPayload>) => {
+    async (job: Job<GenerationJobPayload>, token?: string) => {
       const payload = generationJobPayloadSchema.safeParse(job.data);
       if (!payload.success) throw new UnrecoverableError('invalid payload');
       const outcome = await options.processor.process(payload.data.jobId, job.name);
       if (outcome.type === 'retry') throw new RetryLaterError(outcome.errorCode, outcome.delayMs);
+      if (outcome.type === 'deferred') {
+        // Not a failure: BullMQ keeps its attempt count (circuit open, M7 design §7).
+        await job.moveToDelayed(Date.now() + outcome.delayMs, token);
+        throw new DelayedError();
+      }
       return outcome;
     },
     {

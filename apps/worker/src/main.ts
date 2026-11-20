@@ -2,6 +2,7 @@
 // reconciles PostgreSQL with Redis, and sweeps abandoned LLM invocations at start-up.
 import {
   createImageProviders,
+  CircuitBreaker,
   createLlmProviders,
   createTtsProviders,
   createVideoProviders,
@@ -145,9 +146,27 @@ export async function startWorker(
     });
   }
 
+  const circuits = new CircuitBreaker(prisma, {
+    onTransition: (t) => {
+      const msg =
+        t.to === 'open'
+          ? 'circuit_opened'
+          : t.to === 'closed'
+            ? 'circuit_closed'
+            : 'circuit_half_open';
+      logger.log(t.to === 'open' ? 'warn' : 'info', msg, {
+        providerId: t.providerId,
+        reason: t.reason,
+        errorCode: t.errorCode,
+        jobId: t.jobId,
+      });
+    },
+  });
+
   const processor = new GenerationProcessor({
     prisma,
-    jobs: new JobStore(prisma),
+    circuits,
+    jobs: new JobStore(prisma, logger),
     llm,
     images,
     videos,

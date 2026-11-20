@@ -26,6 +26,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@acf/config": "workspace:*",
     "zod": "4.6.7"
   }
 }

@@ -1,3 +1,5 @@
+import { redactSecrets } from '@acf/config';
+
 /**
  * Normalized provider errors (M2 design package §4.3).
  *
@@ -102,7 +104,8 @@ const SECRET_PATTERNS: readonly RegExp[] = [
  * `flagged_input`).
  */
 export function sanitizeProviderMessage(message: string): string {
-  let clean = message;
+  // Shared credential shapes (URL credentials, signed-URL parameters, key=value secrets: M7 §10).
+  let clean = redactSecrets(message);
   for (const pattern of SECRET_PATTERNS) {
     clean = clean.replace(pattern, (match, scheme?: string) =>
       typeof scheme === 'string' ? `${scheme} [redacted]` : '[redacted]',

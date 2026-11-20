@@ -137,6 +137,20 @@ held reservation + open and held reservations; the month is the UTC calendar mon
 `packages/database/test/budgets.integration.test.ts` and
 `apps/api/test/generation/budgets.integration.test.ts`.
 
+## 0.8 Implemented schema (M7b: circuit breaker)
+
+Migration `m7_circuits` (design: `docs/design/M7-design-review-package.md` §7):
+
+| Table | Purpose |
+|---|---|
+| `provider_circuits` | One row per provider (PK `provider_id`, created closed on first use): `state` (`circuit_state`: `closed`, `open`, `half_open`), `consecutive_failures`, `last_failure_at`, `opened_at`/`retry_at` (required unless closed), `open_for_ms` (doubles after a failed trial, max 30 min), `trial_job_id`/`trial_started_at` (only while half-open), `last_error_code`. Never deleted (`AC011`); locked `FOR UPDATE` by every change, shared by API and workers. |
+| `provider_circuit_events` | Append-only transitions (`AC011`): `from_state`, `to_state`, `reason` (`failures`, `trial`, `trial_failed`, `trial_succeeded`, `trial_expired`, `manual`), `error_code`, `job_id`, `actor_id` (manual changes). |
+
+Budget reservations are now resolved as jobs end (worker job store; API cancel): `settled` on
+success, `held` for `SUBMIT_OUTCOME_UNKNOWN` and for canceled video jobs already submitted,
+`released` otherwise. Verified by `packages/database/test/circuits.integration.test.ts` and
+`apps/worker/test/reliability.integration.test.ts`.
+
 ## 1. Entity groups
 
 ### Identity and workspace

@@ -1,3 +1,5 @@
+import { reservationOutcomeFor, resolveReservation } from '@acf/ai-runtime';
+import { redactSecrets } from '@acf/config';
 import { nextContentStatus, type ContentStatus, type PipelineEvent } from '@acf/content-domain';
 import type {
   GenerationJob,
@@ -6,6 +8,8 @@ import type {
   PrismaClient,
   TransactionClient,
 } from '@acf/database';
+
+import { silentLogger, type Logger } from './logger.js';
 
 /** Scene-scoped media job kinds (M4 images, M5 video and TTS). */
 export const SCENE_JOB_KINDS: ReadonlySet<GenerationJob['kind']> = new Set([
@@ -20,7 +24,10 @@ export const SCENE_JOB_KINDS: ReadonlySet<GenerationJob['kind']> = new Set([
  * transition happen at most once, also when a job is delivered twice or canceled concurrently.
  */
 export class JobStore {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly logger: Logger = silentLogger,
+  ) {}
 
   load(jobId: string): Promise<GenerationJob | null> {
     return this.prisma.generationJob.findUnique({ where: { id: jobId } });
@@ -103,7 +110,7 @@ export class JobStore {
           activeKey: null,
           completedAt: new Date(),
           errorCode,
-          errorMessage: errorMessage.slice(0, 500),
+          errorMessage: redactSecrets(errorMessage).slice(0, 500),
         },
       });
       await this.event(tx, current, current.status, 'failed', current.attempt, {
@@ -111,6 +118,7 @@ export class JobStore {
         errorCode,
         ...detail,
       });
+      await this.resolveBudget(tx, current, errorCode);
       if (SCENE_JOB_KINDS.has(current.kind)) {
         await this.settleImageWork(tx, current);
       } else if (current.kind === 'render') {
@@ -147,6 +155,7 @@ export class JobStore {
       },
     });
     if (count !== 1) return false;
+    await this.resolveBudget(tx, job, null);
     await this.event(tx, job, 'running', 'succeeded', job.attempt, {
       type: 'succeeded',
       assetIds: [...assetIds],
@@ -332,6 +341,7 @@ export class JobStore {
       },
     });
     if (count !== 1) return false;
+    await this.resolveBudget(tx, job, null);
     await this.event(tx, job, 'running', 'succeeded', job.attempt, {
       type: 'succeeded',
       ...result,
@@ -378,6 +388,7 @@ export class JobStore {
       },
     });
     if (count !== 1) return false;
+    await this.resolveBudget(tx, job, null);
     await this.event(tx, job, 'running', 'succeeded', job.attempt, { type: 'succeeded', renderId });
     await this.endRun(tx, job.productionRunId, 'succeeded');
     await this.transitionContent(tx, job.contentItemId, { type: 'render_succeeded' });
@@ -396,6 +407,25 @@ export class JobStore {
         detail: { type: 'result_discarded' },
       },
     });
+  }
+
+  /**
+   * Resolves the job's budget reservation as it ends (M7 design §4): settled on success (the
+   * ledger now counts), held when the provider charge is unknown, released otherwise.
+   */
+  private async resolveBudget(
+    tx: TransactionClient,
+    job: Pick<GenerationJob, 'id' | 'projectId'>,
+    errorCode: string | null,
+  ): Promise<void> {
+    const outcome = await resolveReservation(tx, job.id, reservationOutcomeFor(errorCode));
+    if (outcome === 'held') {
+      this.logger.log('warn', 'reservation_held', {
+        jobId: job.id,
+        projectId: job.projectId,
+        errorCode,
+      });
+    }
   }
 
   private async endRun(

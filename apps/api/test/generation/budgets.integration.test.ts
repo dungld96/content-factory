@@ -279,6 +279,22 @@ describe('enforcement on generate requests', () => {
 
     const budget = bodyOf<BudgetDto>(await as('viewer', 'GET', `/projects/${w.projectId}/budget`));
     expect(budget).toMatchObject({ reservedUsd: '15', remainingUsd: '85' });
+
+    // Canceled before the provider call: nothing will be charged, the reservation is released.
+    expect(
+      (await as('editor', 'POST', `/production-runs/${job.productionRunId}/cancel`)).status,
+    ).toBe(200);
+    expect(
+      await prisma.budgetReservation.findUniqueOrThrow({ where: { jobId: job.id } }),
+    ).toMatchObject({
+      status: 'released',
+    });
+    expect(
+      bodyOf<BudgetDto>(await as('viewer', 'GET', `/projects/${w.projectId}/budget`)),
+    ).toMatchObject({
+      reservedUsd: '0',
+      remainingUsd: '100',
+    });
   });
 });
 

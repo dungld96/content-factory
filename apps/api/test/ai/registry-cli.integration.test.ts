@@ -213,6 +213,34 @@ describe('model import-openrouter', () => {
   });
 });
 
+describe('circuits (M7b)', () => {
+  it('lists, opens and closes a provider circuit, and refuses an unknown provider', async () => {
+    const mock = await prisma.aiProvider.upsert({
+      where: { key: 'mock' },
+      create: { key: 'mock', name: 'Mock', kind: 'mock', status: 'enabled' },
+      update: {},
+    });
+    expect((await cli('circuit list')).out).toMatch(/^mock\tclosed\tfailures=0$/m);
+    const opened = await cli('circuit open mock');
+    expect([opened.code, opened.out]).toEqual([
+      0,
+      expect.stringMatching(/^✔ circuit mock is open until /),
+    ]);
+    expect((await cli('circuit list')).out).toMatch(/^mock\topen\tfailures=0\tretry_at=/m);
+    expect((await cli('circuit close mock')).out).toBe('✔ circuit mock is closed');
+    const events = await prisma.providerCircuitEvent.findMany({
+      where: { providerId: mock.id },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(events.map((e) => [e.toState, e.reason])).toEqual([
+      ['open', 'manual'],
+      ['closed', 'manual'],
+    ]);
+    expect((await cli('circuit open nobody')).code).toBe(2);
+    expect((await cli('circuit open')).code).toBe(2);
+  });
+});
+
 describe('status, prices and listing', () => {
   it('enables a model and lists its active prices', async () => {
     expect((await cli('model set-status deepseek/deepseek-v4-flash enabled')).code).toBe(0);

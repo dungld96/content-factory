@@ -170,7 +170,7 @@ model User {
   reviewedStoryboards StoryboardVersion[] @relation("StoryboardReviewedBy")
   updatedTaskRoutes   AiTaskRoute[]
 
-  reviewedAssets     Asset[]               @relation("AssetReviewedBy")
+  reviewedAssets     Asset[]                @relation("AssetReviewedBy")
   selectedKeyframes  SceneKeyframe[]
   keyframeEvents     SceneKeyframeEvent[]
   selectedClips      SceneClip[]
@@ -178,11 +178,12 @@ model User {
   selectedVoiceovers SceneVoiceover[]
   voiceoverEvents    SceneVoiceoverEvent[]
   voiceProfiles      VoiceProfile[]
-  rendersReviewed    Render[]              @relation("RenderReviewedBy")
-  rendersExported    Render[]              @relation("RenderExportedBy")
-  rendersCreated     Render[]              @relation("RenderCreatedBy")
-  budgetsUpdated     ProjectBudget[]       @relation("BudgetUpdatedBy")
-  budgetEvents       BudgetEvent[]         @relation("BudgetEventActor")
+  rendersReviewed    Render[]               @relation("RenderReviewedBy")
+  rendersExported    Render[]               @relation("RenderExportedBy")
+  rendersCreated     Render[]               @relation("RenderCreatedBy")
+  budgetsUpdated     ProjectBudget[]        @relation("BudgetUpdatedBy")
+  budgetEvents       BudgetEvent[]          @relation("BudgetEventActor")
+  circuitEvents      ProviderCircuitEvent[] @relation("CircuitEventActor")
 
   @@map("users")
 }
@@ -726,8 +727,10 @@ model AiProvider {
   createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  models      AiModel[]
-  invocations AiInvocation[]
+  models        AiModel[]
+  invocations   AiInvocation[]
+  circuit       ProviderCircuit?
+  circuitEvents ProviderCircuitEvent[]
 
   @@map("ai_providers")
 }
@@ -1527,4 +1530,59 @@ model BudgetReservation {
   @@index([projectId, status, createdAt])
   @@index([contentItemId, status])
   @@map("budget_reservations")
+}
+
+enum CircuitState {
+  /// Calls go through; counted failures are tallied.
+  closed
+  /// Calls wait until `retry_at`.
+  open
+  /// One trial call is let through; its outcome closes or reopens the circuit.
+  half_open
+
+  @@map("circuit_state")
+}
+
+/// Circuit breaker per provider (M7 design §7), shared by the API and every worker.
+model ProviderCircuit {
+  providerId          String       @id @map("provider_id") @db.Uuid
+  state               CircuitState @default(closed)
+  /// Counted (transient) failures in a row, within the failure window.
+  consecutiveFailures Int          @default(0) @map("consecutive_failures")
+  lastFailureAt       DateTime?    @map("last_failure_at") @db.Timestamptz(3)
+  openedAt            DateTime?    @map("opened_at") @db.Timestamptz(3)
+  retryAt             DateTime?    @map("retry_at") @db.Timestamptz(3)
+  /// How long the circuit stays open next time it opens from half-open (doubles, capped).
+  openForMs           Int          @default(300000) @map("open_for_ms")
+  /// The job allowed through while half-open.
+  trialJobId          String?      @map("trial_job_id") @db.Uuid
+  trialStartedAt      DateTime?    @map("trial_started_at") @db.Timestamptz(3)
+  lastErrorCode       String?      @map("last_error_code") @db.VarChar(64)
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  provider AiProvider @relation(fields: [providerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("provider_circuits")
+}
+
+/// Append-only history of circuit transitions (opened, half-opened, closed, manual).
+model ProviderCircuitEvent {
+  id         String       @id @default(uuid(7)) @db.Uuid
+  providerId String       @map("provider_id") @db.Uuid
+  fromState  CircuitState @map("from_state")
+  toState    CircuitState @map("to_state")
+  /// failures | trial | trial_failed | trial_succeeded | success | manual (CHECK).
+  reason     String       @db.VarChar(32)
+  errorCode  String?      @map("error_code") @db.VarChar(64)
+  jobId      String?      @map("job_id") @db.Uuid
+  actorId    String?      @map("actor_id") @db.Uuid
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  provider AiProvider @relation(fields: [providerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor    User?      @relation("CircuitEventActor", fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([providerId, createdAt(sort: Desc)])
+  @@index([actorId])
+  @@map("provider_circuit_events")
 }

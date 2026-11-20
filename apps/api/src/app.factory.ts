@@ -4,7 +4,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 
-import type { ApiEnv } from '@acf/config';
+import { redactValue, type ApiEnv } from '@acf/config';
 import { CORRELATION_ID_HEADER } from '@acf/contracts';
 
 import { AppModule } from './app.module.js';
@@ -22,9 +22,31 @@ export { API_PREFIX };
 
 const LEVELS: readonly LogLevel[] = ['fatal', 'error', 'warn', 'log', 'debug', 'verbose'];
 
+/**
+ * Nest's console logger with every message and parameter redacted (M7 design §10): credentials
+ * never reach the logs, whatever a caller passes (error stacks, provider bodies, URLs).
+ */
+export class RedactingConsoleLogger extends ConsoleLogger {
+  protected override printMessages(
+    messages: unknown[],
+    context?: string,
+    logLevel?: LogLevel,
+    writeStreamType?: 'stdout' | 'stderr',
+    errorStack?: unknown,
+  ): void {
+    super.printMessages(
+      messages.map((m) => redactValue(m)),
+      context,
+      logLevel,
+      writeStreamType,
+      redactValue(errorStack),
+    );
+  }
+}
+
 export function createLogger(env: Pick<ApiEnv, 'LOG_LEVEL' | 'LOG_JSON'>): ConsoleLogger {
   const threshold = LEVELS.indexOf(env.LOG_LEVEL);
-  return new ConsoleLogger({
+  return new RedactingConsoleLogger({
     json: env.LOG_JSON,
     colors: !env.LOG_JSON,
     logLevels: LEVELS.slice(0, threshold + 1),

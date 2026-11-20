@@ -8,7 +8,10 @@ import {
 import {
   ImageConstraintError,
   MediaConstraintError,
+  CIRCUIT_POLICY,
+  recheckJobBudget,
   RoutingError,
+  type CircuitBreaker,
   type ImageService,
   type LlmService,
   type TtsService,
@@ -76,7 +79,12 @@ export type ProcessOutcome =
   | { readonly type: 'skipped' }
   /** A video job was accepted by the provider; polls follow as separate BullMQ jobs (M5). */
   | { readonly type: 'submitted'; readonly providerJobId: string }
-  | { readonly type: 'polling'; readonly pollCount: number };
+  | { readonly type: 'polling'; readonly pollCount: number }
+  /**
+   * The provider's circuit is open (M7 design §7): delivered again after `delayMs` without using
+   * an attempt (PostgreSQL or BullMQ).
+   */
+  | { readonly type: 'deferred'; readonly errorCode: string; readonly delayMs: number };
 
 export interface ProcessorDeps {
   readonly prisma: PrismaClient;
@@ -104,6 +112,8 @@ export interface ProcessorDeps {
   readonly random?: () => number;
   /** Override of the retry delay (tests); defaults to `retryDelayMs` (RETRY_POLICY). */
   readonly retryDelay?: (attempt: number, retryAfterMs: number | undefined) => number;
+  /** Circuit breaker per provider (M7b); absent → calls are never held back. */
+  readonly circuits?: CircuitBreaker;
 }
 
 /** The model output stayed invalid after deterministic and one LLM repair (decision Q5). */
@@ -188,6 +198,10 @@ export class GenerationProcessor {
         return this.handleError(current, error);
       }
     }
+    if (current?.status === 'queued') {
+      const wait = await this.waitForCircuit(current);
+      if (wait) return wait;
+    }
     const job = await jobs.startAttempt(jobId);
     if (!job) {
       const current = await jobs.load(jobId);
@@ -199,8 +213,14 @@ export class GenerationProcessor {
     }
     logger.log('info', 'job_attempt_started', { jobId, kind: job.kind, attempt: job.attempt });
     try {
+      const breach = await this.recheckBudget(job);
+      if (breach) {
+        return await this.failFinal(job, 'BUDGET_EXCEEDED', breach.message, breach.detail);
+      }
       if (job.kind === 'video_generation') {
-        return stepOutcome(await this.media.submitVideo(job));
+        const step = stepOutcome(await this.media.submitVideo(job));
+        await this.circuitSuccess(job);
+        return step;
       }
       const versionId =
         job.kind === 'image_generation'
@@ -213,6 +233,7 @@ export class GenerationProcessor {
                 ? await this.runScript(job)
                 : await this.runStoryboard(job);
       logger.log('info', 'job_succeeded', { jobId, attempt: job.attempt, versionId });
+      await this.circuitSuccess(job);
       return { type: 'succeeded', versionId };
     } catch (error) {
       return this.handleError(job, error);
@@ -728,6 +749,7 @@ export class GenerationProcessor {
       return this.failFinal(job, 'INVALID_JOB_INPUT', 'the job input does not match its schema');
     }
     if (isProviderError(error)) {
+      await this.circuitFailure(job, error.code);
       if (error.retryable && job.attempt < job.maxAttempts) {
         return this.retry(job, error.code, error.retryAfterMs);
       }
@@ -741,6 +763,83 @@ export class GenerationProcessor {
     });
     if (job.attempt < job.maxAttempts) return this.retry(job, 'INTERNAL_ERROR', undefined);
     return this.failFinal(job, 'INTERNAL_ERROR', 'internal error');
+  }
+
+  // ------------------------------------------------------------------- circuit breaker
+
+  /** The provider a job's calls go to, or null for local work (renders) and unknown models. */
+  private async providerOf(job: GenerationJob): Promise<string | null> {
+    if (!this.deps.circuits || job.kind === 'render') return null;
+    const model = await this.deps.prisma.aiModel.findUnique({
+      where: { id: job.modelId },
+      select: { providerId: true },
+    });
+    return model?.providerId ?? null;
+  }
+
+  /**
+   * Before an attempt starts: an open circuit defers the job (no attempt used). A job that has
+   * waited longer than {@link CIRCUIT_POLICY.maxWaitMs} since it was queued fails with
+   * `PROVIDER_UNAVAILABLE`.
+   */
+  private async waitForCircuit(job: GenerationJob): Promise<ProcessOutcome | null> {
+    const providerId = await this.providerOf(job);
+    if (!providerId || !this.deps.circuits) return null;
+    const admission = await this.deps.circuits.admit(providerId, job.id);
+    if (admission.admitted) return null;
+    if (Date.now() - job.queuedAt.getTime() > CIRCUIT_POLICY.maxWaitMs) {
+      return this.failFinal(
+        job,
+        'PROVIDER_UNAVAILABLE',
+        'the provider stayed unavailable (circuit open) for too long',
+      );
+    }
+    this.deps.logger.log('info', 'job_deferred_circuit_open', {
+      jobId: job.id,
+      delayMs: admission.retryInMs,
+    });
+    return { type: 'deferred', errorCode: 'PROVIDER_CIRCUIT_OPEN', delayMs: admission.retryInMs };
+  }
+
+  private async circuitSuccess(job: GenerationJob): Promise<void> {
+    const providerId = await this.providerOf(job);
+    if (providerId) await this.deps.circuits?.recordSuccess(providerId, job.id);
+  }
+
+  private async circuitFailure(job: GenerationJob, errorCode: string): Promise<void> {
+    const providerId = await this.providerOf(job);
+    if (providerId) await this.deps.circuits?.recordFailure(providerId, job.id, errorCode);
+  }
+
+  /**
+   * The budget re-check right before the paid call (M7 design §5.2): if the budget was lowered
+   * after the job was queued and its reservation no longer fits a hard limit, the job fails with
+   * `BUDGET_EXCEEDED` (never retried; the reservation is released). Recorded as a `blocked`
+   * budget event.
+   */
+  private async recheckBudget(
+    job: GenerationJob,
+  ): Promise<{ message: string; detail: Prisma.InputJsonObject } | null> {
+    const found = await this.deps.prisma.$transaction(async (tx) => {
+      const breach = await recheckJobBudget(tx, job);
+      if (!breach) return null;
+      const detail = {
+        jobId: job.id,
+        scope: breach.scope,
+        mode: breach.mode,
+        limitUsd: breach.limit.toString(),
+        spentUsd: breach.spent.toString(),
+        requestedUsd: breach.requested.toString(),
+      };
+      await tx.budgetEvent.create({ data: { projectId: job.projectId, type: 'blocked', detail } });
+      return detail;
+    });
+    if (!found) return null;
+    this.deps.logger.log('warn', 'budget_exceeded', { projectId: job.projectId, ...found });
+    return {
+      message: `the ${found.scope} budget of USD ${found.limitUsd} no longer covers this job (USD ${found.requestedUsd})`,
+      detail: { budget: found },
+    };
   }
 
   private async retry(

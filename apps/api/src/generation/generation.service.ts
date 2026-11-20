@@ -10,7 +10,7 @@ import {
   type PriceComponent,
   type QualityTier,
 } from '@acf/ai-core';
-import { ModelCatalog, VideoService } from '@acf/ai-runtime';
+import { ModelCatalog, resolveReservation, VideoService } from '@acf/ai-runtime';
 import {
   activeJobKey,
   executionKey,
@@ -280,7 +280,11 @@ export class GenerationService {
         });
         if (changed !== 1) continue;
         count += 1;
-        if (job.kind === 'video_generation' && job.invocationId) submitted.push(job.invocationId);
+        const providerMayCharge = job.kind === 'video_generation' && job.invocationId !== null;
+        if (providerMayCharge && job.invocationId) submitted.push(job.invocationId);
+        // A submitted video may still be charged: its reservation keeps counting (held). Any
+        // other call still in flight is counted from the ledger once it records its cost.
+        await resolveReservation(tx, job.id, providerMayCharge ? 'held' : 'released');
         await tx.jobEvent.create({
           data: {
             projectId: job.projectId,

@@ -10,6 +10,8 @@
 //   pnpm ai:registry model import-openrouter-images <modelKey>... [--tier <tier>] [--endpoint <slug>] [--apply]
 //   pnpm ai:registry route set <script_generation|storyboard_generation|image_generation|video_generation|tts_generation> <modelKey> [--provider openrouter] [--zdr]
 //   pnpm ai:registry invocations mark-abandoned
+//   pnpm ai:registry circuit list
+//   pnpm ai:registry circuit <open|close> <providerKey>                                   (M7b)
 //   ACF_PAID_SMOKE=1 pnpm ai:registry smoke <modelKey> --project <slug> --max-cost-usd <usd>
 //   ACF_PAID_SMOKE=1 pnpm ai:registry smoke-image <modelKey> --project <slug> --max-cost-usd <usd>
 //                              [--count <1-10>] [--resolution 2K] [--out <dir>]   (M4 benchmark)
@@ -38,6 +40,7 @@ import {
   type LlmUsage,
 } from '@acf/ai-core';
 import {
+  CircuitBreaker,
   createImageProviders,
   createLlmProviders,
   ImageConstraintError,
@@ -186,6 +189,43 @@ export async function runAiRegistryCli(
       for (const p of await prisma.aiProvider.findMany({ orderBy: { key: 'asc' } })) {
         io.out(`${p.key}\t${p.kind}\t${p.status}\t${p.name}`);
       }
+      return 0;
+    }
+    if (group === 'circuit' && command === 'list') {
+      const circuits = new Map(
+        (await new CircuitBreaker(prisma).list()).map((c) => [c.providerId, c]),
+      );
+      for (const p of await prisma.aiProvider.findMany({ orderBy: { key: 'asc' } })) {
+        const c = circuits.get(p.id);
+        io.out(
+          [
+            p.key,
+            c?.state ?? 'closed',
+            `failures=${String(c?.consecutiveFailures ?? 0)}`,
+            c?.retryAt ? `retry_at=${c.retryAt.toISOString()}` : '',
+            c?.lastErrorCode ? `last_error=${c.lastErrorCode}` : '',
+          ]
+            .filter(Boolean)
+            .join('\t'),
+        );
+      }
+      return 0;
+    }
+    if (group === 'circuit' && (command === 'open' || command === 'close')) {
+      const [key] = positionals;
+      if (!key) return usage('circuit <open|close> <providerKey>');
+      const provider = await prisma.aiProvider.findUnique({ where: { key } });
+      if (!provider) return usage(`unknown provider ${key}`);
+      const row = await new CircuitBreaker(prisma).set(
+        provider.id,
+        command === 'open' ? 'open' : 'closed',
+        null,
+      );
+      io.out(
+        row.state === 'open'
+          ? `✔ circuit ${key} is open until ${row.retryAt?.toISOString() ?? '?'}`
+          : `✔ circuit ${key} is closed`,
+      );
       return 0;
     }
     if (group === 'provider' && command === 'set-status') {

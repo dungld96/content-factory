@@ -229,6 +229,9 @@ importers:
 
   packages/ai-core:
     dependencies:
+      '@acf/config':
+        specifier: workspace:*
+        version: link:../config
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -241,6 +244,9 @@ importers:
       '@acf/config':
         specifier: workspace:*
         version: link:../config
+      '@acf/content-domain':
+        specifier: workspace:*
+        version: link:../content-domain
       '@acf/database':
         specifier: workspace:*
         version: link:../database

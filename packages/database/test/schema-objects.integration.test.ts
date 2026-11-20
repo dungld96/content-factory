@@ -58,6 +58,8 @@ const EXPECTED_TRIGGERS: readonly (readonly [string, string, boolean])[] = [
   ['project_members', 'project_members_keep_owner', true],
   ['projects', 'projects_created_with_owner', true],
   ['projects', 'projects_no_delete', false],
+  ['provider_circuit_events', 'provider_circuit_events_append_only', false],
+  ['provider_circuits', 'provider_circuits_no_delete', false],
   ['renders', 'renders_guard', false],
   ['scene_clip_events', 'scene_clip_events_append_only', false],
   ['scene_clips', 'scene_clips_guard', false],
@@ -142,6 +144,11 @@ const EXPECTED_CHECKS = [
   'project_budgets.project_budgets_item_nonnegative',
   'project_budgets.project_budgets_monthly_nonnegative',
   'project_budgets.project_budgets_request_nonnegative',
+  'provider_circuit_events.provider_circuit_events_reason_known',
+  'provider_circuits.provider_circuits_failures_nonnegative',
+  'provider_circuits.provider_circuits_open_consistent',
+  'provider_circuits.provider_circuits_open_for_positive',
+  'provider_circuits.provider_circuits_trial_consistent',
   'renders.renders_duration_positive',
   'renders.renders_execution_key_format',
   'renders.renders_export_consistent',
@@ -284,7 +291,7 @@ describe('role separation (U3)', () => {
       `SELECT tablename, has_table_privilege(current_user, 'public.' || tablename, 'SELECT, INSERT, UPDATE, DELETE') AS ok
        FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`,
     );
-    expect(rows.length).toBe(40); // M1–M3: 27; R0: content_masters; M4: 3 image tables; M5: 5 media tables; M6: renders; M7: 3 budget tables
+    expect(rows.length).toBe(42); // M1–M3: 27; R0: content_masters; M4: 3 image tables; M5: 5 media tables; M6: renders; M7: 3 budget + 2 circuit tables
     expect(rows.filter((r) => !r.ok)).toEqual([]);
   });
 });

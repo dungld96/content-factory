@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import { redactSecrets } from './redact.js';
 
 export interface EnvIssue {
   /** Environment variable name (or dotted path). */
@@ -29,6 +30,6 @@ export class EnvValidationError extends Error {
 export function toEnvIssues(error: z.ZodError): EnvIssue[] {
   return error.issues.map((issue) => ({
     key: issue.path.length > 0 ? issue.path.join('.') : '(root)',
-    message: issue.message,
+    message: redactSecrets(issue.message),
   }));
 }

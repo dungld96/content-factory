@@ -1,7 +1,7 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 
 import { UsdAmount } from '@acf/ai-core';
-import { usdFromDecimal } from '@acf/ai-runtime';
+import { budgetLimitsOf, budgetUsage, lockProjectBudget, usdFromDecimal } from '@acf/ai-runtime';
 import type { ApiEnv } from '@acf/config';
 import {
   ApiErrorCode,
@@ -9,14 +9,7 @@ import {
   type BudgetDto,
   type UpdateBudgetRequest,
 } from '@acf/contracts';
-import {
-  BUDGET_WARNING_RATIO,
-  budgetMonth,
-  findBudgetBreach,
-  reservationAmount,
-  type BudgetLimits,
-  type BudgetUsage,
-} from '@acf/content-domain';
+import { BUDGET_WARNING_RATIO, findBudgetBreach, reservationAmount } from '@acf/content-domain';
 import type { Prisma, ProjectBudget, TransactionClient } from '@acf/database';
 
 import type { Actor } from '../auth/actor.js';
@@ -72,8 +65,8 @@ export class BudgetsService {
       ...reservationAmount(j.estimate, j.calls ?? 1),
     }));
     const requested = UsdAmount.sum(planned.map((p) => p.amount));
-    const usage = await this.usage(tx, input.projectId, input.contentItemId, new Date());
-    const breach = findBudgetBreach(limitsOf(budget), usage.limits, requested);
+    const usage = await budgetUsage(tx, input.projectId, input.contentItemId, new Date());
+    const breach = findBudgetBreach(budgetLimitsOf(budget), usage.limits, requested);
     if (breach) {
       const current: BudgetBreachDto = {
         scope: breach.scope,
@@ -166,91 +159,17 @@ export class BudgetsService {
     return this.toDto(projectId);
   }
 
-  /** The project's budget row, created with the defaults on first use, locked FOR UPDATE. */
-  private async lock(tx: TransactionClient, projectId: string): Promise<ProjectBudget> {
-    await tx.projectBudget.upsert({
-      where: { projectId },
-      create: {
-        projectId,
-        monthlyLimitUsd: this.env.DEFAULT_MONTHLY_BUDGET_USD,
-        monthlyMode: 'hard',
-        itemLimitUsd: this.env.DEFAULT_ITEM_BUDGET_USD,
-        itemMode: 'soft',
-        requestLimitUsd: this.env.DEFAULT_REQUEST_BUDGET_USD,
-        requestMode: 'hard',
-      },
-      update: {},
+  private lock(tx: TransactionClient, projectId: string): Promise<ProjectBudget> {
+    return lockProjectBudget(tx, projectId, {
+      monthlyUsd: this.env.DEFAULT_MONTHLY_BUDGET_USD,
+      itemUsd: this.env.DEFAULT_ITEM_BUDGET_USD,
+      requestUsd: this.env.DEFAULT_REQUEST_BUDGET_USD,
     });
-    await tx.$queryRaw`SELECT 1 FROM project_budgets WHERE project_id = ${projectId}::uuid FOR UPDATE`;
-    return tx.projectBudget.findUniqueOrThrow({ where: { projectId } });
-  }
-
-  /**
-   * What counts against the limits (§3.3): ledger costs (reported, else estimated) of calls not
-   * covered by an open or held reservation, plus open and held reservations.
-   */
-  private async usage(
-    db: TransactionClient | PrismaService['client'],
-    projectId: string,
-    contentItemId: string | null,
-    at: Date,
-  ): Promise<{
-    limits: BudgetUsage;
-    spent: UsdAmount;
-    reserved: UsdAmount;
-    held: UsdAmount;
-    unknownCalls: number;
-    period: { start: Date; end: Date };
-  }> {
-    const period = budgetMonth(at);
-    const ledger = await db.$queryRaw<{ spent: Prisma.Decimal | null; unknown_calls: bigint }[]>`
-      SELECT COALESCE(SUM(CASE
-               WHEN i.cost_status = 'reported' THEN i.reported_cost
-               WHEN i.cost_status = 'estimated' THEN i.estimated_cost
-               ELSE 0 END), 0) AS spent,
-             COUNT(*) FILTER (WHERE i.cost_status = 'unknown') AS unknown_calls
-      FROM ai_invocations i
-      LEFT JOIN budget_reservations r ON r.job_id = i.generation_job_id
-      WHERE i.project_id = ${projectId}::uuid
-        AND i.started_at >= ${period.start} AND i.started_at < ${period.end}
-        AND (r.id IS NULL OR r.status IN ('settled', 'released'))`;
-    const reservations = await db.$queryRaw<{ status: string; amount: Prisma.Decimal | null }[]>`
-      SELECT status::text AS status, SUM(amount_usd) AS amount FROM budget_reservations
-      WHERE project_id = ${projectId}::uuid AND status IN ('open', 'held') GROUP BY status`;
-    const spent = usd(ledger[0]?.spent) ?? UsdAmount.ZERO;
-    const reserved = usd(reservations.find((r) => r.status === 'open')?.amount) ?? UsdAmount.ZERO;
-    const held = usd(reservations.find((r) => r.status === 'held')?.amount) ?? UsdAmount.ZERO;
-    let item = UsdAmount.ZERO;
-    if (contentItemId) {
-      const rows = await db.$queryRaw<{ spent: Prisma.Decimal | null }[]>`
-        SELECT (
-          SELECT COALESCE(SUM(CASE
-                   WHEN i.cost_status = 'reported' THEN i.reported_cost
-                   WHEN i.cost_status = 'estimated' THEN i.estimated_cost
-                   ELSE 0 END), 0)
-          FROM ai_invocations i
-          LEFT JOIN budget_reservations r ON r.job_id = i.generation_job_id
-          WHERE i.content_item_id = ${contentItemId}::uuid
-            AND (r.id IS NULL OR r.status IN ('settled', 'released'))
-        ) + (
-          SELECT COALESCE(SUM(amount_usd), 0) FROM budget_reservations
-          WHERE content_item_id = ${contentItemId}::uuid AND status IN ('open', 'held')
-        ) AS spent`;
-      item = usd(rows[0]?.spent) ?? UsdAmount.ZERO;
-    }
-    return {
-      limits: { month: spent.add(reserved).add(held), item },
-      spent,
-      reserved,
-      held,
-      unknownCalls: Number(ledger[0]?.unknown_calls ?? 0),
-      period,
-    };
   }
 
   private async toDto(projectId: string): Promise<BudgetDto> {
     const budget = await this.prisma.client.$transaction((tx) => this.lock(tx, projectId));
-    const u = await this.usage(this.prisma.client, projectId, null, new Date());
+    const u = await budgetUsage(this.prisma.client, projectId, null, new Date());
     const monthly = usd(budget.monthlyLimitUsd) ?? UsdAmount.ZERO;
     const used = u.limits.month;
     const remaining = monthly.minusOrZero(used);
@@ -273,17 +192,6 @@ export class BudgetsService {
       updatedAt: budget.updatedAt.toISOString(),
     };
   }
-}
-
-function limitsOf(b: ProjectBudget): BudgetLimits {
-  return {
-    monthlyLimit: usd(b.monthlyLimitUsd) ?? UsdAmount.ZERO,
-    monthlyMode: b.monthlyMode,
-    itemLimit: usd(b.itemLimitUsd),
-    itemMode: b.itemMode,
-    requestLimit: usd(b.requestLimitUsd),
-    requestMode: b.requestMode,
-  };
 }
 
 function limitsJson(b: ProjectBudget): Prisma.InputJsonObject {

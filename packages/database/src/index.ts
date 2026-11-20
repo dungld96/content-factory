@@ -40,6 +40,8 @@ export type {
   Render,
   ProjectBudget,
   BudgetReservation,
+  ProviderCircuit,
+  ProviderCircuitEvent,
 } from './generated/prisma/client.js';
 export * from './generated/prisma/enums.js';
 export {

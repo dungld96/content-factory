@@ -20,6 +20,7 @@
   "dependencies": {
     "@acf/ai-core": "workspace:*",
     "@acf/config": "workspace:*",
+    "@acf/content-domain": "workspace:*",
     "@acf/database": "workspace:*"
   }
 }
