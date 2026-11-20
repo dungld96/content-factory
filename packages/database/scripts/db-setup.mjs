@@ -5,6 +5,7 @@
 // Reads DATABASE_ADMIN_URL, DATABASE_MIGRATION_URL, DATABASE_URL and optional
 // DATABASE_SHADOW_URL from the shell or the repository-root .env. Never prints secrets.
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 
 import { bootstrapDatabase, credentialsFromUrl } from '../dist/admin/index.js';
@@ -45,7 +46,10 @@ const { databases } = await bootstrapDatabase(urls, { extraDatabases });
 console.info(`✔ roles and grants applied (databases: ${databases.join(', ')})`);
 
 if (command === 'setup') {
-  execFileSync('pnpm', ['exec', 'prisma', 'migrate', 'deploy'], {
+  // Run the Prisma CLI's JS entry with the current Node binary rather than spawning
+  // `pnpm`: on Windows pnpm is a .cmd shim that execFileSync cannot launch without a shell.
+  const prismaCli = createRequire(import.meta.url).resolve('prisma/build/index.js');
+  execFileSync(process.execPath, [prismaCli, 'migrate', 'deploy'], {
     cwd: packageDir,
     stdio: 'inherit',
   });
