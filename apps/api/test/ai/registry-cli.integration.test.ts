@@ -317,6 +317,12 @@ describe('task routes (M3 Q4)', () => {
     expect((await cli('route list')).out).toContain(
       'script_generation\topenrouter/anthropic/claude-haiku-5.5\tdisabled',
     );
+    // P1 O6: CLI changes are audited too, without an actor.
+    const event = await prisma.aiRegistryEvent.findFirstOrThrow({
+      where: { action: 'route_set', target: 'script_generation' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(event).toMatchObject({ source: 'cli', actorId: null });
   });
 
   it.each(['route set music_generation x', 'route set script_generation'])(

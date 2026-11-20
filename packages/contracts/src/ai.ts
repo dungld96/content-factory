@@ -105,6 +105,8 @@ export const aiModelSchema = z
     maxOutputTokens: z.number().int().nullable(),
     qualityTier: aiQualityTierSchema,
     status: aiStatusSchema,
+    /** Structured-output mode for LLMs (`full` | `basic`, M8.5). */
+    schemaMode: z.enum(['full', 'basic']),
     isFreeVariant: z.boolean(),
     rateLimitNotes: z.string().nullable(),
     dataPolicyNotes: z.string().nullable(),
@@ -135,3 +137,89 @@ export const listAiModelsQuerySchema = paginationQuerySchema.extend({
   providerKey: z.string().min(1).max(64).optional(),
 });
 export type ListAiModelsQuery = z.output<typeof listAiModelsQuerySchema>;
+
+// ------------------------------------------------------------------- P1: operator settings
+
+/** Generation tasks with a routed model (`ai_task_routes.task`). */
+export const aiTaskSchema = z
+  .enum([
+    'script_generation',
+    'storyboard_generation',
+    'image_generation',
+    'video_generation',
+    'tts_generation',
+  ])
+  .meta({ id: 'AiTask' });
+export type AiTask = z.infer<typeof aiTaskSchema>;
+export const aiTaskParamsSchema = z.strictObject({ task: aiTaskSchema });
+export const aiProviderKeyParamsSchema = z.strictObject({
+  providerKey: z.string().min(1).max(64),
+});
+
+/** `GET /ai/routes`: every task and the model it is routed to (P1 O4). */
+export const aiRouteSchema = z
+  .object({
+    task: aiTaskSchema,
+    model: z
+      .object({
+        id: z.uuid(),
+        modelKey: z.string(),
+        displayName: z.string(),
+        status: aiStatusSchema,
+      })
+      .nullable(),
+    provider: z
+      .object({ key: z.string(), status: aiStatusSchema, configured: z.boolean() })
+      .nullable(),
+    zeroDataRetention: z.boolean(),
+    updatedAt: z.string().nullable(),
+  })
+  .meta({ id: 'AiRoute' });
+export type AiRouteDto = z.infer<typeof aiRouteSchema>;
+export const aiRouteListSchema = z
+  .object({ data: z.array(aiRouteSchema) })
+  .meta({ id: 'AiRouteList' });
+export type AiRouteList = z.infer<typeof aiRouteListSchema>;
+
+/** `PUT /ai/routes/:task` (operator). */
+export const setAiRouteRequestSchema = z
+  .strictObject({
+    modelKey: z.string().min(1).max(200),
+    providerKey: z.string().min(1).max(64).optional(),
+    zeroDataRetention: z.boolean().optional(),
+  })
+  .meta({ id: 'SetAiRouteRequest' });
+export type SetAiRouteRequest = z.output<typeof setAiRouteRequestSchema>;
+
+/** `PATCH /ai/providers/:providerKey` (operator). */
+export const updateAiProviderRequestSchema = z
+  .strictObject({ status: aiStatusSchema })
+  .meta({ id: 'UpdateAiProviderRequest' });
+export type UpdateAiProviderRequest = z.output<typeof updateAiProviderRequestSchema>;
+
+/** `PATCH /ai/models/:modelId` (operator). */
+export const updateAiModelRequestSchema = z
+  .strictObject({
+    status: aiStatusSchema.optional(),
+    schemaMode: z.enum(['full', 'basic']).optional(),
+  })
+  .refine((v) => v.status !== undefined || v.schemaMode !== undefined, {
+    message: 'at least one field is required',
+  })
+  .meta({ id: 'UpdateAiModelRequest' });
+export type UpdateAiModelRequest = z.output<typeof updateAiModelRequestSchema>;
+
+/** `GET /ai/registry-events` (operator): the registry audit, newest first (P1 O6). */
+export const aiRegistryEventSchema = z
+  .object({
+    id: z.uuid(),
+    source: z.enum(['api', 'cli']),
+    actor: z.object({ id: z.uuid(), email: z.string(), displayName: z.string() }).nullable(),
+    action: z.string(),
+    target: z.string(),
+    before: z.unknown().nullable(),
+    after: z.unknown().nullable(),
+    createdAt: z.string(),
+  })
+  .meta({ id: 'AiRegistryEvent' });
+export type AiRegistryEventDto = z.infer<typeof aiRegistryEventSchema>;

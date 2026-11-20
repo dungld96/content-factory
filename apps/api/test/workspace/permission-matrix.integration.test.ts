@@ -167,6 +167,31 @@ const ROWS: Record<string, Row> = {
     path: (_f, ids) => `/ai/models/${ids['aiModel'] ?? ''}`,
     expect: [401, 200, 200, 200, 200],
   },
+  // P1: operator settings. No caller here is in OPERATOR_EMAILS: every change is 403.
+  'GET /ai/routes': { method: 'GET', path: () => '/ai/routes', expect: [401, 200, 200, 200, 200] },
+  'PUT /ai/routes/:task': {
+    method: 'PUT',
+    path: () => '/ai/routes/script_generation',
+    body: () => ({ modelKey: 'mock/echo' }),
+    expect: [401, 403, 403, 403, 403],
+  },
+  'PATCH /ai/providers/:providerKey': {
+    method: 'PATCH',
+    path: () => '/ai/providers/mock',
+    body: () => ({ status: 'enabled' }),
+    expect: [401, 403, 403, 403, 403],
+  },
+  'PATCH /ai/models/:modelId': {
+    method: 'PATCH',
+    path: (_f, ids) => `/ai/models/${ids['aiModel'] ?? ''}`,
+    body: () => ({ status: 'enabled' }),
+    expect: [401, 403, 403, 403, 403],
+  },
+  'GET /ai/registry-events': {
+    method: 'GET',
+    path: () => '/ai/registry-events',
+    expect: [401, 403, 403, 403, 403],
+  },
   'GET /projects/:projectId': {
     method: 'GET',
     path: (f) => `/projects/${f.projectId}`,

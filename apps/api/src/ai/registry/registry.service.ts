@@ -1,6 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { activePrices, ttsConstraintsSchema, type LlmProvider } from '@acf/ai-core';
+import {
+  activePrices,
+  ttsConstraintsSchema,
+  type ImageProvider,
+  type LlmProvider,
+  type TtsProvider,
+  type VideoProvider,
+} from '@acf/ai-core';
 import { toPriceComponents, usdFromDecimal } from '@acf/ai-runtime';
 import type {
   AiModelDetailDto,
@@ -8,6 +15,9 @@ import type {
   AiPriceDto,
   AiProviderDto,
   AiProviderList,
+  AiRegistryEventDto,
+  AiRouteList,
+  AiTask,
   ListAiModelsQuery,
   Page,
 } from '@acf/contracts';
@@ -16,7 +26,15 @@ import type { AiModel, AiModelCapability, AiModelPrice, AiProvider } from '@acf/
 import { notFound } from '../../common/domain-errors.js';
 import { keysetAfter, NEWEST_FIRST, toPage } from '../../common/http/pagination.js';
 import { PrismaService } from '../../infrastructure/prisma.service.js';
-import { LLM_PROVIDERS } from '../ai.tokens.js';
+import { IMAGE_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS, VIDEO_PROVIDERS } from '../ai.tokens.js';
+
+const ROUTED_TASKS: readonly AiTask[] = [
+  'script_generation',
+  'storyboard_generation',
+  'image_generation',
+  'video_generation',
+  'tts_generation',
+];
 
 type ModelRow = AiModel & {
   provider: AiProvider;
@@ -54,11 +72,84 @@ export class RegistryService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(LLM_PROVIDERS) private readonly llmProviders: ReadonlyMap<string, LlmProvider>,
+    @Inject(IMAGE_PROVIDERS) private readonly imageProviders: ReadonlyMap<string, ImageProvider>,
+    @Inject(VIDEO_PROVIDERS) private readonly videoProviders: ReadonlyMap<string, VideoProvider>,
+    @Inject(TTS_PROVIDERS) private readonly ttsProviders: ReadonlyMap<string, TtsProvider>,
   ) {}
 
-  /** Credentials for this provider are configured in this deployment. */
+  /** Credentials for this provider are configured in this deployment, for any capability (P1 O2). */
   isConfigured(providerKey: string): boolean {
-    return this.llmProviders.has(providerKey);
+    return [this.llmProviders, this.imageProviders, this.videoProviders, this.ttsProviders].some(
+      (map) => map.has(providerKey),
+    );
+  }
+
+  /** Credentials for this provider are configured for one capability (routing check, P1 O4). */
+  isConfiguredFor(capability: string, providerKey: string): boolean {
+    const map =
+      capability === 'image_generation'
+        ? this.imageProviders
+        : capability === 'video_generation'
+          ? this.videoProviders
+          : capability === 'tts'
+            ? this.ttsProviders
+            : this.llmProviders;
+    return map.has(providerKey);
+  }
+
+  /** Every task with its routed model (P1 O4); `model: null` when no route is set. */
+  async listRoutes(): Promise<AiRouteList> {
+    const rows = await this.prisma.client.aiTaskRoute.findMany({
+      include: { model: { include: { provider: true } } },
+    });
+    return {
+      data: ROUTED_TASKS.map((task) => {
+        const r = rows.find((row) => row.task === task);
+        return {
+          task,
+          model: r
+            ? {
+                id: r.model.id,
+                modelKey: r.model.modelKey,
+                displayName: r.model.displayName,
+                status: r.model.status,
+              }
+            : null,
+          provider: r
+            ? {
+                key: r.model.provider.key,
+                status: r.model.provider.status,
+                configured: this.isConfigured(r.model.provider.key),
+              }
+            : null,
+          zeroDataRetention: r?.zeroDataRetention ?? false,
+          updatedAt: r?.updatedAt.toISOString() ?? null,
+        };
+      }),
+    };
+  }
+
+  /** The registry audit, newest first (P1 O6; operators). */
+  async listEvents(query: {
+    limit: number;
+    cursor?: string | undefined;
+  }): Promise<Page<AiRegistryEventDto>> {
+    const rows = await this.prisma.client.aiRegistryEvent.findMany({
+      where: keysetAfter(query.cursor),
+      include: { actor: { select: { id: true, email: true, displayName: true } } },
+      orderBy: NEWEST_FIRST,
+      take: query.limit + 1,
+    });
+    return toPage(rows, query.limit, (e) => ({
+      id: e.id,
+      source: e.source === 'api' ? 'api' : 'cli',
+      actor: e.actor,
+      action: e.action,
+      target: e.target,
+      before: e.before ?? null,
+      after: e.after ?? null,
+      createdAt: e.createdAt.toISOString(),
+    }));
   }
 
   async listProviders(): Promise<AiProviderList> {
@@ -122,6 +213,7 @@ export class RegistryService {
       maxOutputTokens: row.maxOutputTokens,
       qualityTier: row.qualityTier,
       status: row.status,
+      schemaMode: row.schemaMode === 'basic' ? 'basic' : 'full',
       isFreeVariant: row.isFreeVariant,
       rateLimitNotes: row.rateLimitNotes,
       dataPolicyNotes: row.dataPolicyNotes,

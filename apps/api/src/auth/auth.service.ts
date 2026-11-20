@@ -16,6 +16,7 @@ import { getCorrelationId } from '../common/correlation-id.js';
 import { API_ENV } from '../config/api-config.module.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
 import type { Actor } from './actor.js';
+import { isOperator } from './operator.js';
 import { CsrfService } from './csrf.service.js';
 import { PasswordHasher } from './password-hasher.js';
 import { PrismaSessionStore } from './session/prisma-session-store.js';
@@ -106,6 +107,7 @@ export class AuthService {
     });
     return {
       user: actor.user,
+      isOperator: isOperator(this.env, actor),
       memberships: memberships.map((m) => ({
         projectId: m.project.id,
         projectSlug: m.project.slug,

@@ -135,6 +135,7 @@ services:
       # Only Next.js (web) and Caddy may set X-Forwarded-* (fixed addresses below).
       TRUST_PROXY: 172.30.0.10,172.30.0.11
       WEB_ORIGINS: https://${SITE_ADDRESS:?}
+      OPERATOR_EMAILS: ${OPERATOR_EMAILS:-}
       API_CORS_ORIGINS: https://${SITE_ADDRESS:?}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       S3_ENDPOINT: http://seaweedfs:8333

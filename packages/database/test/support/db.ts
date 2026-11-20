@@ -57,6 +57,7 @@ export const ALL_TABLES = [
   'budget_reservations',
   'provider_circuits',
   'provider_circuit_events',
+  'ai_registry_events',
 ] as const;
 
 /** Empties every table. Must run as the migrator (the app role has no TRUNCATE). */

@@ -130,6 +130,9 @@ export const ApiErrorCode = {
   // --- P2a: asset metadata the platform writes is immutable (design A2) ---
   /** The request sets a metadata key reserved for the platform (`SYSTEM_METADATA_KEYS`). */
   MetadataKeyReserved: 'METADATA_KEY_RESERVED',
+  // --- P1: operator settings ---
+  /** The model cannot serve the task: capability missing, or model/provider disabled or unconfigured. */
+  ModelNotRoutable: 'MODEL_NOT_ROUTABLE',
 
   // --- R0: content masters and variants (ADR-0015) ---
   /** The format cannot be published on the target platform. */

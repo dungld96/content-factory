@@ -184,6 +184,7 @@ model User {
   budgetsUpdated     ProjectBudget[]        @relation("BudgetUpdatedBy")
   budgetEvents       BudgetEvent[]          @relation("BudgetEventActor")
   circuitEvents      ProviderCircuitEvent[] @relation("CircuitEventActor")
+  registryEvents        AiRegistryEvent[]    @relation("RegistryEventActor")
 
   @@map("users")
 }
@@ -1594,4 +1595,27 @@ model ProviderCircuitEvent {
   @@index([providerId, createdAt(sort: Desc)])
   @@index([actorId])
   @@map("provider_circuit_events")
+}
+
+/// Append-only audit of AI registry changes from the API or the CLI (P1 design O6).
+model AiRegistryEvent {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  /// The operator; null for the CLI.
+  actorId   String?  @map("actor_id") @db.Uuid
+  /// api | cli (CHECK).
+  source    String   @db.VarChar(8)
+  /// provider_status | model_status | model_schema_mode | model_min_billed_seconds | route_set |
+  /// price_added | model_imported (CHECK).
+  action    String   @db.VarChar(32)
+  /// Provider key, model key or task.
+  target    String   @db.VarChar(300)
+  before    Json?    @db.JsonB
+  after     Json?    @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actor User? @relation("RegistryEventActor", fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  @@index([actorId])
+  @@map("ai_registry_events")
 }

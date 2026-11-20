@@ -98,6 +98,14 @@ export const apiEnvSchema = z.object({
   WEB_ORIGINS: commaList
     .pipe(z.array(z.url({ message: 'each origin must be a valid URL' })).min(1))
     .default(['http://localhost:3000']),
+  /**
+   * Platform operators (P1 design O1): the users who may change AI providers, models and routes
+   * over HTTP. Comma-separated emails, compared case-insensitively. Empty: nobody (CLI only).
+   */
+  OPERATOR_EMAILS: commaList
+    .pipe(z.array(z.email({ message: 'each operator must be an email address' })))
+    .transform((emails) => emails.map((e) => e.toLowerCase()))
+    .default([]),
   /** Login attempts allowed per client IP per minute. */
   LOGIN_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(10_000).default(10),
 

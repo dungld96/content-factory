@@ -28,6 +28,20 @@ export const OPENROUTER_PROVIDER_ROW = {
     'LLM gateway (text). Requests send data_collection=deny and require_parameters=true; zdr per call. Model commercial terms are per model.',
 } as const;
 
+/** Who made a registry change (P1 O6): an operator over HTTP; omitted for the CLI. */
+export interface RegistryChangeBy {
+  readonly actorId: string;
+}
+
+type RegistryAction =
+  | 'provider_status'
+  | 'model_status'
+  | 'model_schema_mode'
+  | 'model_min_billed_seconds'
+  | 'route_set'
+  | 'price_added'
+  | 'model_imported';
+
 export interface ImportOutcome {
   readonly modelKey: string;
   readonly action: 'created' | 'updated' | 'unchanged' | 'refused';
@@ -42,21 +56,74 @@ export interface ImportOutcome {
 export class RegistryAdminService {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async setProviderStatus(key: string, status: AiProviderStatus): Promise<void> {
-    const { count } = await this.prisma.aiProvider.updateMany({ where: { key }, data: { status } });
-    if (count === 0) throw new RegistryAdminError(`unknown provider ${key}`);
+  /** One `model_imported` event per model an import created or changed (CLI only). */
+  private async recordImports(outcomes: readonly ImportOutcome[]): Promise<void> {
+    for (const o of outcomes) {
+      if (o.action === 'created' || o.action === 'updated' || o.newPrices > 0) {
+        await this.record(this.prisma, undefined, 'model_imported', o.modelKey, null, {
+          action: o.action,
+          newPrices: o.newPrices,
+        });
+      }
+    }
+  }
+
+  /** Appends one audit row (append-only, AC011) in the caller's transaction. */
+  private async record(
+    tx: Prisma.TransactionClient | PrismaClient,
+    by: RegistryChangeBy | undefined,
+    action: RegistryAction,
+    target: string,
+    before: Prisma.InputJsonValue | null,
+    after: Prisma.InputJsonValue | null,
+  ): Promise<void> {
+    await tx.aiRegistryEvent.create({
+      data: {
+        actorId: by?.actorId ?? null,
+        source: by ? 'api' : 'cli',
+        action,
+        target,
+        ...(before === null ? {} : { before }),
+        ...(after === null ? {} : { after }),
+      },
+    });
+  }
+
+  async setProviderStatus(
+    key: string,
+    status: AiProviderStatus,
+    by?: RegistryChangeBy,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const row = await tx.aiProvider.findUnique({ where: { key }, select: { status: true } });
+      if (!row) throw new RegistryAdminError(`unknown provider ${key}`);
+      await tx.aiProvider.update({ where: { key }, data: { status } });
+      await this.record(tx, by, 'provider_status', key, { status: row.status }, { status });
+    });
   }
 
   async setModelStatus(
     providerKey: string,
     modelKey: string,
     status: AiProviderStatus,
+    by?: RegistryChangeBy,
   ): Promise<void> {
-    const { count } = await this.prisma.aiModel.updateMany({
-      where: { modelKey, provider: { key: providerKey } },
-      data: { status },
+    await this.prisma.$transaction(async (tx) => {
+      const row = await tx.aiModel.findFirst({
+        where: { modelKey, provider: { key: providerKey } },
+        select: { id: true, status: true },
+      });
+      if (!row) throw new RegistryAdminError(`unknown model ${providerKey}/${modelKey}`);
+      await tx.aiModel.update({ where: { id: row.id }, data: { status } });
+      await this.record(
+        tx,
+        by,
+        'model_status',
+        `${providerKey}/${modelKey}`,
+        { status: row.status },
+        { status },
+      );
     });
-    if (count === 0) throw new RegistryAdminError(`unknown model ${providerKey}/${modelKey}`);
   }
 
   /**
@@ -68,17 +135,29 @@ export class RegistryAdminService {
     providerKey: string,
     modelKey: string,
     mode: 'full' | 'basic',
+    by?: RegistryChangeBy,
   ): Promise<void> {
-    const { count } = await this.prisma.aiModel.updateMany({
-      where: {
-        modelKey,
-        provider: { key: providerKey },
-        capabilities: { some: { capability: 'llm' } },
-      },
-      data: { schemaMode: mode },
+    await this.prisma.$transaction(async (tx) => {
+      const row = await tx.aiModel.findFirst({
+        where: {
+          modelKey,
+          provider: { key: providerKey },
+          capabilities: { some: { capability: 'llm' } },
+        },
+        select: { id: true, schemaMode: true },
+      });
+      if (!row)
+        throw new RegistryAdminError(`${providerKey}/${modelKey} is not a registered text model`);
+      await tx.aiModel.update({ where: { id: row.id }, data: { schemaMode: mode } });
+      await this.record(
+        tx,
+        by,
+        'model_schema_mode',
+        `${providerKey}/${modelKey}`,
+        { schemaMode: row.schemaMode },
+        { schemaMode: mode },
+      );
     });
-    if (count === 0)
-      throw new RegistryAdminError(`${providerKey}/${modelKey} is not a registered text model`);
   }
 
   async setMinBilledSeconds(
@@ -98,9 +177,19 @@ export class RegistryAdminService {
     }
     const next: Record<string, unknown> = { ...parsed.data, minBilledSeconds: seconds };
     if (seconds === null) delete next['minBilledSeconds'];
-    await this.prisma.aiModel.update({
-      where: { id: model.id },
-      data: { mediaConstraints: next as Prisma.InputJsonObject },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.aiModel.update({
+        where: { id: model.id },
+        data: { mediaConstraints: next as Prisma.InputJsonObject },
+      });
+      await this.record(
+        tx,
+        undefined,
+        'model_min_billed_seconds',
+        `${providerKey}/${modelKey}`,
+        { minBilledSeconds: parsed.data.minBilledSeconds ?? null },
+        { minBilledSeconds: seconds },
+      );
     });
   }
 
@@ -115,6 +204,7 @@ export class RegistryAdminService {
     modelKey: string,
     /** Route only to zero-data-retention endpoints (M4 decision G9). */
     zeroDataRetention = false,
+    by?: RegistryChangeBy,
   ): Promise<{ enabled: boolean }> {
     const model = await this.prisma.aiModel.findFirst({
       where: { modelKey, provider: { key: providerKey } },
@@ -130,10 +220,26 @@ export class RegistryAdminService {
     if (!model.capabilities.some((c) => c.capability === needed)) {
       throw new RegistryAdminError(`${providerKey}/${modelKey} has no ${needed} capability`);
     }
-    await this.prisma.aiTaskRoute.upsert({
-      where: { task },
-      create: { task, modelId: model.id, zeroDataRetention },
-      update: { modelId: model.id, zeroDataRetention },
+    await this.prisma.$transaction(async (tx) => {
+      const before = await tx.aiTaskRoute.findUnique({
+        where: { task },
+        include: { model: { select: { modelKey: true } } },
+      });
+      await tx.aiTaskRoute.upsert({
+        where: { task },
+        create: { task, modelId: model.id, zeroDataRetention },
+        update: { modelId: model.id, zeroDataRetention },
+      });
+      await this.record(
+        tx,
+        by,
+        'route_set',
+        task,
+        before
+          ? { modelKey: before.model.modelKey, zeroDataRetention: before.zeroDataRetention }
+          : null,
+        { modelKey: `${providerKey}/${modelKey}`, zeroDataRetention },
+      );
     });
     return { enabled: model.status === 'enabled' && model.provider.status === 'enabled' };
   }
@@ -161,21 +267,36 @@ export class RegistryAdminService {
       throw new RegistryAdminError(`invalid USD amount ${JSON.stringify(input.usdPerUnit)}`);
     }
     const now = new Date();
-    const row = await this.prisma.aiModelPrice.create({
-      data: {
-        modelId: model.id,
-        metric: input.metric,
-        unitPrice: unitPrice.toString(),
-        sourceValue: input.usdPerUnit.trim(),
-        minPromptTokens: input.minPromptTokens ?? 0,
-        effectiveFrom: input.effectiveFrom ?? now,
-        source: input.source,
-        sourceUrl: input.sourceUrl,
-        capturedAt: now,
-      },
-      select: { id: true },
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.aiModelPrice.create({
+        data: {
+          modelId: model.id,
+          metric: input.metric,
+          unitPrice: unitPrice.toString(),
+          sourceValue: input.usdPerUnit.trim(),
+          minPromptTokens: input.minPromptTokens ?? 0,
+          effectiveFrom: input.effectiveFrom ?? now,
+          source: input.source,
+          sourceUrl: input.sourceUrl,
+          capturedAt: now,
+        },
+        select: { id: true },
+      });
+      await this.record(
+        tx,
+        undefined,
+        'price_added',
+        `${input.providerKey}/${input.modelKey}`,
+        null,
+        {
+          priceId: row.id,
+          metric: input.metric,
+          usdPerUnit: input.usdPerUnit.trim(),
+          source: input.source,
+        },
+      );
+      return row.id;
     });
-    return row.id;
   }
 
   /**
@@ -209,6 +330,7 @@ export class RegistryAdminService {
         await this.importModel(provider.id, entry.model, options.tier, options.sourceUrl, now),
       );
     }
+    await this.recordImports(outcomes);
     return outcomes;
   }
 
@@ -336,6 +458,7 @@ export class RegistryAdminService {
         ),
       );
     }
+    await this.recordImports(outcomes);
     return outcomes;
   }
 
@@ -444,6 +567,7 @@ export class RegistryAdminService {
           : { modelKey: entry.modelKey, action: 'refused', newPrices: 0, detail: [entry.reason] },
       );
     }
+    await this.recordImports(outcomes);
     return outcomes;
   }
 

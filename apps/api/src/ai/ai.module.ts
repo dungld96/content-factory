@@ -19,6 +19,8 @@ import { API_ENV } from '../config/api-config.module.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
 import { IMAGE_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS, VIDEO_PROVIDERS } from './ai.tokens.js';
 import { RegistryController } from './registry/registry.controller.js';
+import { RegistryAdminService } from './registry/registry-admin.service.js';
+import { RegistrySettingsService } from './registry/registry-settings.service.js';
 import { RegistryService } from './registry/registry.service.js';
 
 /**
@@ -112,6 +114,13 @@ import { RegistryService } from './registry/registry.service.js';
         }),
     },
     RegistryService,
+    {
+      // The same writes as the operator CLI (P1 O4); constructed without Nest by the CLI.
+      provide: RegistryAdminService,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => new RegistryAdminService(prisma.client),
+    },
+    RegistrySettingsService,
   ],
   exports: [LlmService, ModelCatalog, ImageService, VideoService, TtsService, RegistryService],
 })

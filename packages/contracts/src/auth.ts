@@ -42,7 +42,12 @@ export type Membership = z.infer<typeof membershipSchema>;
 
 /** `GET /auth/me`. */
 export const meResponseSchema = z
-  .object({ user: authUserSchema, memberships: z.array(membershipSchema) })
+  .object({
+    user: authUserSchema,
+    /** A platform operator (P1 design O1): may change AI providers, models and routes. */
+    isOperator: z.boolean(),
+    memberships: z.array(membershipSchema),
+  })
   .meta({ id: 'MeResponse' });
 export type MeResponse = z.infer<typeof meResponseSchema>;
 
