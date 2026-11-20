@@ -161,20 +161,23 @@ describe('POST /production-runs/:runId/resume', () => {
     });
   });
 
-  it('skips a possibly charged submission unless a double charge is accepted', async () => {
-    const w = await world();
-    const failed = await failedScriptJob(w, 'SUBMIT_OUTCOME_UNKNOWN');
-    const runId = failed.productionRunId;
-    const refused = await as('editor', 'POST', `/production-runs/${runId}/resume`, { body: {} });
-    expect([refused.status, codeOf(refused)]).toEqual([409, 'NOTHING_TO_RESUME']);
-    expect((refused.json as { error: { current: unknown } }).error.current).toEqual({
-      skipped: [{ jobId: failed.job.id, sceneId: null, reason: 'outcome_unknown' }],
-    });
-    const accepted = await as('editor', 'POST', `/production-runs/${runId}/resume`, {
-      body: { acceptPossibleDoubleCharge: true },
-    });
-    expect(accepted.status).toBe(202);
-  });
+  it.each(['SUBMIT_OUTCOME_UNKNOWN', 'CALL_OUTCOME_UNKNOWN'])(
+    'skips a possibly charged call (%s) unless a double charge is accepted',
+    async (code) => {
+      const w = await world();
+      const failed = await failedScriptJob(w, code);
+      const runId = failed.productionRunId;
+      const refused = await as('editor', 'POST', `/production-runs/${runId}/resume`, { body: {} });
+      expect([refused.status, codeOf(refused)]).toEqual([409, 'NOTHING_TO_RESUME']);
+      expect((refused.json as { error: { current: unknown } }).error.current).toEqual({
+        skipped: [{ jobId: failed.job.id, sceneId: null, reason: 'outcome_unknown' }],
+      });
+      const accepted = await as('editor', 'POST', `/production-runs/${runId}/resume`, {
+        body: { acceptPossibleDoubleCharge: true },
+      });
+      expect(accepted.status).toBe(202);
+    },
+  );
 
   it('refuses a run without failures', async () => {
     const w = await world();

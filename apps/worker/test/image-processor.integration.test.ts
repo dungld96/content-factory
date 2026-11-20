@@ -187,6 +187,22 @@ describe('image jobs', () => {
     expect(await contentStatus()).toBe('storyboard_review');
   });
 
+  it('retries an image call that timed out: image billing is all-or-nothing (P3 W6)', async () => {
+    mock.script({
+      kind: 'error',
+      error: new ProviderError(ProviderErrorCode.TIMEOUT, 'timed out', {
+        outcome: ProviderErrorOutcome.UNKNOWN,
+      }),
+    });
+    const [jobId] = await createImageJobs(prisma, world, iw, [
+      await imageInput(prisma, iw, iw.sceneIds[0] ?? ''),
+    ]);
+    expect(await build().process(jobId ?? '')).toMatchObject({
+      type: 'retry',
+      errorCode: 'TIMEOUT',
+    });
+  });
+
   it('never retries a content-policy block', async () => {
     mock.script({
       kind: 'error',

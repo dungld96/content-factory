@@ -1,5 +1,6 @@
 import {
   isProviderError,
+  ProviderErrorOutcome,
   type GenerationContext,
   type ImageReference,
   type LlmMessage,
@@ -136,6 +137,16 @@ class PermanentJobError extends Error {
     super(message);
   }
 }
+/**
+ * Job kinds whose synchronous provider call ends the job when its outcome is unknown (P3 W5):
+ * OpenRouter does not document whether such text or speech calls are billed.
+ */
+const HOLD_ON_UNKNOWN: ReadonlySet<string> = new Set([
+  'script_generation',
+  'storyboard_generation',
+  'tts_generation',
+]);
+
 /** The provider returned bytes that are not a valid image of the declared type (retryable). */
 class ImageOutputError extends Error {}
 
@@ -765,6 +776,16 @@ export class GenerationProcessor {
     }
     if (isProviderError(error)) {
       await this.circuitFailure(job, error.code);
+      // P3 W5: a text or TTS call that may have reached the provider (timeout, lost connection
+      // after sending) may have been charged; it is never sent again without the user's consent.
+      // Images retry: their billing is documented as all-or-nothing (W6).
+      if (error.outcome === ProviderErrorOutcome.UNKNOWN && HOLD_ON_UNKNOWN.has(job.kind)) {
+        return this.failFinal(
+          job,
+          'CALL_OUTCOME_UNKNOWN',
+          'the provider call could not be confirmed; resuming may be charged twice',
+        );
+      }
       if (error.retryable && job.attempt < job.maxAttempts) {
         return this.retry(job, error.code, error.retryAfterMs);
       }

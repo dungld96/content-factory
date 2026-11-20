@@ -41,6 +41,12 @@ workflow gaps it found (`docs/design/M8.5-design-review-package.md`).
 - **Video providers keep prompts and keyframes** (no zero-data-retention option for video).
 - **A lost video submission may be charged** (`SUBMIT_OUTCOME_UNKNOWN`): it is never resubmitted
   automatically; its reserved amount stays counted until an owner resolves it.
+- **An unconfirmed script, storyboard or voice-over call may be charged** (`CALL_OUTCOME_UNKNOWN`,
+  a timeout or lost connection after sending): the job ends without retrying, its reservation is
+  held, and Resume asks before trying again (P3). Image calls are retried: OpenRouter documents
+  that a disconnected image request is not billed.
+- A worker that stops in the middle of a text or speech call is still retried (`WORKER_LOST`);
+  the interrupted call is recorded `outcome_unknown` later and may have been charged.
 
 ## Cost
 

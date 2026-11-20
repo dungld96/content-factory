@@ -265,6 +265,7 @@ Update `title`, `channelId` (or `null`), `targetPlatform`, `targetDurationSecond
 |---|---|
 | `GET /production-runs/:runId` | Run with its jobs and cost |
 | `POST /production-runs/:runId/cancel` | Stops queued work; a running call finishes and its result is discarded. A submitted video is recorded `outcome_unknown` (the provider may still charge) |
+| `GET /content/:contentId/jobs` | The item's jobs, newest first (`queuedAt`, then id), without events; filters `kind`, `status`; paged (`limit`, `cursor`). Viewer |
 | `GET /generation-jobs/:jobId` | Status, attempts, events, sanitized error, cost (`reportedUsd`, `estimatedUsd`, `unknownCalls`) |
 | `POST /generation-jobs/:jobId/recheck` | Immediate, free status read of a running video job |
 
@@ -278,8 +279,8 @@ scope (text: the same stage of the item; scene jobs: those scenes, with the orig
 resolution, seed and audio options; render: the same captions and music) through the normal
 endpoint's planning, budget checks and reuse, in **one new run** whose `resumedFromRunId` names
 the old one. Skipped: `superseded` (a later job of the same stage and scope succeeded),
-`in_progress` (one is queued or running), `outcome_unknown` (ended `SUBMIT_OUTCOME_UNKNOWN`;
-resumed only with `acceptPossibleDoubleCharge: true`). `202 { resumedFromRunId, run, skipped }`;
+`in_progress` (one is queued or running), `outcome_unknown` (ended `SUBMIT_OUTCOME_UNKNOWN` or
+`CALL_OUTCOME_UNKNOWN`; resumed only with `acceptPossibleDoubleCharge: true`). `202 { resumedFromRunId, run, skipped }`;
 `409 NOTHING_TO_RESUME` (skips in `error.current`) and every error of the underlying request
 (`402`/`409` budget, `409 ESTIMATE_CHANGED` for clips without `confirmedEstimateUsd`, ...).
 
@@ -414,10 +415,16 @@ VOICE_PROFILE_REQUIRED`, `409 CLIP_INVALID`, `409 VOICEOVER_INVALID`, `409 SCENE
 MODEL_LIMITS`, `422 REFERENCE_FILE_MISSING` (keyframe file), `503 STORAGE_NOT_CONFIGURED`.
 
 Job error codes shown to the user (video): `SUBMIT_OUTCOME_UNKNOWN` (never resubmitted
-automatically; regenerating may be charged twice), `PROVIDER_FAILED`/`_CANCELLED`/`_EXPIRED`,
+automatically; regenerating may be charged twice; the reservation is held), `PROVIDER_FAILED`/`_CANCELLED`/`_EXPIRED`,
 `PROVIDER_TIMEOUT` (followed for 6 h), `OUTPUT_INVALID` (FFprobe), `OUTPUT_EXPIRED`. Canceling a
 run with a submitted video records its invocation as `outcome_unknown` (`CANCELED_BY_USER`): the
 provider has no cancel endpoint and may still charge.
+
+Text and voice-over jobs end with `CALL_OUTCOME_UNKNOWN` when a provider call timed out or lost
+its connection after sending: it is not retried automatically, its reservation is held, and a
+resume needs `acceptPossibleDoubleCharge`. Image calls are retried (all-or-nothing billing). Every
+job code is listed in `JOB_ERROR_CODES` (`packages/content-domain/src/job-errors.ts`); job DTOs
+also carry `storyboardSceneId` (scene media jobs, else `null`).
 
 Content status: as for images (`generating_assets` while any scene media job is active, then
 `asset_review`).

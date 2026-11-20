@@ -133,6 +133,11 @@ Do not build all milestones in one task. Implement one milestone at a time and w
 The MVP is complete: M0–M8.5 are done and approved (2026-11-20). Details per milestone:
 `docs/IMPLEMENTATION_PLAN.md` §2 and the design packages in `docs/design/`.
 
+Post-MVP: audit `docs/post-mvp/POST_MVP_AUDIT.md` (owner decisions recorded there). **P3 —
+Worker monitoring & smart recovery:** design package revision 1 approved
+(`docs/design/P3-design-review-package.md`; W1–W6, 2026-11-20); slices P3a–P3c implemented,
+integration/E2E verification pending (package §10).
+
 Open items:
 - Off-server backups wait for the backup destination (rclone remote).
 - The paid image benchmark (G2) waits for an OpenRouter API key.

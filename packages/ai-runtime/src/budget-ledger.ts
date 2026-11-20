@@ -2,6 +2,7 @@ import { UsdAmount } from '@acf/ai-core';
 import {
   budgetMonth,
   findBudgetBreach,
+  OUTCOME_UNKNOWN_CODES,
   type BudgetBreach,
   type BudgetLimits,
   type BudgetUsage,
@@ -198,4 +199,4 @@ export function reservationOutcomeFor(errorCode: string | null): ReservationOutc
 }
 
 /** Job endings whose provider charge is unknown: the reservation keeps counting. */
-const HELD_ERROR_CODES: ReadonlySet<string> = new Set(['SUBMIT_OUTCOME_UNKNOWN']);
+const HELD_ERROR_CODES: ReadonlySet<string> = OUTCOME_UNKNOWN_CODES;

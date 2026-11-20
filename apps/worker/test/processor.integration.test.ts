@@ -392,7 +392,7 @@ describe('errors and retries', () => {
     for (let i = 0; i < 3; i += 1)
       mock.enqueue({
         kind: 'error',
-        error: providerError('TIMEOUT', ProviderErrorOutcome.UNKNOWN),
+        error: providerError('PROVIDER_UNAVAILABLE', ProviderErrorOutcome.REJECTED),
       });
     const outcomes = [];
     for (let i = 0; i < 4; i += 1) outcomes.push((await processor.process(jobId)).type);
@@ -400,14 +400,58 @@ describe('errors and retries', () => {
     expect(await jobRow(jobId)).toMatchObject({
       status: 'failed',
       attempt: 3,
-      errorCode: 'TIMEOUT',
+      errorCode: 'PROVIDER_UNAVAILABLE',
     });
-    // A timed-out call may have been charged: each attempt is in the ledger as outcome_unknown.
-    expect(
-      await prisma.aiInvocation.count({
-        where: { generationJobId: jobId, status: 'outcome_unknown' },
-      }),
-    ).toBe(3);
+    expect(mock.calls).toHaveLength(3);
+  });
+
+  it.each(['TIMEOUT', 'NETWORK'] as const)(
+    'never sends a call again after %s with an unknown outcome; holds the reservation (P3 W5)',
+    async (code) => {
+      const jobId = await createJob(prisma, world, 'script_generation', scriptInput(world));
+      await prisma.budgetReservation.create({
+        data: {
+          projectId: world.projectId,
+          contentItemId: world.contentItemId,
+          jobId,
+          amountUsd: '0.02',
+          kind: 'estimate',
+        },
+      });
+      mock.enqueue({ kind: 'error', error: providerError(code, ProviderErrorOutcome.UNKNOWN) });
+      expect(await processor.process(jobId)).toEqual({
+        type: 'failed',
+        errorCode: 'CALL_OUTCOME_UNKNOWN',
+      });
+      expect(mock.calls).toHaveLength(1);
+      expect(await jobRow(jobId)).toMatchObject({
+        status: 'failed',
+        attempt: 1,
+        errorCode: 'CALL_OUTCOME_UNKNOWN',
+      });
+      // The call may have been charged: it is in the ledger as outcome_unknown, and the
+      // reservation keeps counting until an owner resolves it.
+      expect(
+        await prisma.aiInvocation.count({
+          where: { generationJobId: jobId, status: 'outcome_unknown' },
+        }),
+      ).toBe(1);
+      expect(await prisma.budgetReservation.findUniqueOrThrow({ where: { jobId } })).toMatchObject({
+        status: 'held',
+        resolvedAt: null,
+      });
+      expect(deadLetters).toHaveLength(1);
+      expect(await contentStatus()).not.toBe('scripting');
+    },
+  );
+
+  it('still retries a call that was rejected before acceptance (known outcome)', async () => {
+    const jobId = await createJob(prisma, world, 'script_generation', scriptInput(world));
+    mock.enqueue({
+      kind: 'error',
+      error: providerError('TIMEOUT', ProviderErrorOutcome.NOT_SENT),
+    });
+    expect((await processor.process(jobId)).type).toBe('retry');
   });
 
   it('fails with NO_ELIGIBLE_MODEL when the model was disabled after the job was created', async () => {

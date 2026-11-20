@@ -61,6 +61,16 @@ export type ProviderCodesMatch = [Missing, Extra] extends [never, never] ? true 
 // Fails to compile if `ProviderErrorCode` and `PROVIDER_CODES` ever differ.
 export const PROVIDER_CODES_MATCH: ProviderCodesMatch = true;
 
+/**
+ * Job endings after which the provider may still charge for a call it may have received
+ * (video submissions; text and speech calls, P3 W5): the reservation is held for an owner to
+ * resolve, and a resume needs the user's explicit consent to a possible double charge.
+ */
+export const OUTCOME_UNKNOWN_CODES: ReadonlySet<string> = new Set<JobErrorCode>([
+  'SUBMIT_OUTCOME_UNKNOWN',
+  'CALL_OUTCOME_UNKNOWN',
+]);
+
 const CODES: ReadonlySet<string> = new Set(JOB_ERROR_CODES);
 
 export function isJobErrorCode(code: string): code is JobErrorCode {

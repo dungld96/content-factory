@@ -381,4 +381,30 @@ describe('TTS jobs', () => {
       errorCode: 'OUTPUT_INVALID',
     });
   });
+
+  it('ends the job without a second call when the speech call outcome is unknown (P3 W5)', async () => {
+    const mock = new MockTtsProvider({
+      providerKey: 'mock',
+      steps: [
+        {
+          kind: 'error',
+          error: new ProviderError(ProviderErrorCode.TIMEOUT, 'timed out', {
+            outcome: ProviderErrorOutcome.UNKNOWN,
+          }),
+        },
+      ],
+    });
+    const sceneId = iw.sceneIds[0] ?? '';
+    const [jobId] = await createMediaJobs(prisma, world, 'tts_generation', mw.ttsModelId, [
+      await ttsInput(prisma, iw, mw, sceneId),
+    ]);
+    expect(await build({ tts: mock }).process(jobId ?? '')).toEqual({
+      type: 'failed',
+      errorCode: 'CALL_OUTCOME_UNKNOWN',
+    });
+    expect(mock.calls).toHaveLength(1);
+    const row = await job(jobId ?? '');
+    expect(row).toMatchObject({ status: 'failed', attempt: 1, errorCode: 'CALL_OUTCOME_UNKNOWN' });
+    expect(row.invocations.map((i) => i.status)).toEqual(['outcome_unknown']);
+  });
 });

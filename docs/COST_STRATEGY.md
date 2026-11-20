@@ -72,7 +72,10 @@ Per project (ADR-0019), owners set them on the **Costs** page:
 
 - Retries only for transient errors, with backoff and jitter; at most 3 attempts.
 - Failed attempts that were charged are counted as retry cost.
-- A lost video submission is never resubmitted automatically: it could be charged twice.
+- A paid call whose outcome is unknown is never sent again automatically: video submissions
+  (`SUBMIT_OUTCOME_UNKNOWN`) and text or speech calls (`CALL_OUTCOME_UNKNOWN`). The reservation is
+  held until an owner records it as charged or not; Resume asks before a possible double charge.
+  Image calls are retried (all-or-nothing billing).
 
 ## 7. Testing paid models
 

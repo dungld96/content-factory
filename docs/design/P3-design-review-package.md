@@ -1,6 +1,7 @@
 # P3 Design Review Package — Worker Monitoring & Smart Recovery
 
-- Status: **Revision 1, proposed** (awaiting owner review)
+- Status: **Revision 1, approved by the owner (2026-11-20)**: W1–W6 as proposed. Slices
+  P3a–P3c implemented (§10); integration and E2E verification pending (§10.2).
 - Date: 2026-11-20
 - Baseline: MVP complete (M0–M8.5). Input: `docs/post-mvp/POST_MVP_AUDIT.md` §A3, §B3, §C3;
   owner decisions of 2026-11-20 (hold-and-ask for unknown outcomes; P3 first).
@@ -186,3 +187,26 @@ P3c is last because it changes runtime behaviour; P3a and P3b only expose existi
   left as is and listed in `KNOWN_LIMITATIONS.md`.
 - **Resume of mixed runs:** a run holds one batch kind today; if that changes, the dialog asks
   per request in sequence (bounded to three rounds).
+
+## 10. Deviations and results found during implementation
+
+### 10.1 Deviations
+
+| Item                  | Planned                                      | Done                                                                                             | Why                                                                          |
+| --------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| W3 code list          | `JOB_ERROR_CODES` in `@acf/contracts`        | In `@acf/content-domain` (browser-safe `schemas` entry), re-exported by `@acf/contracts`         | The worker does not depend on `@acf/contracts`; this needs no new dependency |
+| W3 video codes        | Typed pass-through                           | `videoFailureCode()` maps `failed`/`cancelled`/`expired` explicitly (was string interpolation)   | Lets the typecheck enforce the list                                          |
+| W3 `CANCELED_BY_USER` | In the "Possibly charged" group              | Not a job code (it is recorded on the invocation); not listed                                    | The list holds job codes only                                                |
+| W4 Activity tab       | New "Activity" tab                           | A **Jobs** section at the top of the existing Activity tab (it already held the version history) | One place for the item's history                                             |
+| W5 shared rule        | Two lists (`HELD_ERROR_CODES`, resume check) | One set, `OUTCOME_UNKNOWN_CODES` (`job-errors.ts`), used by the budget ledger and resume         | They cannot drift apart                                                      |
+| Tests                 | Existing "bounded retries" test unchanged    | Now uses `PROVIDER_UNAVAILABLE`: a timeout with unknown outcome no longer retries (W5)           | Intended behaviour change                                                    |
+
+### 10.2 Verification
+
+| Check                                                            | Result                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm format:check` | Pass                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Unit tests (`pnpm test`)                                         | Pass, incl. new `p3-helpers.test.ts` (catalogue covers every code; resume dialog steps), `job-errors.test.ts`, `budget-ledger.test.ts`                                                                                                                                                                                                                                                                     |
+| Integration tests written                                        | `processor.integration.test.ts` (LLM timeout/network → `CALL_OUTCOME_UNKNOWN`, one call, reservation held; known-outcome timeout still retries), `media-processor.integration.test.ts` (TTS), `image-processor.integration.test.ts` (image timeout retries), `operations.integration.test.ts` (resume skips both codes), `generation.integration.test.ts` (`GET /content/:id/jobs`), permission matrix row |
+| Integration and E2E **run**                                      | **Not run in the implementation session**: the worker and API suites need S3 storage (SeaweedFS), which was not available there. Run `pnpm test:integration` and `pnpm test:e2e` with `pnpm infra:up` before approval                                                                                                                                                                                      |
+| E2E specs (clip resume, cancel, jobs expand)                     | **Not written yet**; follow-up once the suite can run                                                                                                                                                                                                                                                                                                                                                      |

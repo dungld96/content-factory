@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 
 import {
   imageJobInputSchema,
+  OUTCOME_UNKNOWN_CODES,
   renderJobInputSchema,
   renderManifestSchema,
   renderSettingsSchema,
@@ -24,9 +25,6 @@ import { VideosService } from './videos.service.js';
 import { VoiceoversService } from './voiceovers.service.js';
 
 type Skip = ResumeRunResponseDto['skipped'][number];
-
-/** Job endings after which the provider may still charge for the earlier submission. */
-const OUTCOME_UNKNOWN = 'SUBMIT_OUTCOME_UNKNOWN';
 
 /**
  * Resume of a production run (M7 design §6, B6): each failed or canceled job's stage is requested
@@ -79,7 +77,11 @@ export class ResumeService {
           sceneId,
           reason: later.status === 'succeeded' ? 'superseded' : 'in_progress',
         });
-      } else if (job.errorCode === OUTCOME_UNKNOWN && !request.acceptPossibleDoubleCharge) {
+      } else if (
+        job.errorCode !== null &&
+        OUTCOME_UNKNOWN_CODES.has(job.errorCode) &&
+        !request.acceptPossibleDoubleCharge
+      ) {
         skipped.push({ jobId: job.id, sceneId, reason: 'outcome_unknown' });
       } else {
         toResume.push(job);
