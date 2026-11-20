@@ -8,7 +8,6 @@ import {
 import {
   ImageConstraintError,
   MediaConstraintError,
-  CIRCUIT_POLICY,
   recheckJobBudget,
   RoutingError,
   type CircuitBreaker,
@@ -779,7 +778,7 @@ export class GenerationProcessor {
 
   /**
    * Before an attempt starts: an open circuit defers the job (no attempt used). A job that has
-   * waited longer than {@link CIRCUIT_POLICY.maxWaitMs} since it was queued fails with
+   * waited longer than the circuit policy's `maxWaitMs` (2 h) since it was queued fails with
    * `PROVIDER_UNAVAILABLE`.
    */
   private async waitForCircuit(job: GenerationJob): Promise<ProcessOutcome | null> {
@@ -787,7 +786,7 @@ export class GenerationProcessor {
     if (!providerId || !this.deps.circuits) return null;
     const admission = await this.deps.circuits.admit(providerId, job.id);
     if (admission.admitted) return null;
-    if (Date.now() - job.queuedAt.getTime() > CIRCUIT_POLICY.maxWaitMs) {
+    if (Date.now() - job.queuedAt.getTime() > this.deps.circuits.policy.maxWaitMs) {
       return this.failFinal(
         job,
         'PROVIDER_UNAVAILABLE',

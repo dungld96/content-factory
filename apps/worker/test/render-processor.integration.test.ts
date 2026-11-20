@@ -293,6 +293,43 @@ describe('render jobs', () => {
     ).toBe('quality_review');
   }, 240_000);
 
+  it('drill: a render whose worker died mid-attempt is redone once and stored once', async () => {
+    const { renderId, jobId } = await createRender(await manifestWith({}));
+    // The first worker started the render, reached the first stage, and died.
+    await prisma.generationJob.update({
+      where: { id: jobId },
+      data: { status: 'running', attempt: 1, startedAt: new Date() },
+    });
+    await prisma.jobEvent.create({
+      data: {
+        projectId: world.projectId,
+        jobId,
+        fromStatus: 'running',
+        toStatus: 'running',
+        attempt: 1,
+        detail: { type: 'render_stage', stage: 'normalise' },
+      },
+    });
+
+    // BullMQ redelivers the stalled job (or the reconciler requeues it): a new attempt.
+    expect(await build().process(jobId)).toEqual({ type: 'succeeded', versionId: renderId });
+    const job = await prisma.generationJob.findUniqueOrThrow({
+      where: { id: jobId },
+      include: { events: { orderBy: { createdAt: 'asc' } } },
+    });
+    expect([job.status, job.attempt]).toEqual(['succeeded', 2]);
+    expect(
+      job.events.some((e) => (e.detail as { type: string }).type === 'stalled_recovered'),
+    ).toBe(true);
+    // One set of outputs, all referenced by the render.
+    const outputs = await prisma.asset.findMany({ where: { generationJobId: jobId } });
+    expect(outputs.map((a) => a.assetType).sort()).toEqual(['image', 'render', 'subtitle']);
+    const render = await prisma.render.findUniqueOrThrow({ where: { id: renderId } });
+    expect(new Set([render.videoAssetId, render.subtitleAssetId, render.thumbnailAssetId])).toEqual(
+      new Set(outputs.map((a) => a.id)),
+    );
+  }, 240_000);
+
   it('fails without retry when an input file is missing, and restores the content status', async () => {
     const { renderId, jobId } = await createRender(await manifestWith({ missingClip: true }));
     expect(await build().process(jobId)).toEqual({

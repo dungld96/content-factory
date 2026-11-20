@@ -27,6 +27,7 @@
     "test": "pnpm build:packages && vitest run --project 'unit:*'",
     "test:watch": "vitest --project 'unit:*'",
     "test:integration": "pnpm build:packages && vitest run --project 'integration:*'",
+    "test:drills": "pnpm build:packages && vitest run --project 'integration:*' -t drill",
     "test:e2e": "pnpm --filter @acf/web test:e2e",
     "test:coverage": "pnpm build:packages && vitest run --project 'unit:*' --coverage",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",

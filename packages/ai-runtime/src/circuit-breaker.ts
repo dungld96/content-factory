@@ -55,16 +55,22 @@ export interface CircuitBreakerOptions {
   /** Called after each committed transition (the worker logs `circuit_opened` / `circuit_closed`). */
   readonly onTransition?: (t: CircuitTransition) => void;
   readonly now?: () => Date;
+  /** Overrides of {@link CIRCUIT_POLICY} (failure drills and tests). */
+  readonly policy?: Partial<CircuitPolicy>;
 }
+
+export type CircuitPolicy = { readonly [K in keyof typeof CIRCUIT_POLICY]: number };
 
 export class CircuitBreaker {
   private readonly now: () => Date;
+  readonly policy: CircuitPolicy;
 
   constructor(
     private readonly prisma: PrismaClient,
     private readonly options: CircuitBreakerOptions = {},
   ) {
     this.now = options.now ?? (() => new Date());
+    this.policy = { ...CIRCUIT_POLICY, ...options.policy };
   }
 
   /** May this job call the provider now? Half-open admits only the trial job. */
@@ -86,14 +92,14 @@ export class CircuitBreaker {
       // half-open
       if (c.trialJobId === jobId) return { admitted: true } as const;
       const trialAge = now.getTime() - (c.trialStartedAt?.getTime() ?? 0);
-      if (trialAge >= CIRCUIT_POLICY.trialTimeoutMs) {
+      if (trialAge >= this.policy.trialTimeoutMs) {
         await this.move(tx, c, 'half_open', 'trial_expired', null, jobId, done, {
           trialJobId: jobId,
           trialStartedAt: now,
         });
         return { admitted: true } as const;
       }
-      return { admitted: false, retryInMs: CIRCUIT_POLICY.trialWaitMs } as const;
+      return { admitted: false, retryInMs: this.policy.trialWaitMs } as const;
     });
     this.emit(done);
     return result;
@@ -105,7 +111,7 @@ export class CircuitBreaker {
     await this.prisma.$transaction(async (tx) => {
       const c = await this.lock(tx, providerId);
       if (c.state === 'half_open' && c.trialJobId === jobId) {
-        await this.move(tx, c, 'closed', 'trial_succeeded', null, jobId, done, CLOSED);
+        await this.move(tx, c, 'closed', 'trial_succeeded', null, jobId, done, this.closed());
       } else if (c.state === 'closed' && c.consecutiveFailures > 0) {
         await tx.providerCircuit.update({
           where: { providerId },
@@ -129,7 +135,7 @@ export class CircuitBreaker {
       const now = this.now();
       if (c.state === 'half_open') {
         if (c.trialJobId !== jobId) return;
-        const openForMs = Math.min(c.openForMs * 2, CIRCUIT_POLICY.maxOpenForMs);
+        const openForMs = Math.min(c.openForMs * 2, this.policy.maxOpenForMs);
         await this.move(tx, c, 'open', 'trial_failed', errorCode, jobId, done, {
           openedAt: now,
           retryAt: new Date(now.getTime() + openForMs),
@@ -144,14 +150,14 @@ export class CircuitBreaker {
       if (c.state === 'open') return;
       const recent =
         c.lastFailureAt !== null &&
-        now.getTime() - c.lastFailureAt.getTime() <= CIRCUIT_POLICY.failureWindowMs;
+        now.getTime() - c.lastFailureAt.getTime() <= this.policy.failureWindowMs;
       const failures = (recent ? c.consecutiveFailures : 0) + 1;
-      if (failures >= CIRCUIT_POLICY.failureThreshold) {
+      if (failures >= this.policy.failureThreshold) {
         await this.move(tx, c, 'open', 'failures', errorCode, jobId, done, {
           consecutiveFailures: failures,
           openedAt: now,
-          retryAt: new Date(now.getTime() + CIRCUIT_POLICY.openForMs),
-          openForMs: CIRCUIT_POLICY.openForMs,
+          retryAt: new Date(now.getTime() + this.policy.openForMs),
+          openForMs: this.policy.openForMs,
           lastErrorCode: errorCode,
           lastFailureAt: now,
         });
@@ -178,11 +184,11 @@ export class CircuitBreaker {
       const now = this.now();
       const data =
         state === 'closed'
-          ? CLOSED
+          ? this.closed()
           : {
               openedAt: now,
-              retryAt: new Date(now.getTime() + CIRCUIT_POLICY.openForMs),
-              openForMs: CIRCUIT_POLICY.openForMs,
+              retryAt: new Date(now.getTime() + this.policy.openForMs),
+              openForMs: this.policy.openForMs,
               trialJobId: null,
               trialStartedAt: null,
             };
@@ -236,16 +242,19 @@ export class CircuitBreaker {
     return row;
   }
 
+  /** Fields of a freshly closed circuit. */
+  private closed() {
+    return {
+      consecutiveFailures: 0,
+      openedAt: null,
+      retryAt: null,
+      openForMs: this.policy.openForMs,
+      trialJobId: null,
+      trialStartedAt: null,
+    };
+  }
+
   private emit(done: readonly CircuitTransition[]): void {
     for (const t of done) this.options.onTransition?.(t);
   }
 }
-
-const CLOSED = {
-  consecutiveFailures: 0,
-  openedAt: null,
-  retryAt: null,
-  openForMs: CIRCUIT_POLICY.openForMs,
-  trialJobId: null,
-  trialStartedAt: null,
-} as const;
