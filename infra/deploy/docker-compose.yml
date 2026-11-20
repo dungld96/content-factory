@@ -48,7 +48,13 @@ services:
   seaweedfs:
     image: chrislusf/seaweedfs:4.54
     restart: unless-stopped
-    entrypoint: ['/bin/sh', '/opt/acf/start.sh']
+    # Strips Windows line endings first: a CRLF checkout of start.sh would not run in /bin/sh.
+    entrypoint:
+      [
+        '/bin/sh',
+        '-c',
+        "tr -d '\\r' < /opt/acf/start.sh > /tmp/start.sh && exec /bin/sh /tmp/start.sh",
+      ]
     environment:
       STORAGE_ADMIN_ACCESS_KEY_ID: ${STORAGE_ADMIN_ACCESS_KEY_ID:?run ./generate-env.sh first}
       STORAGE_ADMIN_SECRET_ACCESS_KEY: ${STORAGE_ADMIN_SECRET_ACCESS_KEY:?}
