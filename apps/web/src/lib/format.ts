@@ -63,3 +63,13 @@ export function formatSeconds(ms: number): string {
 export function jobErrorText(code: string): string {
   return jobError(code).text;
 }
+
+/** Stage names of generation job kinds (Operations, Activity). */
+export const JOB_KIND_LABEL: Readonly<Record<string, string>> = {
+  script_generation: 'Script',
+  storyboard_generation: 'Storyboard',
+  image_generation: 'Images',
+  video_generation: 'Clip',
+  tts_generation: 'Voice-over',
+  render: 'Render',
+};

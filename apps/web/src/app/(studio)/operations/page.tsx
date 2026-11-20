@@ -9,21 +9,13 @@ import { LocalTime } from '@/components/local-time';
 import { ResumeRunButton } from '@/components/resume-run';
 import { Pill } from '@/components/status-pill';
 import { apiGet } from '@/lib/api-server';
+import { JOB_KIND_LABEL } from '@/lib/format';
 import { formatUsd } from '@/lib/money';
 
 import { ReservationActions } from './reservation-actions';
 
 export const metadata: Metadata = { title: 'Operations · Content Studio' };
 export const dynamic = 'force-dynamic';
-
-const KIND_LABEL: Readonly<Record<string, string>> = {
-  script_generation: 'Script',
-  storyboard_generation: 'Storyboard',
-  image_generation: 'Images',
-  video_generation: 'Clip',
-  tts_generation: 'Voice-over',
-  render: 'Render',
-};
 
 const CIRCUIT_TONE = { closed: 'green', half_open: 'amber', open: 'red' } as const;
 const CIRCUIT_LABEL = { closed: 'Closed', half_open: 'Trying again', open: 'Open' } as const;
@@ -148,7 +140,7 @@ export default async function OperationsPage() {
                       <br />
                       <span className="muted small-text">{j.projectName}</span>
                     </td>
-                    <td>{KIND_LABEL[j.kind] ?? j.kind}</td>
+                    <td>{JOB_KIND_LABEL[j.kind] ?? j.kind}</td>
                     <td>
                       {j.errorCode ? (
                         <JobErrorLine code={j.errorCode} message={j.errorMessage} />
@@ -182,7 +174,7 @@ export default async function OperationsPage() {
           <ul className="plain-list" aria-label="Held reservations">
             {s.heldReservations.map((r) => (
               <li key={r.id}>
-                <b>{formatUsd(r.amountUsd)}</b> · {KIND_LABEL[r.jobKind] ?? r.jobKind} of{' '}
+                <b>{formatUsd(r.amountUsd)}</b> · {JOB_KIND_LABEL[r.jobKind] ?? r.jobKind} of{' '}
                 <Link href={`/content/${r.contentItemId}`}>{r.contentTitle}</Link> ({r.projectName})
                 {r.jobErrorCode ? ` · ${r.jobErrorCode}` : ''} · <LocalTime iso={r.createdAt} />{' '}
                 {r.canResolve ? (

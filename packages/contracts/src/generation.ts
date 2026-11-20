@@ -84,6 +84,8 @@ export const generationJobSchema = z
     contentItemId: z.uuid(),
     productionRunId: z.uuid(),
     kind: generationJobKindSchema,
+    /** The storyboard scene of a scene media job (images, clips, voice-overs); null otherwise. */
+    storyboardSceneId: z.uuid().nullable(),
     status: generationJobStatusSchema,
     attempt: z.number().int(),
     maxAttempts: z.number().int(),
@@ -207,3 +209,10 @@ export const sceneIdParamsSchema = z.strictObject({ sceneId: z.uuid() });
 export const runIdParamsSchema = z.strictObject({ runId: z.uuid() });
 export const jobIdParamsSchema = z.strictObject({ jobId: z.uuid() });
 export const listArtifactVersionsQuerySchema = paginationQuerySchema;
+
+/** `GET /content/:contentId/jobs` (P3 W4): the item's jobs, newest first. */
+export const listContentJobsQuerySchema = paginationQuerySchema.extend({
+  kind: generationJobKindSchema.optional(),
+  status: generationJobStatusSchema.optional(),
+});
+export type ListContentJobsQuery = z.output<typeof listContentJobsQuerySchema>;

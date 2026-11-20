@@ -42,6 +42,7 @@ import { RenderPanel } from './render-panel';
 import { SceneClipsPanel } from './scene-clips';
 import { ResyncBriefButton, SceneImagesPanel } from './scene-images';
 import { SceneVoiceoversPanel } from './scene-voiceovers';
+import { JobActivity } from './job-activity';
 import { WorkspaceTabs } from './workspace-tabs';
 
 export const metadata: Metadata = { title: 'Content · Content Studio' };
@@ -775,9 +776,14 @@ export default async function ContentPage({
     { kind: 'clip', scenes: videoData?.scenes ?? [] },
     { kind: 'voice-over', scenes: voiceData?.scenes ?? [] },
   ]);
+  const sceneNumbers: Record<string, number> = Object.fromEntries(
+    (imageData?.scenes ?? []).map((s) => [s.sceneId, s.sceneNumber]),
+  );
   const activityPanel = (
     <section className="card work-card">
       <h2>Activity & version history</h2>
+      <JobActivity contentId={content.id} sceneNumbers={sceneNumbers} canEdit={canEdit} />
+      <h3 style={{ marginTop: 24 }}>Version history</h3>
       {events.length === 0 ? (
         <div className="empty">Nothing has happened yet.</div>
       ) : (

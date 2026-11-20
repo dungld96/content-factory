@@ -18,6 +18,7 @@ import {
   briefValidationSchema,
   generateResponseSchema,
   generationJobDetailSchema,
+  generationJobSchema,
   pageSchema,
   productionRunSchema,
   scriptVersionSchema,
@@ -323,6 +324,40 @@ describe('script generation', () => {
       (await as('viewer', 'GET', `/production-runs/${created.productionRunId}`)).json,
     );
     expect(run.jobs.map((j) => j.id)).toEqual([created.job.id]);
+  });
+
+  it("lists the content item's jobs newest first, filtered and paged (P3 W4)", async () => {
+    const f = await createFixture(db, ids);
+    const first = generateResponseSchema.parse((await generate(f)).json);
+    await completeJob(first.job.id);
+    const second = generateResponseSchema.parse((await generate(f, { regenerate: true })).json);
+    const jobsPage = pageSchema(generationJobSchema);
+
+    const all = jobsPage.parse((await as('viewer', 'GET', `/content/${f.contentId}/jobs`)).json);
+    expect(all.data.map((j) => j.id)).toEqual([second.job.id, first.job.id]);
+    expect(all.data[0]).toMatchObject({ kind: 'script_generation', storyboardSceneId: null });
+    expect(all.page.nextCursor).toBeNull();
+
+    const paged = jobsPage.parse(
+      (await as('viewer', 'GET', `/content/${f.contentId}/jobs?limit=1`)).json,
+    );
+    expect(paged.data.map((j) => j.id)).toEqual([second.job.id]);
+    const next = jobsPage.parse(
+      (
+        await as(
+          'viewer',
+          'GET',
+          `/content/${f.contentId}/jobs?limit=1&cursor=${paged.page.nextCursor ?? ''}`,
+        )
+      ).json,
+    );
+    expect(next.data.map((j) => j.id)).toEqual([first.job.id]);
+
+    const done = jobsPage.parse(
+      (await as('viewer', 'GET', `/content/${f.contentId}/jobs?status=succeeded`)).json,
+    );
+    expect(done.data.map((j) => j.id)).toEqual([first.job.id]);
+    expect((await as('outsider', 'GET', `/content/${f.contentId}/jobs`)).status).toBe(404);
   });
 });
 

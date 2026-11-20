@@ -2348,3 +2348,18 @@ input.filter {
   padding: 10px 0;
   border-bottom: 1px solid var(--line-soft);
 }
+
+/* Jobs on the content Activity tab (P3 W4). */
+.job-row {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.job-row summary {
+  cursor: pointer;
+}
+
+.job-row ol {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}

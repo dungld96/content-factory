@@ -35,6 +35,8 @@ import {
   type GenerateResponseDto,
   type GenerationJobDetailDto,
   type GenerationJobDto,
+  type ListContentJobsQuery,
+  type Page,
   type ProductionRunDto,
 } from '@acf/contracts';
 import {
@@ -50,6 +52,7 @@ import type { Actor } from '../auth/actor.js';
 import { BudgetsService } from '../budgets/budgets.service.js';
 import { ApiError } from '../common/api-error.js';
 import { archived, notFound } from '../common/domain-errors.js';
+import { decodeCursor, encodeCursor } from '../common/http/pagination.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
 import { ProjectAccess } from '../projects/project-access.service.js';
 import { GenerationQueue } from './generation.queue.js';
@@ -236,6 +239,51 @@ export class GenerationService {
     const [dto] = await this.jobDtos([job]);
     if (!dto) throw notFound('job');
     return { ...dto, events: job.events.map(toEventDto) };
+  }
+
+  /**
+   * The content item's jobs, newest first (P3 W4; viewer). Ordered by `(queued_at DESC, id
+   * DESC)`; the cursor carries that position.
+   */
+  async listJobs(
+    actor: Actor,
+    contentId: string,
+    query: ListContentJobsQuery,
+  ): Promise<Page<GenerationJobDto>> {
+    const item = await this.loadItem(contentId);
+    await this.access.require(actor, item.projectId, 'viewer');
+    const after = query.cursor === undefined ? null : decodeCursor(query.cursor);
+    const rows = await this.prisma.client.generationJob.findMany({
+      where: {
+        contentItemId: item.id,
+        ...(query.kind ? { kind: query.kind } : {}),
+        ...(query.status ? { status: query.status } : {}),
+        ...(after
+          ? {
+              OR: [
+                { queuedAt: { lt: after.createdAt } },
+                { queuedAt: after.createdAt, id: { lt: after.id } },
+              ],
+            }
+          : {}),
+      },
+      include: { model: { select: { modelKey: true } } },
+      orderBy: [{ queuedAt: 'desc' }, { id: 'desc' }],
+      take: query.limit + 1,
+    });
+    const visible = rows.slice(0, query.limit);
+    const dtos = await this.jobDtos(visible);
+    const last = visible.at(-1);
+    return {
+      data: dtos,
+      page: {
+        nextCursor:
+          rows.length > query.limit && last
+            ? encodeCursor({ createdAt: last.queuedAt, id: last.id })
+            : null,
+        limit: query.limit,
+      },
+    };
   }
 
   async getRun(actor: Actor, runId: string): Promise<ProductionRunDto> {

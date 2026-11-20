@@ -10,8 +10,10 @@ import {
   generateRequestSchema,
   generateResponseSchema,
   generationJobDetailSchema,
+  generationJobSchema,
   jobIdParamsSchema,
   listArtifactVersionsQuerySchema,
+  listContentJobsQuerySchema,
   pageSchema,
   productionRunSchema,
   reviewRequestSchema,
@@ -28,6 +30,8 @@ import {
   type GenerateRequest,
   type GenerateResponseDto,
   type GenerationJobDetailDto,
+  type GenerationJobDto,
+  type ListContentJobsQuery,
   type Page,
   type ProductionRunDto,
   type ReviewRequest,
@@ -373,6 +377,23 @@ export class GenerationController {
     @ValidBody() body: ResumeRunRequest,
   ): Promise<ResumeRunResponseDto> {
     return this.resume.resume(actor, params.runId, body);
+  }
+
+  @Get('content/:contentId/jobs')
+  @Endpoint({
+    summary: 'List the generation jobs of a content item, newest first (without events)',
+    tags: ['generation'],
+    params: contentIdParamsSchema,
+    query: listContentJobsQuerySchema,
+    responses: { 200: { description: 'Newest first', schema: pageSchema(generationJobSchema) } },
+    errors: [400, 401, 404],
+  })
+  listJobs(
+    @CurrentActor() actor: Actor,
+    @ValidParams() params: ContentParams,
+    @ValidQuery() query: ListContentJobsQuery,
+  ): Promise<Page<GenerationJobDto>> {
+    return this.generation.listJobs(actor, params.contentId, query);
   }
 
   @Get('generation-jobs/:jobId')

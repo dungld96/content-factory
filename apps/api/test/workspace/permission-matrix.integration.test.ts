@@ -145,6 +145,11 @@ const ROWS: Record<string, Row> = {
     path: (f) => `/production-runs/${f.runId}/cancel`,
     expect: [401, 404, 403, 409, 409],
   },
+  'GET /content/:contentId/jobs': {
+    method: 'GET',
+    path: (f) => `/content/${f.contentId}/jobs`,
+    expect: [401, 404, 200, 200, 200],
+  },
   'GET /generation-jobs/:jobId': {
     method: 'GET',
     path: (f) => `/generation-jobs/${f.jobId}`,

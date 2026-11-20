@@ -47,6 +47,7 @@ export function toJobDto(job: GenerationJob, modelKey: string, cost: JobCostDto)
     contentItemId: job.contentItemId,
     productionRunId: job.productionRunId,
     kind: job.kind,
+    storyboardSceneId: job.storyboardSceneId,
     status: job.status,
     attempt: job.attempt,
     maxAttempts: job.maxAttempts,
