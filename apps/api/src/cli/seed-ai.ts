@@ -3,7 +3,7 @@
 // snapshot in docs/design/m2/openrouter-verification.md §5 (2026-11-17T16:05:34Z). Catalog prices
 // are the default endpoint's; the endpoint that serves a call may charge more or less (§5.1), so
 // these are estimates and the provider-reported cost stays authoritative. Every model starts DISABLED: none
-// has been benchmarked (AI_PROVIDER_STRATEGY §9) and their commercial terms are unreviewed.
+// has been benchmarked (AI_PROVIDER_STRATEGY §7) and their commercial terms are unreviewed.
 import type { Prisma, PrismaClient } from '@acf/database';
 
 import { catalogUrl, planCatalogModel } from '../ai/providers/openrouter-catalog.js';

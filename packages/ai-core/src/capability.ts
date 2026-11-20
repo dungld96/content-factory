@@ -27,7 +27,7 @@ export function meetsQualityTier(offered: QualityTier, required: QualityTier): b
   return TIER_RANK[offered] >= TIER_RANK[required];
 }
 
-/** Registry status of a provider or model (DATABASE.md §4 `ProviderStatus`). */
+/** Registry status of a provider or model (DATABASE.md §2, `ai_providers`). */
 export const ProviderStatus = {
   ENABLED: 'enabled',
   DISABLED: 'disabled',

@@ -1,144 +1,112 @@
-# Product Requirements Document (PRD)
+# Product Requirements (PRD)
 
-**Product:** AI Content Factory  
-**Version:** 1.0.0  
-**Target release:** MVP  
-**Primary channel:** Vertical short-form video (TikTok/Reels/Shorts)
+**Product:** AI Content Factory · **Release:** MVP (delivered 2026-11-20) · **Channel:** vertical
+short video (TikTok, Reels, Shorts)
 
-## 1. Problem statement
+## 1. Problem
 
-Producing short-form social content requires many disconnected tools and repetitive manual steps: research, scripting, storyboard preparation, image generation, video generation, voice generation, editing, quality checks, and asset organization. Tool switching makes production slow, expensive, and difficult to reproduce.
+Making short social videos takes many separate tools and manual steps: research, scripting,
+storyboarding, image, video and voice generation, editing, checks and asset organization. Switching
+tools makes production slow, expensive and hard to reproduce.
 
-AI Content Factory provides one workflow and one project workspace to coordinate these tasks across multiple AI providers while tracking cost and preserving reusable brand/character assets.
+AI Content Factory gives one workspace and one workflow across several AI providers, tracks cost,
+and keeps reusable brand and character assets.
 
 ## 2. Goals
 
-1. Convert a natural-language brief into a production-ready script and storyboard.
-2. Generate images, video clips, and audio using replaceable providers.
+1. Turn a brief into a production-ready script and storyboard.
+2. Generate images, clips and audio with replaceable providers.
 3. Assemble approved clips into a final MP4.
-4. Track actual provider usage and estimated/actual cost per job, scene, and content item.
-5. Preserve asset lineage, prompt versions, character references, and environment references.
-6. Recover from provider failures without restarting successful stages.
-7. Require human approval at defined quality gates.
+4. Track usage and cost per job, scene and content item.
+5. Keep lineage: prompts, versions, character and environment references.
+6. Recover from provider failures without redoing successful work.
+7. Require human approval at defined gates.
 
-## 3. Non-goals for MVP
+## 3. Non-goals (MVP)
 
-- Multi-tenant public SaaS, billing, subscriptions, or marketplace.
-- Fully autonomous publishing to every social platform.
-- Training or fine-tuning proprietary foundation models.
-- Guaranteed viral performance or automatic growth.
-- Unlimited free generation.
-- Real-time livestream avatars.
-- Fully autonomous approval of sensitive or commercial claims.
+Multi-tenant SaaS or billing · publishing to social platforms · training or fine-tuning models ·
+promised viral performance · unlimited free generation · livestream avatars · automatic approval
+of sensitive or commercial claims.
 
-## 4. Users and roles
+## 4. Roles
 
-### MVP roles
+| Role | Can |
+|---|---|
+| Owner | Everything an editor can, plus project settings, members, budgets, resolving held charges |
+| Editor | Create briefs, generate, edit, review and approve, render and export |
+| Viewer | Read everything; cannot generate, edit or approve |
 
-- **Owner/Admin:** manages projects, providers, credentials, budgets, and users.
-- **Editor:** creates briefs, edits scripts/storyboards, reviews assets, approves exports.
-- **Viewer:** can view projects and outputs but cannot trigger paid generation.
+Accounts are created by an operator (CLI). Provider secrets never reach the browser.
 
-For a single-user MVP, authentication can initially be simple but must not expose provider secrets to the browser.
+## 5. User journeys
 
-## 5. Core user journeys
+**A. Create content.** Choose a project (and optionally a channel), enter the brief (topic,
+audience, objective, tone, duration, format, language, references). Generate and review the
+script, then the storyboard; approve each.
 
-### Journey A — Create a content item
+**B. Generate media.** For the approved storyboard: estimate, then generate keyframes; choose one
+per scene. Estimate and generate clips and voice-overs; choose one per scene. Failed scenes are
+retried on their own.
 
-1. User selects a project and channel.
-2. User enters topic, audience, objective, tone, target duration, format, language, and optional references.
-3. System validates the brief and creates a content item.
-4. Research and planning stages produce structured outputs.
-5. User reviews and edits the content angle and script.
-6. System creates storyboard scenes.
-7. User approves the storyboard.
+**C. Render and export.** Render the video with captions and optional music; automated checks
+run. Preview, approve and export the package.
 
-### Journey B — Generate media
-
-1. User selects approved storyboard scenes.
-2. System selects a provider/model based on capability, policy, budget, and availability.
-3. System creates generation jobs.
-4. Worker submits provider requests and polls asynchronous jobs where needed.
-5. Outputs are downloaded, validated, stored, and linked to their source jobs.
-6. User reviews images and clips.
-7. Failed scenes can be retried independently.
-
-### Journey C — Render and export
-
-1. User selects approved clips and audio.
-2. System validates media compatibility.
-3. FFmpeg worker assembles scenes, audio, subtitles, and transitions.
-4. System validates final duration, resolution, codec, audio, and file integrity.
-5. User previews and approves the final export.
-6. System creates a downloadable publishing package.
-
-### Journey D — Review costs
-
-1. User opens content cost summary.
-2. System shows LLM input/output tokens, image jobs, video duration/credits, TTS usage, retries, and estimated/actual cost.
-3. User can inspect provider/model and generation job details.
-4. Budget limits prevent new paid jobs when configured thresholds are exceeded.
+**D. Review costs.** The Costs page shows the month's spend against the budget, by item, stage and
+model, with reported, estimated and unknown costs apart. Budgets block or ask before paid work.
 
 ## 6. Functional requirements
 
-| ID | Requirement | Priority |
-|---|---|---|
-| FR-001 | Create and manage content projects | P0 |
-| FR-002 | Create content brief and content item | P0 |
-| FR-003 | Generate research summary and ideas | P1 |
-| FR-004 | Generate and edit scripts | P0 |
-| FR-005 | Generate storyboard with scenes | P0 |
-| FR-006 | Manage characters, environments, and reference assets | P0 |
-| FR-007 | Generate images through provider adapters | P0 |
-| FR-008 | Generate video clips through provider adapters | P0 |
-| FR-009 | Generate voice-over and subtitles | P1 |
-| FR-010 | Assemble media using FFmpeg | P0 |
-| FR-011 | Preview, approve, and download final export | P0 |
-| FR-012 | Track provider usage and costs | P0 |
-| FR-013 | Retry an individual failed scene | P0 |
-| FR-014 | Resume production from last successful stage | P0 |
-| FR-015 | Maintain prompt and asset lineage | P0 |
-| FR-016 | Configure project and content budget limits | P1 |
-| FR-017 | Publish/schedule directly to social platforms | P2 |
-| FR-018 | Collect social analytics | P2 |
+| ID | Requirement | Priority | Status |
+|---|---|---|---|
+| FR-001 | Create and manage projects | P0 | Done |
+| FR-002 | Create briefs and content items | P0 | Done (masters and variants) |
+| FR-003 | Research summary and ideas | P1 | Not built (script cites the brief's sources only) |
+| FR-004 | Generate and edit scripts | P0 | Done |
+| FR-005 | Generate storyboards with scenes | P0 | Done |
+| FR-006 | Characters, environments, reference assets | P0 | Done |
+| FR-007 | Generate images through adapters | P0 | Done |
+| FR-008 | Generate video clips through adapters | P0 | Done |
+| FR-009 | Voice-over and subtitles | P1 | Done |
+| FR-010 | Assemble media with FFmpeg | P0 | Done |
+| FR-011 | Preview, approve, download the final export | P0 | Done |
+| FR-012 | Track usage and cost | P0 | Done |
+| FR-013 | Retry a single failed scene | P0 | Done |
+| FR-014 | Resume production from the last successful stage | P0 | Done |
+| FR-015 | Prompt and asset lineage | P0 | Done |
+| FR-016 | Project and content budget limits | P1 | Done |
+| FR-017 | Publish or schedule to social platforms | P2 | Not in MVP |
+| FR-018 | Social analytics | P2 | Not in MVP |
 
 ## 7. Non-functional requirements
 
-- **Reliability:** queued jobs survive API/worker restarts; completed stage outputs are not regenerated without explicit request.
-- **Traceability:** every generated output links to its provider, model, prompt version, input assets, and job.
-- **Security:** provider credentials are server-side only; secrets are never logged.
-- **Cost safety:** every paid job has a preflight estimate or explicit “unknown cost” warning and a budget check.
-- **Extensibility:** adding a provider should not require changing content-domain logic.
-- **Observability:** structured logs, job state, retry history, latency, and provider errors are queryable.
-- **Portability:** media storage uses an S3-compatible abstraction.
-- **Usability:** users can inspect and approve script, storyboard, assets, and final export separately.
+- **Reliability:** jobs survive API and worker restarts; finished stages are not redone unless asked.
+- **Traceability:** every output links to provider, model, prompt snapshot, inputs and job.
+- **Security:** credentials server-side only; secrets never logged.
+- **Cost safety:** every paid job has an estimate or an explicit "unknown cost" confirmation, and a budget check.
+- **Extensibility:** a new provider needs no change to content-domain logic.
+- **Observability:** structured logs, job state, retry history and provider errors are queryable.
+- **Portability:** storage behind an S3-compatible interface.
+- **Usability:** script, storyboard, media and final render are reviewed separately.
 
 ## 8. MVP acceptance criteria
 
-The MVP is accepted when:
+All met in the M8 pilot (`docs/design/m8/pilot-report.md`, `docs/UAT.md`):
 
-1. A user can create a project and content item.
-2. A valid brief can generate a structured script and storyboard.
-3. At least one configured image provider can create an image.
-4. At least one configured video provider can create a clip or the system clearly reports provider capability/configuration limitations.
+1. A user can create a project and a content item.
+2. A valid brief produces a structured script and storyboard.
+3. A configured image provider creates images.
+4. A configured video provider creates clips, or reports a clear limitation.
 5. Audio can be generated or imported.
-6. FFmpeg can produce a valid vertical MP4 from approved assets.
-7. The final output can be previewed and downloaded.
-8. Provider usage and cost are recorded where provider data permits; otherwise the record is explicitly marked estimated/unknown.
+6. FFmpeg produces a valid vertical MP4 from approved assets.
+7. The output can be previewed and downloaded.
+8. Usage and cost are recorded; otherwise marked estimated or unknown.
 9. A failed scene can be retried without rerunning completed scenes.
-10. The system records prompt, model, provider, input assets, output assets, and timestamps.
-11. A project budget limit can block new paid generation jobs.
-12. Human approval is required before final export is marked approved.
+10. Prompt, model, provider, inputs, outputs and timestamps are recorded.
+11. A project budget can block new paid jobs.
+12. Human approval is required before the final export is approved.
 
-## 9. Success metrics
+## 9. Pilot metrics
 
-Track these during pilot; do not treat targets as guarantees:
-
-- Cost per approved video.
-- Average production time per video.
-- Percentage of generation jobs that succeed on first attempt.
-- Retry rate per scene.
-- Percentage of outputs passing human review.
-- Time spent on manual editing per video.
-- Character consistency review score.
-- Cost variance: estimated vs actual.
+Tracked, not promised: cost per approved video · production time per video · first-attempt job
+success · retries per scene · share of outputs passing review · manual editing time · character
+consistency · estimated vs actual cost.

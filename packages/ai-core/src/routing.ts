@@ -65,7 +65,7 @@ export function effectiveParameters(
 }
 
 /**
- * Candidate filtering (AI_PROVIDER_STRATEGY §4, steps 1–3 and 7). Budget, project data policy and
+ * Candidate filtering (AI_PROVIDER_STRATEGY §5, steps 1–3 and 7). Budget, project data policy and
  * circuit breaking (steps 4–6) arrive with M7; scoring waits for benchmark data (§9). Degraded
  * providers and models are not eligible.
  */

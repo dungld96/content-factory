@@ -90,7 +90,7 @@ function claimTermsIn(text: string): string[] {
   );
 }
 
-/** Stage 1 (CONTENT_PIPELINE §2): deterministic, no LLM call. */
+/** Stage 1 (CONTENT_PIPELINE §3.1): deterministic, no LLM call. */
 export function validateBrief(input: BriefInput): BriefValidation {
   const normalized: NormalizedBrief = {
     topic: input.topic.trim(),

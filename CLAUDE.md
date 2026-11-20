@@ -130,17 +130,25 @@ Do not build all milestones in one task. Implement one milestone at a time and w
 
 ## 12. Project status
 
-- **M0 — Foundation:** done and reviewed.
-- **M1 — Domain, persistence, identity & access:** done and approved (design revision 4, slices M1a–M1e).
-- **M2 — AI core and model registry:** done and approved (design revision 1, slices M2a–M2d).
-- **M3 — Script and storyboard pipeline:** design package revision 1 approved (`docs/design/M3-design-review-package.md`, ADR-0013); delivered in slices M3a–M3e (package §13). All slices done; **M3 done and approved (2026-11-18)**.
-- **M3.5 — Multi-format architecture review:** approved (`docs/design/M3.5-multiformat-architecture-review.md`, §8, ADR-0015). Slice R0 (content masters, variants, format/platform registries) **done and approved (2026-11-18)**.
-- **M4 — Image and asset management:** design package revision 1 approved (`docs/design/M4-design-review-package.md`, verification record `docs/design/m4/`, ADR-0016, ADR-0006 amended); delivered in slices M4a–M4e (package §11–§12). All slices done; **M4 done and approved (2026-11-19)**. The paid image benchmark (G2) waits for an OpenRouter API key.
-- **M4.5 — UI/UX refinement:** web-only redesign from `docs/design/content-studio-ui-prototype.html` (`docs/design/M4.5-ui-refinement.md`); **done and approved (2026-11-19)**.
-- **M5 — Video and audio generation:** design review package revision 1 approved (`docs/design/M5-design-review-package.md`, verification record `docs/design/m5/`; V1–V12 as proposed, 2026-11-19); delivered in slices M5a–M5e (package §14; deviations §15, ADR-0017). All slices done; **M5 done and approved (2026-11-19)**. Paid benchmark run (`docs/design/m5/benchmark-results.md`); routed: images Seedream 5.0 Flash, clips Veo 3.1 Lite.
-- **M6 — Rendering and export:** design review package revision 1 approved (`docs/design/M6-design-review-package.md`; X1–X12 as proposed, 2026-11-19); delivered in slices M6a–M6d (package §15; deviations §16, ADR-0018). All slices done; **M6 done and approved (2026-11-20)**. After deploys run `pnpm media:selftest` in the image (Debian FFmpeg 5.1).
-- **M7 — Reliability and cost controls:** design review package revision 1 approved (`docs/design/M7-design-review-package.md`; B1–B10 as proposed, 2026-11-20); delivered in slices M7a–M7d (package §14; deviations §15, ADR-0019). All slices done; **M7 done and approved (2026-11-20)**.
-- **M8 — Pilot and hardening:** design review package revision 1 approved (`docs/design/M8-design-review-package.md`; P1–P10 as proposed, 2026-11-20); delivered in slices M8a–M8d (package §10; deviations §11, ADR-0020; pilot report `docs/design/m8/pilot-report.md`). All slices done; **M8 done and approved (2026-11-20)**. The MVP is complete.
-- **M8.5 — Production polish from the pilot:** design review package revision 1 approved (`docs/design/M8.5-design-review-package.md`; Q1–Q9 as proposed, backup bucket to be named later, 2026-11-20); delivered in slices M8.5a–M8.5d (package §10; deviations §11). All slices done; **M8.5 done and approved (2026-11-20)**. Off-server backups wait for the backup destination (rclone remote). Staging targets a generic Ubuntu VPS (ADR-0021).
+The MVP is complete: M0–M8.5 are done and approved (2026-11-20). Details per milestone:
+`docs/IMPLEMENTATION_PLAN.md` §2 and the design packages in `docs/design/`.
 
-Before M1-area work, read `docs/design/M1-design-review-package.md` and ADR-0009 to ADR-0011. Before M2 work, read `docs/design/M2-design-review-package.md`, its verification record and ADR-0012. Before M4-area work (storage, images), read `docs/design/M4-design-review-package.md` §12, ADR-0006 and ADR-0016. Before M5 work, read `docs/design/M5-design-review-package.md` and `docs/design/m5/openrouter-video-tts-verification.md`. Before M6 work, read `docs/design/M6-design-review-package.md`. Before M7 work, read `docs/design/M7-design-review-package.md`.
+Open items:
+- Off-server backups wait for the backup destination (rclone remote).
+- The paid image benchmark (G2) waits for an OpenRouter API key.
+- Staging targets a generic Ubuntu VPS (ADR-0021). After deploys run `pnpm media:selftest` in the
+  image (Debian FFmpeg 5.1).
+
+Routed models (pilot): scripts Gemini 3.5 Flash Lite, storyboards Claude Haiku 5.5, images
+Seedream 5.0 Flash, clips Veo 3.1 Lite, voice per voice profile.
+
+Read before working in an area:
+
+| Area | Read |
+|---|---|
+| Domain, persistence, auth (M1) | `docs/design/M1-design-review-package.md`, ADR-0009 to ADR-0011 |
+| AI core, registry, money (M2) | `docs/design/M2-design-review-package.md`, `docs/design/m2/`, ADR-0012 |
+| Storage, images (M4) | `docs/design/M4-design-review-package.md` §12, ADR-0006, ADR-0016 |
+| Video, audio (M5) | `docs/design/M5-design-review-package.md`, `docs/design/m5/openrouter-video-tts-verification.md` |
+| Rendering, export (M6) | `docs/design/M6-design-review-package.md` |
+| Budgets, reliability (M7) | `docs/design/M7-design-review-package.md` |

@@ -2,120 +2,91 @@
 
 ## 1. Principles
 
-- Optimize cost per approved video, not raw generation count.
-- Use low-cost LLMs for routine text tasks.
-- Spend on image/video generation only after script/storyboard approval.
-- Render only failed or changed scenes again.
-- Reuse approved brand assets.
-- Never assume free-tier quota is guaranteed.
-- Track estimated and actual cost separately.
+- Optimize **cost per approved video**, not generation count.
+- Spend on images and video only after the script and storyboard are approved.
+- Reuse identical results; redo only failed or changed scenes.
+- Track provider-reported and estimated cost separately.
+- **Unknown cost is not zero**: never stored or shown as `$0`.
+- Free tiers are not production capacity; none is relied on.
 
-## 2. Cost categories
+## 2. Money
 
-- LLM input tokens.
-- LLM output tokens.
-- Image generation count/resolution.
-- Video generation duration/resolution/credits.
-- TTS characters or audio duration.
-- Transcription usage.
-- Storage and egress.
-- Compute for rendering.
-- Retry and failed-generation cost.
+- AI costs are exact decimal USD: `NUMERIC(38,18)` in PostgreSQL, `UsdAmount` (10⁻¹⁸ USD,
+  `bigint`) in code (ADR-0012). Integer micros cannot hold per-token prices such as
+  USD 0.000000072.
+- Budgets use `DECIMAL(14,6)` USD.
+- The API returns money as decimal strings, never JSON numbers.
 
-## 3. Cost estimation
+## 3. Prices
 
-Use integer micros for currency calculations or Decimal. Keep currency explicit.
+Prices are append-only registry rows (`ai_model_prices`): model, metric, unit price, published
+value, optional variant, effective date, source and URL. The active price is the latest row in
+effect. A metric with no price means unknown cost.
 
-**Implemented for AI usage in M2 (ADR-0012):** exact decimal USD, `NUMERIC(38,18)` in PostgreSQL
-and `UsdAmount` (10⁻¹⁸ USD, `bigint`) in `packages/ai-core`. Integer micros cannot hold per-token
-LLM prices (e.g. USD 0.000000072 per token) or the cost of a short call. Each call records the
-provider-reported cost and the registry estimate separately, with `cost_status`
-`reported` / `estimated` / `unknown`; unknown cost is never stored or shown as an amount.
+`estimated_cost = Σ(quantity × unit_price)` over the metrics the model is priced on.
 
-`estimated_cost = Σ(quantity × configured_unit_price)`
+| Media | Metrics | Notes |
+|---|---|---|
+| LLM | input/output tokens (prompt-size tiers) | Text jobs reserve their worst case, twice (repair call) |
+| Image | `output_images`, `input_images`, `output_pixels`, `input_pixels`, image tokens; variant per resolution (`2k`) | Token-priced models: estimate unknown, needs confirmation |
+| Video | `output_video_seconds`, variant per resolution/audio (`720p-silent`, `720p`, …); first-frame fee `input_images` | Billed seconds = the supported duration chosen for the scene, or the model's minimum. Token-priced: unknown |
+| TTS | `input_characters` (Unicode code points) | Token-priced: unknown before the call |
+| Render | none | Local FFmpeg, USD 0 |
 
-**Images (M4):** image prices are registry rows with the metrics `output_images`/`input_images`
-(per image), `output_pixels`/`input_pixels` (per-megapixel prices stored per pixel, so quantities
-stay integers) and `output_image_tokens`/`input_image_tokens`, optionally per resolution tier
-(`variant`, e.g. `2k`). Only metrics a model is priced on are billed. A model priced by token has
-no per-image estimate before the call: its estimate is unknown (never zero) and generation needs
-explicit confirmation; the provider-reported cost is recorded after the call.
+Each call writes an `ai_invocations` row with `cost_status`: `reported` (provider figure),
+`estimated` (registry figure) or `unknown`. OpenRouter returns no per-call cost for TTS, so TTS
+is recorded as an estimate.
 
-**Video and TTS (M5):** video prices are `output_video_seconds` per second, with a variant for
-resolution and audio (`720p-silent`, `720p`, `silent`, `` — most specific first); cents in the
-catalog are converted exactly; a first-frame image fee is `input_images`. Seconds billed are the
-model's supported duration chosen for the scene (never less than the scene). Token-priced video
-models (`output_video_tokens`) and unrecognised SKUs have an **unknown** estimate. TTS is
-`input_characters` (Unicode code points of the text); token-priced TTS (e.g. Gemini) is unknown
-before the call. The provider-reported cost (`usage.cost` for video, `GET /generation` for TTS)
-is recorded as `reported`.
+## 4. Budgets
 
-Each pricing record must include:
-- Provider.
-- Model.
-- Unit.
-- Price.
-- Currency.
-- Effective date.
-- Source URL.
-- Whether pricing is official or manually estimated.
+Per project (ADR-0019), owners set them on the **Costs** page:
 
-If price is unknown, mark it unknown and require explicit confirmation or a configured hard budget policy. Do not display `$0` for unknown cost.
+| Limit | Default | Mode |
+|---|---|---|
+| Monthly (UTC calendar month) | USD 10 | hard |
+| Per content item | USD 3 | soft |
+| Per request | USD 2 | hard |
 
-## 4. Budget enforcement (implemented in M7, ADR-0019)
+- **Hard** limit: `402 BUDGET_EXCEEDED`, nothing is queued. **Soft** limit: `409
+  BUDGET_CONFIRMATION_REQUIRED`; accepting is recorded. A hard breach always decides.
+- **Reservations**: every paid request reserves its estimate (unknown cost: USD 0.50 per call)
+  in the same transaction that queues the jobs, under a lock on the budget, so concurrent requests
+  cannot together exceed it.
+- **Two checks**: the API at request time, the worker right before each paid call.
+- **Resolution**: success settles, failure releases, an unknown provider outcome is **held**
+  until an owner records it as charged or not charged (Operations page).
+- **Usage** = ledger costs not covered by a reservation + open and held reservations + confirmed
+  charges.
+- New-project defaults come from `DEFAULT_MONTHLY_BUDGET_USD`, `DEFAULT_ITEM_BUDGET_USD`,
+  `DEFAULT_REQUEST_BUDGET_USD`.
 
-Limits per project: monthly (UTC calendar month), per content item, per request; each `hard`
-(blocks, `402 BUDGET_EXCEEDED`) or `soft` (asks; accepting is recorded). A hard breach always
-decides. Defaults: USD 10 monthly hard, USD 3 per item soft, USD 2 per request hard.
+## 5. Cost reports
 
-- **Reservations**: every paid request reserves its estimate (unknown cost: USD 0.50 per call; text
-  jobs: their worst case, twice for the repair call) in the transaction that queues the jobs, under
-  a lock on the budget. Concurrent requests cannot together exceed it.
-- **Two checks**: the API at request time, the worker right before each attempt's paid call (a
-  budget lowered meanwhile fails the job, never retried).
-- **Resolution**: success settles (the ledger counts), failure releases, an unknown provider outcome
-  holds the amount until an owner records it as charged (kept as a confirmed charge) or not.
-- Usage = ledger costs not covered by a reservation + open and held reservations + confirmed
-  charges. Unknown-cost calls are counted, never priced at $0.
+- **Costs page** (`GET /projects/:projectId/costs`): month total vs limit; by content item, stage
+  and model; retry cost; cost per approved video; six-month trend. Reported, estimated, unknown
+  (count) and held amounts are kept apart.
+- **Render cost report** (`GET /renders/:renderId/cost-report`): every AI call of the content
+  item by stage, part of the export package.
 
-## 5. Retry policy
+## 6. Retries and cost
 
-- Retry transient network/5xx errors with exponential backoff and jitter.
-- Respect provider `Retry-After`.
-- Do not retry policy rejection or invalid requests.
-- Limit attempts per job.
-- Require approval for expensive regeneration after configured threshold.
-- Store failed-attempt costs when charged.
+- Retries only for transient errors, with backoff and jitter; at most 3 attempts.
+- Failed attempts that were charged are counted as retry cost.
+- A lost video submission is never resubmitted automatically: it could be charged twice.
 
-## 6. Cost dashboard (implemented in M7c/M7d)
+## 7. Testing paid models
 
-The project's **Costs** page (`GET /projects/:projectId/costs`) shows, for a UTC month: the total
-against the monthly limit; cost by content item, by stage and by provider/model; retry cost (calls
-that did not produce their job's result); cost per approved video; the six-month trend. Each figure
-keeps provider-reported, estimated, unknown (count of calls) and held cost apart.
+- No paid calls in automated tests (a network guard blocks real hosts).
+- Paid smoke tests need `ACF_PAID_SMOKE=1` and a `--max-cost-usd` cap.
+- Before a test: check current official prices, set caps, run a small batch, record the actual
+  cost, then update the registry. One successful run is not guaranteed monthly capacity.
 
-Not yet shown: free-tier vs paid usage (no provider in use offers a free tier we rely on).
+Measured: a 30 s video costs about USD 1.05 with the pilot routes
+(`docs/design/m8/pilot-report.md`).
 
-## 7. Initial pilot budget
+## 8. Where to save next
 
-Use a capped test budget rather than a promised per-video price. Suggested initial API test envelope: USD 50–100 for controlled experiments, subject to current provider prices and account quotas.
-
-Before each test:
-1. Confirm current official pricing.
-2. Set per-job and per-project caps.
-3. Generate a small benchmark batch.
-4. Record actual cost.
-5. Recalculate the cost model.
-
-Do not extrapolate one successful generation into guaranteed monthly capacity.
-
-## 8. Optimization order
-
-1. Reduce unnecessary generation.
-2. Approve script/storyboard before media calls.
-3. Generate low-cost drafts before premium outputs.
-4. Use candidate selection and scene-level regeneration.
-5. Reuse reference assets and backgrounds.
-6. Batch text tasks where supported.
-7. Select cheaper providers only after quality benchmark.
-8. Optimize storage and rendering after API spend is understood.
+1. Avoid unnecessary generation (approve script and storyboard first).
+2. Start with one candidate per scene; regenerate single scenes.
+3. Reuse reference assets and identical results.
+4. Switch to cheaper models only after a quality benchmark.

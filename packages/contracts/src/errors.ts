@@ -172,7 +172,7 @@ export const validationIssueSchema = z.object({
 });
 export type ValidationIssue = z.infer<typeof validationIssueSchema>;
 
-/** Error envelope defined in docs/API_SPEC.md §10. */
+/** Error envelope defined in docs/API_SPEC.md §11. */
 export const apiErrorResponseSchema = z
   .object({
     error: z.object({

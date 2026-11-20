@@ -24,7 +24,7 @@ export interface ApiErrorBody {
   readonly current?: unknown;
 }
 
-/** An HTTP error with an explicit API error code (docs/API_SPEC.md §10). */
+/** An HTTP error with an explicit API error code (docs/API_SPEC.md §11). */
 export class ApiError extends HttpException {
   constructor(options: ApiErrorOptions, cause?: unknown) {
     const body: ApiErrorBody = {

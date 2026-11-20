@@ -6,7 +6,7 @@ import type { UsdAmount } from './money.js';
 import type { LlmUsage } from './usage.js';
 
 /**
- * Request parameters a model must support for a call to be routed to it (AI_PROVIDER_STRATEGY §4).
+ * Request parameters a model must support for a call to be routed to it (AI_PROVIDER_STRATEGY §5).
  * The registry stores each model's supported set; `structured_outputs` means the model enforces a
  * JSON schema, on top of accepting `response_format`.
  */

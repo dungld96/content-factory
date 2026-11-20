@@ -25,8 +25,7 @@ Connect (**your computer**; the provider shows the first user, often `root` or `
 ssh ubuntu@203.0.113.10
 ```
 
-Costs: the provider's monthly price for the plan, plus any backup storage (§ off-server
-backups). Check current prices on the provider's site.
+Costs: the provider's monthly price for the plan, plus any backup storage (§7). Check current prices on the provider's site.
 
 ## 2. Prepare the server (server)
 
@@ -123,7 +122,7 @@ cd infra/deploy
 ./acf.sh run --rm migrate
 ```
 
-Create the asset bucket in SeaweedFS (M4a; idempotent):
+Create the asset bucket in SeaweedFS (idempotent):
 
 ```bash
 ./acf.sh run --rm storage-setup
@@ -153,8 +152,8 @@ Optional demo workspace instead (Demo Studio, three demo users; passwords are pr
 Open `https://<site address>/login`. Caddy obtains the certificate on the first request (a few
 seconds). Logs: `./acf.sh logs -f api worker web caddy`.
 
-Check that the image's FFmpeg (Debian 5.1, not the 6.1 used in development) renders correctly
-(M6 risk R6): it renders a short synthetic video with captions, music and loudness normalisation,
+Check that the image's FFmpeg (Debian 5.1, not the 6.1 used in development) renders correctly:
+it renders a short synthetic video with captions, music and loudness normalisation,
 runs the automated QC and prints the result (exit code 0 = passed; no network, no cost):
 
 ```bash
@@ -171,7 +170,7 @@ set `OPENROUTER_API_KEY=` in `infra/deploy/.env.production` (on the server only)
 ```
 
 Routes measured in the M8 pilot (`docs/design/m8/pilot-report.md`): scripts Gemini 3.5 Flash
-Lite, storyboards **Claude Haiku 5.5** (Gemini rejects the storyboard's JSON schema), keyframes
+Lite, storyboards **Claude Haiku 5.5** (Gemini did not keep to the clip lengths), keyframes
 Seedream 5.0 Flash, clips Veo 3.1 Lite; narration is chosen per voice profile (MAI-Voice 2.1 has
 native Vietnamese voices, e.g. `vi-VN-Harper:MAI-Voice-2.1`).
 
@@ -191,7 +190,7 @@ native Vietnamese voices, e.g. `vi-VN-Harper:MAI-Voice-2.1`).
 ./acf.sh exec api node dist/cli/ai-registry-cli.js route set storyboard_generation anthropic/claude-haiku-5.5
 ```
 
-Storyboards are written to fit the routed clip model's lengths (M8.5): no retiming is needed when
+Storyboards are written to fit the routed clip model's lengths: no retiming is needed when
 the video route is set before storyboards are generated. Optional, for Gemini on structured tasks:
 `./acf.sh exec api node dist/cli/ai-registry-cli.js model set-schema-mode google/gemini-3.5-flash-lite basic`.
 
@@ -224,14 +223,9 @@ Update to a newer commit (take a backup first; migrations run in `migrate` and a
 git pull && ./acf.sh build migrate && ./acf.sh run --rm migrate && ./acf.sh up -d
 ```
 
-Upgrade notes by milestone (all migrations are applied by `migrate`; nothing else is needed unless
-listed): M4a needs storage keys (below); M6 needs `media:selftest` after the first build; M7 adds
-budgets for every existing project (USD 10/3/2, change them on the Costs page) and optional
-`DEFAULT_*_BUDGET_USD` variables; M8 adds the `backup` tool service and security headers in Caddy.
-
 Rollback: there are no down-migrations. To return to an earlier version, restore the backup taken
 before the update onto fresh volumes with the earlier commit checked out (`git checkout <commit>`,
-`./acf.sh build migrate`, then the restore steps in "Backup and restore").
+`./acf.sh build migrate`, then the restore steps in §7).
 
 After every deploy (a few minutes, no cost):
 
@@ -242,29 +236,23 @@ After every deploy (a few minutes, no cost):
 5. Response headers include `Strict-Transport-Security` and `X-Frame-Options`
    (`curl -sI https://<site address>/login`).
 
-Upgrading a deployment created before M4a: `.env.production` has no storage keys yet. Append them
-once (then run `./acf.sh up -d seaweedfs` and `./acf.sh run --rm storage-setup` before the full
-`up -d`):
-
-```bash
-printf 'S3_ACCESS_KEY_ID=acf_app_%s\nS3_SECRET_ACCESS_KEY=%s\nSTORAGE_ADMIN_ACCESS_KEY_ID=acf_admin_%s\nSTORAGE_ADMIN_SECRET_ACCESS_KEY=%s\n' "$(openssl rand -hex 6)" "$(openssl rand -hex 24)" "$(openssl rand -hex 6)" "$(openssl rand -hex 24)" >> .env.production
-```
-
 Asset files live in the `seaweedfs-data` volume on the server's disk; provider snapshots of the
 disk (if your VPS plan offers them) back them up together with the database volume.
 
-#### Backup and restore (M8, ADR-0020)
+## 7. Backup and restore
+
+ADR-0020, ADR-0021.
 
 A backup is the database dump plus every stored object with a SHA-256 manifest, in
-`infra/deploy/backups/<UTC timestamp>/`. It can run while the stack is up; the last 7 are kept on the server (nightly copies off the server: below).
-It contains user data and password hashes: keep it private. Secrets (`.env.production`) are not
-included; keep your own private copy of that file.
+`infra/deploy/backups/<UTC timestamp>/`. It can run while the stack is up; the last 7 are kept on
+the server. It contains user data and password hashes: keep it private. Secrets
+(`.env.production`) are not included; keep your own private copy of that file.
 
 ```bash
 ./acf.sh backup
 ```
 
-#### Scheduled, off-server backups (M8.5)
+### Scheduled, off-server backups
 
 A backup on the server's own disk does not survive losing the server. Once, give the server a
 place to copy backups to, then schedule the nightly backup. The copy uses
@@ -324,6 +312,8 @@ then restore as below:
 rclone copy offsite:YOUR_BACKUP_BUCKET/acf/<timestamp> backups/<timestamp>
 ```
 
+### Restore
+
 Restore needs **empty volumes** (a new server, or after `./acf.sh down -v`, which deletes all data):
 it restores the database, writes the objects back, checks every object and asset checksum, and
 applies any newer migrations. Then start the stack.
@@ -336,6 +326,8 @@ applies any newer migrations. Then start the stack.
 ./acf.sh up -d
 ```
 
+### Stop or remove
+
 Stop the stack (data is kept in Docker volumes):
 
 ```bash
@@ -345,7 +337,7 @@ Stop the stack (data is kept in Docker volumes):
 When you no longer need the server, take a last backup and copy it off the server, then cancel
 or delete the server in your provider's control panel (this deletes its disk and all data).
 
-### Budgets, alerts and operations (M7)
+## 8. Budgets, alerts and operations
 
 Every project starts with a monthly budget of USD 10 (hard), USD 3 per content item (soft) and USD
 2 per request (hard); owners change them on the project's **Costs** page. Defaults for new projects
@@ -378,7 +370,7 @@ Circuits can also be inspected or forced from the server:
 ./acf.sh exec api node dist/cli/ai-registry-cli.js circuit close openrouter
 ```
 
-## Security notes
+## 9. Security notes
 
 - Only Caddy publishes ports (80/443). PostgreSQL, Redis, SeaweedFS and the API are internal;
   browsers read asset bytes only through the API (`GET /assets/:assetId/content`).

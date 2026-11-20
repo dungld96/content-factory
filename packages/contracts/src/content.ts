@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { channelPlatformSchema } from './channels.js';
 import { includeArchivedSchema, isoDateTimeSchema, languageTagSchema } from './common.js';
 
-/** Canonical list per docs/CONTENT_PIPELINE.md §1 (decision U1). M1 creates `draft` only. */
+/** Canonical list per docs/CONTENT_PIPELINE.md §2 (decision U1). M1 creates `draft` only. */
 export const contentStatusSchema = z
   .enum([
     'draft',

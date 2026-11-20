@@ -67,7 +67,7 @@ function isIssueList(value: unknown): value is ValidationIssue[] {
 }
 
 /**
- * Maps every thrown error to the envelope in docs/API_SPEC.md §10.
+ * Maps every thrown error to the envelope in docs/API_SPEC.md §11.
  * Unknown errors become a generic 500: no stack traces or internal messages leave the process.
  */
 @Catch()

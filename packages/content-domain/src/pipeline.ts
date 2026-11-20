@@ -1,4 +1,4 @@
-/** Content statuses (CONTENT_PIPELINE §1, decision U1); mirrors the database enum. */
+/** Content statuses (CONTENT_PIPELINE §2, decision U1); mirrors the database enum. */
 export type ContentStatus =
   | 'draft'
   | 'researching'

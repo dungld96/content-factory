@@ -5,7 +5,7 @@ import { redactSecrets } from '@acf/config';
  *
  * Adapters never retry (decision P4). They classify every failure into one code whose policy says
  * whether a retry, or a switch to another compatible model or provider, is allowed
- * (AI_PROVIDER_STRATEGY §7, CLAUDE.md §7). The job layer (M5/M7) acts on the flags.
+ * (AI_PROVIDER_STRATEGY §6, CLAUDE.md §7). The job layer (M5/M7) acts on the flags.
  */
 import type { UsdAmount } from './money.js';
 import type { LlmUsage } from './usage.js';
@@ -32,7 +32,7 @@ export type ProviderErrorCode = (typeof ProviderErrorCode)[keyof typeof Provider
 export interface ProviderErrorPolicy {
   /** The same request may be sent again later (bounded, with backoff: M7). */
   readonly retryable: boolean;
-  /** Another compatible model/provider may be tried (AI_PROVIDER_STRATEGY §7). */
+  /** Another compatible model/provider may be tried (AI_PROVIDER_STRATEGY §6). */
   readonly fallbackAllowed: boolean;
 }
 
@@ -41,7 +41,7 @@ const transient: ProviderErrorPolicy = { retryable: true, fallbackAllowed: true 
 
 /**
  * Never retried and never failed over: invalid requests, policy blocks, authentication failures
- * and budget blocks (CLAUDE.md §7; AI_PROVIDER_STRATEGY §7).
+ * and budget blocks (CLAUDE.md §7; AI_PROVIDER_STRATEGY §6).
  */
 export const PROVIDER_ERROR_POLICY: Readonly<Record<ProviderErrorCode, ProviderErrorPolicy>> = {
   AUTHENTICATION: deny,

@@ -94,7 +94,7 @@ enum ApprovalStatus {
   @@map("approval_status")
 }
 
-/// Canonical list per docs/CONTENT_PIPELINE.md §1 (decision U1).
+/// Canonical list per docs/CONTENT_PIPELINE.md §2 (decision U1).
 /// M1 creates items in `draft` only; transitions are implemented in M3.
 enum ContentStatus {
   draft

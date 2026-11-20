@@ -4,9 +4,14 @@ Base path: `/api/v1`
 Format: JSON  
 Authentication: server-side sessions in an HttpOnly cookie (ADR-0009, §0.1). Every endpoint except health, login and (outside production) the OpenAPI document requires a session.
 
-Use DTO validation (Zod or class-validator) and publish OpenAPI documentation.
+Requests and responses are validated with Zod schemas from `packages/contracts`; the same
+schemas generate the OpenAPI 3.1 document (`GET /openapi.json`). This file is the readable
+overview; the OpenAPI document is the exact contract.
 
-## 0. Health (implemented in M0)
+Roles: `owner` > `editor` > `viewer` per project. Unless noted, reads need viewer and changes
+need editor.
+
+## 1. Health
 
 Health endpoints are unauthenticated and are never rate limited by business rules.
 
@@ -39,9 +44,9 @@ Schemas: `packages/contracts/src/health.ts`.
 ### Correlation IDs
 Every response carries `x-correlation-id`. A caller-supplied value is echoed only if it matches
 `[A-Za-z0-9._-]{8,128}`; otherwise the server generates a UUID. The same ID appears in server
-logs and in error bodies (§10).
+logs and in error bodies (§11).
 
-## 0.1 Authentication (implemented in M1b)
+## 2. Authentication
 
 Design: ADR-0009 and `docs/design/M1-design-review-package.md` §5. The browser talks only to
 the Next.js origin, which rewrites `/api/v1/*` to the API.
@@ -96,15 +101,15 @@ Revokes the session immediately and clears the cookies. `204`.
 Accounts are created only with the CLI (`pnpm user:create`); there is no sign-up endpoint
 (decision D6). Schemas: `packages/contracts/src/auth.ts`.
 
-## 1. Projects
+## 3. Projects
 
-Implemented in M1c. Schemas: `packages/contracts/src/projects.ts`.
+Schemas: `packages/contracts/src/projects.ts`.
 
 **Access rules (all workspace endpoints):** roles are `owner` > `editor` > `viewer` per project
 and are checked in services on every request. A caller who is not a member of the project gets
 `404 NOT_FOUND` (indistinguishable from a missing project; decision D7). A member whose role is
 too low gets `403 FORBIDDEN`. Any change under an archived project returns `409 ARCHIVED`; reads
-still work. Single-resource responses carry an `ETag`; `PATCH` honours `If-Match` (§11).
+still work. Single-resource responses carry an `ETag`; `PATCH` honours `If-Match` (§12).
 
 | Endpoint | Minimum role |
 |---|---|
@@ -140,7 +145,7 @@ Get project details.
 Update `name`, `slug`, `description`, `defaultLanguage`, `timezone` (owner).
 
 ### `POST /projects/:projectId/archive`
-Archive the project (owner). It becomes read-only; there is no unarchive in M1 (decision U7).
+Archive the project (owner). It becomes read-only; there is no unarchive.
 
 ### Members
 - `GET /projects/:projectId/members` → `{ "data": [{ "userId", "email", "displayName", "role", … }] }`.
@@ -158,9 +163,9 @@ Archive the project (owner). It becomes read-only; there is no unarchive in M1 (
   `PATCH /channels/:channelId`, `POST /channels/:channelId/archive`.
 - Sending `""` for an optional text field clears it.
 
-## 2. Characters and environments
+## 4. Characters and environments
 
-Implemented in M1d (ADR-0010; design package §7). Characters and environments have the same
+ADR-0010. Characters and environments have the same
 endpoints; replace `characters`/`character-versions`/`characterId` with
 `environments`/`environment-versions`/`environmentId`. Schemas: `packages/contracts/src/brand.ts`.
 Reads need viewer; everything else needs editor. Changes under an archived character/environment
@@ -192,10 +197,13 @@ Referenced assets must belong to the same project (`422 REFERENCE_NOT_FOUND`) an
 first referenced (`409 ASSET_ARCHIVED`). An asset archived later can stay on a draft, but that
 draft cannot be approved (decision U4).
 
-## 3. Content items
+## 5. Content
+
+A content item is one **variant** of a **content master** (the shared brief; ADR-0015). Schemas:
+`packages/contracts/src/content.ts`, `content-masters.ts`.
 
 ### `POST /projects/:projectId/content`
-Create a content item.
+Creates a master **and** this item as its first variant.
 
 Request:
 ```json
@@ -215,11 +223,15 @@ Request:
 }
 ```
 
-Implemented in M1c (schemas: `packages/contracts/src/content.ts`). The brief accepts `topic`
-(required), `audience`, `objective`, `tone`, `callToAction`, `notes` and up to 20 `sourceUrls`
-(http/https); unknown keys are rejected. `channelId` (optional) must be an active channel of the
-same project (`422 REFERENCE_NOT_FOUND`, `409 ARCHIVED`). `status` is set by the server: always
-`draft` in M1; pipeline transitions arrive in M3.
+The brief accepts `topic` (required), `audience`, `objective`, `tone`, `callToAction`, `notes` and
+up to 20 `sourceUrls` (http/https); unknown keys are rejected. `channelId` (optional) must be an
+active channel of the same project (`422 REFERENCE_NOT_FOUND`, `409 ARCHIVED`). Optional
+`targetPlatform` (`tiktok`, `instagram_reels`, `youtube_shorts`, `other`): with a channel it must
+equal the channel's platform (`422 PLATFORM_CHANNEL_MISMATCH`); a format the platform does not
+accept is `422 FORMAT_PLATFORM_INCOMPATIBLE`. `status` is set by the server (`draft`).
+
+Responses include `contentMasterId`, `targetPlatform` (effective: the channel's platform when a
+channel is set), `masterBriefRevision` and `masterBriefStale`.
 
 ### `GET /projects/:projectId/content`
 List content items, newest first, paginated. Filters: `channelId`, `status`, `includeArchived`.
@@ -231,24 +243,11 @@ Get item details and current production status.
 Archive the content item (editor).
 
 ### `PATCH /content/:contentId`
-Update `title`, `channelId` (or `null`), `targetDurationSeconds`, `aspectRatio`, `language`,
-`brief` (editor). `format` and `status` are not writable. From M3, changes that invalidate
-generated outputs must create a new content revision or mark downstream outputs stale.
-R0: `targetPlatform` is also writable (see below).
+Update `title`, `channelId` (or `null`), `targetPlatform`, `targetDurationSeconds`,
+`aspectRatio`, `language`, `brief`, `voiceProfileId` (active profile of the same project, or
+`null`). `format` and `status` are not writable.
 
-### Content masters and variants (implemented in R0)
-
-Design: `docs/design/M3.5-multiformat-architecture-review.md` §5, ADR-0015. Schemas:
-`packages/contracts/src/content-masters.ts`. A content item is one **variant** of a **content
-master** (the shared brief). Every M1–M3 `/content/:contentId` endpoint is unchanged.
-
-- `POST /projects/:projectId/content` (same body) creates the master **and** this item as its
-  first variant. Optional `targetPlatform` (`tiktok`, `instagram_reels`, `youtube_shorts`,
-  `other`): with a channel it must equal the channel's platform (`422 PLATFORM_CHANNEL_MISMATCH`);
-  a format the platform does not accept is `422 FORMAT_PLATFORM_INCOMPATIBLE`.
-- Content item responses gain `contentMasterId`, `targetPlatform` (effective: the channel's
-  platform when a channel is set), `masterBriefRevision` and `masterBriefStale`.
-- Brief validation adds advisory platform warnings (verified platform limits only).
+### Content masters
 
 | Endpoint | Viewer | Editor/Owner | Notes |
 |---|:-:|:-:|---|
@@ -260,38 +259,19 @@ master** (the shared brief). Every M1–M3 `/content/:contentId` endpoint is unc
 | `POST /content/:contentId/brief/resync` | 403 | ✓ | Copies the master's current brief into the item; `If-Match` |
 | `POST /content-masters/:masterId/archive` | 403 | ✓ | `409 MASTER_HAS_ACTIVE_VARIANTS` until every variant is archived |
 
-## 4. Production pipeline
+## 6. Production runs and jobs
 
-### `POST /content/:contentId/production-runs`
-Start a production run.
+| Endpoint | Behaviour |
+|---|---|
+| `GET /production-runs/:runId` | Run with its jobs and cost |
+| `POST /production-runs/:runId/cancel` | Stops queued work; a running call finishes and its result is discarded. A submitted video is recorded `outcome_unknown` (the provider may still charge) |
+| `GET /generation-jobs/:jobId` | Status, attempts, events, sanitized error, cost (`reportedUsd`, `estimatedUsd`, `unknownCalls`) |
+| `POST /generation-jobs/:jobId/recheck` | Immediate, free status read of a running video job |
 
-Request:
-```json
-{
-  "stages": ["research", "script", "storyboard"],
-  "options": {
-    "qualityTier": "balanced",
-    "maxBudgetMicros": 5000000
-  },
-  "idempotencyKey": "client-generated-unique-key"
-}
-```
+Runs are created by the generate endpoints below; every generate endpoint returns `202` with job
+IDs and never waits for the work. Clients poll the run or job.
 
-Response:
-```json
-{
-  "productionRunId": "uuid",
-  "status": "queued"
-}
-```
-
-### `GET /production-runs/:runId`
-Return overall run status, stage status, progress, and summary.
-
-### `POST /production-runs/:runId/cancel`
-Cancel pending work where cancellation is supported.
-
-### `POST /production-runs/:runId/resume` (implemented in M7c)
+### `POST /production-runs/:runId/resume`
 Editor. Body `{ acceptPossibleDoubleCharge?, acceptOverBudget?, acceptUnknownCost?,
 confirmedEstimateUsd? }`. Each failed or canceled job of the run is requested again for the same
 scope (text: the same stage of the item; scene jobs: those scenes, with the original count,
@@ -302,14 +282,8 @@ the old one. Skipped: `superseded` (a later job of the same stage and scope succ
 resumed only with `acceptPossibleDoubleCharge: true`). `202 { resumedFromRunId, run, skipped }`;
 `409 NOTHING_TO_RESUME` (skips in `error.current`) and every error of the underlying request
 (`402`/`409` budget, `409 ESTIMATE_CHANGED` for clips without `confirmedEstimateUsd`, ...).
-`ProductionRun` now carries `resumedFromRunId`.
 
-## 5. Script and storyboard
-
-### Implemented in M3
-
-Design: `docs/design/M3-design-review-package.md` §6–§10. Viewers read; generating, editing,
-approving, rejecting and canceling need editor (owner included); non-members get 404.
+## 7. Script and storyboard
 
 | Endpoint | Behaviour |
 |---|---|
@@ -322,30 +296,27 @@ approving, rejecting and canceling need editor (owner included); non-members get
 | `GET /content/:contentId/storyboards`, `GET /storyboards/:id` | Versions with `stale`, `isApproved`; detail includes scenes |
 | `PATCH /scenes/:sceneId` | Partial scene: **new** storyboard version with that scene changed (201); numbering and total duration (target ± max(1 s, 5 %)) re-validated |
 | `POST /storyboards/:id/approve`, `/reject` | One-time review; approval sets gate 2; a stale storyboard is refused |
-| `GET /production-runs/:runId`, `POST /production-runs/:runId/cancel` | Run with jobs and cost; cancel stops queued work (a running call finishes and its result is discarded) |
-| `GET /generation-jobs/:jobId` | Status, attempts, events, sanitized error, cost (`reportedUsd`, `estimatedUsd`, `unknownCalls`) |
 
-### Original sketch
+Storyboard jobs (template `storyboard.v2`) are given the routed clip model's lengths and the
+voice profile's narration pace; a scene with another length breaks the rule
+`scene_duration_allowed` ("10 s is not a clip length; use one of 4, 6, 8 s"), which the one repair
+call fixes or the job fails with `OUTPUT_INVALID`. Rule errors on edits (`422`) list each broken
+rule with the measured values in `details`.
 
-- `GET /content/:contentId/scripts`
-- `POST /content/:contentId/scripts/generate`
-- `PATCH /scripts/:scriptVersionId`
-- `POST /scripts/:scriptVersionId/approve`
-- `POST /scripts/:scriptVersionId/reject`
-- `POST /scripts/:scriptVersionId/storyboards/generate`
-- `GET /storyboards/:storyboardVersionId`
-- `PATCH /scenes/:sceneId`
-- `POST /storyboards/:storyboardVersionId/approve`
+Errors: `BRIEF_INVALID` (422, details list the errors), `NO_MODEL_ROUTE` (422),
+`GENERATION_IN_PROGRESS` (409, one active job per content item and kind), `INVALID_PIPELINE_STATE`
+(409), `SCRIPT_NOT_APPROVED` (409), `STALE_STORYBOARD` (409), `ARTIFACT_IMMUTABLE` (409),
+`NOT_CANCELABLE` (409).
 
-Script/storyboard generation must return schema-validated structured JSON, not unstructured prose only.
+## 8. Scene media
 
-## 6. Media generation
+Media endpoints work on a storyboard: one request plans every scene (or the listed ones), creates
+**one job per scene**, and reuses earlier results. Each has an `estimate` endpoint (free, writes
+nothing) and a `generate` endpoint.
 
-### Scene images (implemented in M4)
+### Images (keyframes)
 
-Design: `docs/design/M4-design-review-package.md` §5–§7. Schemas: `packages/contracts/src/images.ts`.
-The original per-scene sketch was replaced by storyboard-level endpoints: one request plans every
-scene (or the listed ones), creates **one job per scene**, and reuses earlier results.
+Schemas: `packages/contracts/src/images.ts`.
 
 | Endpoint | Viewer | Editor/Owner | Notes |
 |---|:-:|:-:|---|
@@ -390,11 +361,9 @@ the starting status). Canceling the run (`POST /production-runs/:runId/cancel`) 
 way. Image jobs appear in `GET /generation-jobs/:jobId` and `GET /production-runs/:runId` with
 `kind: image_generation`.
 
-### Clips, voice-overs and voice profiles (implemented in M5)
+### Clips, voice-overs and voice profiles
 
-Design: `docs/design/M5-design-review-package.md` §5–§11 (deviations §15). Schemas:
-`packages/contracts/src/media.ts`. Like images, these are storyboard-level batches with one job per
-scene; the original per-scene/per-content sketches are replaced.
+Schemas: `packages/contracts/src/media.ts`.
 
 | Endpoint | Viewer | Editor/Owner | Notes |
 |---|:-:|:-:|---|
@@ -411,7 +380,6 @@ scene; the original per-scene/per-content sketches are replaced.
 | `POST /projects/:projectId/voice-profiles` | 403 | 201 | `{ name, modelKey, voice, language, speed?, instructions? }`; the voice is checked against the model's voices |
 | `PATCH /voice-profiles/:voiceProfileId` | 403 | ✓ | Past jobs keep their snapshot |
 | `POST /voice-profiles/:voiceProfileId/archive` | 403 | ✓ | |
-| `PATCH /content/:contentId` | 403 | ✓ | + `voiceProfileId` (active profile of the same project, or `null`) |
 | `POST /assets/:assetId/approve`, `/reject` | 403 | ✓ | Now also clips (`video`) and `audio`; a selected clip/voice-over cannot be rejected (`409 SCENE_SELECTION_INVALID`) |
 
 Video request body (estimate and generate):
@@ -440,7 +408,7 @@ reservations use it). Plan actions: `generate`, `reuse_clip`,
 
 Errors: `409 STORYBOARD_NOT_APPROVED`, `409 ESTIMATE_CHANGED` (no or a lower confirmed total; the
 current plan is in `error.current`), `402 BUDGET_EXCEEDED` / `409 BUDGET_CONFIRMATION_REQUIRED`
-(budgets, §8; M7 replaced the M5 spend guard), `422 UNKNOWN_COST_NOT_ACCEPTED`, `409
+(budgets, §10), `422 UNKNOWN_COST_NOT_ACCEPTED`, `409
 VOICE_PROFILE_REQUIRED`, `409 CLIP_INVALID`, `409 VOICEOVER_INVALID`, `409 SCENE_SELECTION_INVALID`
 (AC016), `409 JOB_NOT_RECHECKABLE`, `409 GENERATION_IN_PROGRESS`, `422 NO_MODEL_ROUTE`, `422
 MODEL_LIMITS`, `422 REFERENCE_FILE_MISSING` (keyframe file), `503 STORAGE_NOT_CONFIGURED`.
@@ -454,11 +422,11 @@ provider has no cancel endpoint and may still charge.
 Content status: as for images (`generating_assets` while any scene media job is active, then
 `asset_review`).
 
-All generation endpoints return job IDs and initial status. Do not hold an HTTP request open while waiting for long-running generation.
+## 9. Assets and renders
 
-## 7. Assets and renders
+### Asset metadata
 
-Implemented in M1d (metadata only; decision D8). Schemas: `packages/contracts/src/assets.ts`.
+Schemas: `packages/contracts/src/assets.ts`.
 
 | Endpoint | Role | Notes |
 |---|---|---|
@@ -474,28 +442,28 @@ Registration rules: `storageKey` must start with `projects/<projectId>/` and con
 segments (`409 STORAGE_KEY_TAKEN` if already registered); `mimeType` must match `assetType`
 (e.g. `reference`/`image`: PNG, JPEG, WebP; `render`: MP4); `sizeBytes` ≤ 10 GiB;
 `checksumSha256` is 64 lowercase hex characters; `sourceType` is `upload`, `import` or `derived`
-(`generated` is reserved for provider jobs in M4); `derived` requires a `sourceAssetId` of the
+(`generated` is reserved for provider jobs); `derived` requires a `sourceAssetId` of the
 same project. File identity and lineage never change after registration.
 
-### Asset files (implemented in M4a)
+### Asset files
 
-Design: `docs/design/M4-design-review-package.md` §4, ADR-0006 (amended).
+Browsers never talk to storage; files go through these endpoints (ADR-0006).
 
 | Endpoint | Role | Notes |
 |---|---|---|
 | `POST /projects/:projectId/assets/upload?assetType=reference\|image&filename=&label=&contentItemId=` | editor | The **raw image is the request body** (`Content-Type: image/png\|jpeg\|webp`, ≤ 25 MB). The server detects the type from the bytes, reads dimensions, computes SHA-256, stores the file write-once at `projects/{projectId}/assets/{assetId}/{sha256}.{ext}` and returns `201` with the asset (`sourceType: upload`). |
-| `POST /projects/:projectId/assets/upload?assetType=audio&purpose=voiceover\|music&licenseNote=` | editor | M5a. The **raw audio file is the body** (MP3, WAV, M4A/AAC, ≤ 25 MB). Magic bytes and FFprobe decide the type; the measured duration is stored (`durationMs`), codec details in `metadata.audio`, `purpose` in `metadata.purpose`. `purpose` is required; `music` also needs `licenseNote` (`422 LICENSE_NOTE_REQUIRED`), stored as `sourceNote`. Without FFprobe: `503 MEDIA_TOOLS_MISSING`. |
-| `GET /assets/:assetId/content` | viewer | Streams the file with `ETag: "<sha256>"` (`If-None-Match` → `304`) and `Cache-Control: private, max-age=300`. M5a: `Accept-Ranges: bytes`; one byte range (`Range: bytes=a-b`, `a-`, `-n`) answers `206` with `Content-Range`; a range outside the file answers `416 RANGE_NOT_SATISFIABLE` with `Content-Range: bytes */size`. |
+| `POST /projects/:projectId/assets/upload?assetType=audio&purpose=voiceover\|music&licenseNote=` | editor | The **raw audio file is the body** (MP3, WAV, M4A/AAC, ≤ 25 MB). Magic bytes and FFprobe decide the type; the measured duration is stored (`durationMs`), codec details in `metadata.audio`, `purpose` in `metadata.purpose`. `purpose` is required; `music` also needs `licenseNote` (`422 LICENSE_NOTE_REQUIRED`), stored as `sourceNote`. Without FFprobe: `503 MEDIA_TOOLS_MISSING`. |
+| `GET /assets/:assetId/content` | viewer | Streams the file with `ETag: "<sha256>"` (`If-None-Match` → `304`) and `Cache-Control: private, max-age=300`, `Accept-Ranges: bytes`; one byte range (`Range: bytes=a-b`, `a-`, `-n`) answers `206` with `Content-Range`; a range outside the file answers `416 RANGE_NOT_SATISFIABLE` with `Content-Range: bytes */size`. |
 
 Errors: `415 UNSUPPORTED_MEDIA` (not PNG/JPEG/WebP by its bytes), `415 MEDIA_TYPE_MISMATCH`
 (`Content-Type` disagrees with the bytes), `413 MEDIA_TOO_LARGE` (file over the limit, or over
 8192 px per side / 40 MP), `422 MEDIA_INVALID` (empty or unreadable header), `404
-ASSET_CONTENT_MISSING` (a metadata-only asset registered before M4), `503 STORAGE_NOT_CONFIGURED`,
+ASSET_CONTENT_MISSING` (a metadata-only asset with no stored file), `503 STORAGE_NOT_CONFIGURED`,
 `503 STORAGE_UNAVAILABLE` (retryable).
 
-### Renders and export (implemented in M6)
+### Renders and export
 
-Design: `docs/design/M6-design-review-package.md` §4–§11 (deviations §16), ADR-0018. Schemas:
+ADR-0018. Schemas:
 `packages/contracts/src/renders.ts`. A render assembles the chosen clip and voice-over of every
 scene of the approved storyboard into one 1080×1920 H.264/AAC MP4 with captions (burned in and
 SRT) and optional ducked music, normalised to −14 LUFS; the worker renders it locally with FFmpeg
@@ -525,11 +493,11 @@ Render job errors: `REFERENCE_MISSING`, `RENDER_INPUT_INVALID`, `RENDER_QC_FAILE
 kept on the render), `MEDIA_TOOLS_MISSING`. Canceling the run (`POST /production-runs/:runId/cancel`)
 returns the item to the status the render started from.
 
-## 8. Cost and model registry
+## 10. Models, budgets, costs and operations
 
-### Implemented in M2 (read-only registry)
+### Model registry (read-only)
 
-Design: `docs/design/M2-design-review-package.md` §8.2. Global (not project-scoped) data: any
+Global (not project-scoped) data: any
 authenticated user may read it (401 otherwise); nothing here is written through the API. Operators
 edit the registry with `pnpm ai:registry` (`docs/LOCAL_DEVELOPMENT.md`). Credentials are never
 returned; money is a decimal string in USD (`unitPriceUsd`), never a JSON number (ADR-0012).
@@ -537,13 +505,10 @@ returned; money is a decimal string in USD (`unitPriceUsd`), never a JSON number
 | Endpoint | Response |
 |---|---|
 | `GET /ai/providers` | `{ data: AiProvider[] }`: `key`, `name`, `kind` (gateway/direct/mock), `status`, `configured` (credentials present in this deployment), terms and data-policy links |
-| `GET /ai/models` | Paginated `AiModel[]`. Filters `capability`, `status`, `qualityTier`, `providerKey`. Each model lists its capabilities, supported parameters, modalities, limits, quality tier, status, free-variant flag and `activePrices` (one per metric and prompt-size tier; a metric with no price has unknown cost, never zero), and `voices` (TTS models: the provider's voice ids, used by the voice-profile picker; `null` otherwise, M8.5) |
+| `GET /ai/models` | Paginated `AiModel[]`. Filters `capability`, `status`, `qualityTier`, `providerKey`. Each model lists its capabilities, supported parameters, modalities, limits, quality tier, status, free-variant flag and `activePrices` (one per metric and prompt-size tier; a metric with no price has unknown cost, never zero), and `voices` (TTS models: the provider's voice ids, used by the voice-profile picker; `null` otherwise) |
 | `GET /ai/models/:modelId` | `AiModel` plus `priceHistory` (append-only price rows with source, URL, effective and captured times) |
 
-No endpoint calls a model in M2 (decision P7): the first caller is the M3 script job, through
-`LlmService` (`apps/api/src/ai/llm.service.ts`).
-
-### Budgets (implemented in M7a)
+### Budgets
 
 | Endpoint | Viewer | Editor | Owner | Notes |
 |---|---|---|---|---|
@@ -562,7 +527,7 @@ then item, then month; a hard breach always wins over a soft one.
 
 Both carry `error.current = { scope: request|item|month, mode, limitUsd, spentUsd, requestedUsd }`.
 
-### Operations and costs (implemented in M7c)
+### Costs and operations
 
 | Endpoint | Caller | Notes |
 |---|---|---|
@@ -573,30 +538,7 @@ Both carry `error.current = { scope: request|item|month, mode, limitUsd, spentUs
 
 Circuits are changed only by operators: `pnpm ai:registry circuit list|open|close <providerKey>`.
 
-### Planned
-
-- `GET /projects/:projectId/usage`
-- `GET /content/:contentId/costs`
-- `GET /generation-jobs/:jobId`
-- `GET /providers`
-- `GET /models`
-- Admin-only provider/model configuration endpoints.
-
-Do not expose credentials in provider/model responses.
-
-## 9. Job status events
-
-Initial MVP may poll `GET /production-runs/:runId`. Later add SSE or WebSocket events:
-- `run.started`
-- `stage.started`
-- `job.waiting_provider`
-- `job.progress`
-- `job.succeeded`
-- `job.failed`
-- `approval.required`
-- `render.completed`
-
-## 10. Error format
+## 11. Errors
 
 ```json
 {
@@ -611,13 +553,13 @@ Initial MVP may poll `GET /production-runs/:runId`. Later add SSE or WebSocket e
 
 Never return raw provider secrets, stack traces, or internal credentials.
 
-Implemented in M0 by `apps/api/src/common/api-exception.filter.ts`. Unknown errors become
+Produced by `apps/api/src/common/api-exception.filter.ts`. Unknown errors become
 `500 INTERNAL_ERROR` with a generic message. `retryable` is `true` for 429/502/503/504. Error codes
 are listed in `packages/contracts/src/errors.ts`. Common HTTP statuses have a dedicated code (for
 example `412 PRECONDITION_FAILED`, `413 PAYLOAD_TOO_LARGE`, `428 PRECONDITION_REQUIRED`); any other
 4xx uses `CLIENT_ERROR`, and a domain exception may set its own `code` (e.g. `BUDGET_EXCEEDED`).
 
-Since M1, a domain error may also override `retryable`, and `400 VALIDATION_FAILED` adds
+A domain error may also override `retryable`, and `400 VALIDATION_FAILED` adds
 `details`, one entry per problem, prefixed by the request part:
 
 ```json
@@ -648,11 +590,13 @@ pre-check every rule, so these are a backstop for races and direct SQL:
 | `AC007` | `409 LAST_OWNER` |
 | `AC008` | `409 ASSET_IN_USE` |
 | `AC010` | `409 ASSET_ARCHIVED` |
-| `AC012` | `409 ARTIFACT_IMMUTABLE` (M3: a reviewed version cannot change; edits create new versions) |
-| `AC013` | `409 STALE_STORYBOARD` (M3: pointer/staleness rules) |
-| `AC014` | `409 CONTENT_MASTER_IMMUTABLE` (R0: a content item never moves to another master) |
-| `AC015` | `409 KEYFRAME_INVALID` (M4: keyframe rules) |
-| `AC011` | `409 LEDGER_IMMUTABLE` (M2: price/usage rows append-only; an invocation's outcome is recorded once) |
+| `AC012` | `409 ARTIFACT_IMMUTABLE` |
+| `AC013` | `409 STALE_STORYBOARD` |
+| `AC014` | `409 CONTENT_MASTER_IMMUTABLE` |
+| `AC011` | `409 LEDGER_IMMUTABLE` |
+| `AC015` | `409 KEYFRAME_INVALID` |
+| `AC016` | `409 SCENE_SELECTION_INVALID` |
+| `AC017` | `409 RENDER_NOT_APPROVED` |
 | `40001` / `40P01` | `409 CONCURRENT_MODIFICATION`, `retryable: true` (a `40001` is first retried once internally; a `40P01` is never retried, see below) |
 
 Transaction retry policy (`apps/api/src/infrastructure/transaction-runner.ts`). Every attempt runs
@@ -666,29 +610,10 @@ mapper above:
 | `AC001`–`AC010` | No retry |
 | Other errors | No retry |
 
-M3 error codes: `BRIEF_INVALID` (422, details list the errors), `NO_MODEL_ROUTE` (422),
-`GENERATION_IN_PROGRESS` (409, one active job per content item and kind), `INVALID_PIPELINE_STATE`
-(409), `SCRIPT_NOT_APPROVED` (409), `STALE_STORYBOARD` (409), `ARTIFACT_IMMUTABLE` (409),
-`NOT_CANCELABLE` (409).
+## 12. Conventions
 
-Storyboard jobs (M8.5, template `storyboard.v2`) are given the routed clip model's lengths and the
-voice profile's narration pace; a generated scene with another length breaks the rule
-`scene_duration_allowed` ("10 s is not a clip length; use one of 4, 6, 8 s"), which the one repair
-call fixes or the job fails with `OUTPUT_INVALID`. Rule errors on edits (`422`) list each broken
-rule with the measured values in `details`, and the web shows them.
-
-## 11. API conventions
-
-- Use UUID identifiers.
-- Use cursor or page-based pagination consistently.
-- Validate request payloads.
-- Use idempotency keys for expensive operations.
-- Return `202 Accepted` for queued generation operations.
-- Document rate limits and permissions.
-- Version breaking API changes under a new path.
-
-Implemented conventions (M1):
-
+- UUID identifiers; breaking changes go under a new version path.
+- Queued work returns `202 Accepted`; generate endpoints accept an `Idempotency-Key` header.
 - **Contracts**: every route declares `@Endpoint({ summary, params, query, body, responses, errors })`
   with Zod schemas (`apps/api/src/common/http/endpoint.ts`). The same schemas validate requests
   (all declared parts at once, after authentication) and generate the OpenAPI document. Request
@@ -705,6 +630,6 @@ Implemented conventions (M1):
   malformed value returns `412 PRECONDITION_FAILED`. With `REQUIRE_IF_MATCH=true`, a missing
   header returns `428 PRECONDITION_REQUIRED`.
 - **Security headers**: `helmet` defaults on every response; no `X-Powered-By`.
-- **Web pages (M8.5)**: every page from the web app carries a `Content-Security-Policy` with a
+- **Web pages**: every page from the web app carries a `Content-Security-Policy` with a
   per-request script nonce (`script-src 'self' 'nonce-…' 'strict-dynamic'`, `default-src 'self'`,
   `frame-ancestors 'none'`); `/api/v1/*` responses are the API's own (helmet).

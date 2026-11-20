@@ -1,22 +1,22 @@
 # Local Development
 
-Exact commands to run the platform locally. Every command runs from the repository root.
+Every command runs from the repository root.
 
-## Prerequisites
+## 1. Prerequisites
 
-| Tool                | Version                                     | Check                            |
-| ------------------- | ------------------------------------------- | -------------------------------- |
-| Node.js             | ≥ 22.12 (see `.nvmrc`)                      | `node -v`                        |
-| pnpm                | 10.x (pinned via `packageManager`: 10.28.0) | `pnpm -v` (or `corepack enable`) |
-| Docker + Compose v2 | recent                                      | `docker compose version`         |
-| FFmpeg (+ FFprobe)  | ≥ 5.1, with libx264 and libmp3lame (M5)     | `ffprobe -version`               |
+| Tool | Version | Check |
+|---|---|---|
+| Node.js | ≥ 22.12 (`.nvmrc`) | `node -v` |
+| pnpm | 10.x (pinned: 10.28.0) | `pnpm -v` (or `corepack enable`) |
+| Docker + Compose v2 | recent | `docker compose version` |
+| FFmpeg + FFprobe | ≥ 5.1 with libx264 and libmp3lame | `ffprobe -version` |
 
-FFmpeg validates every audio and video file (M5) and the mock video/TTS providers use it to
-make real test files. Install it from your package manager (`apt-get install ffmpeg`,
-`brew install ffmpeg`). Without it, audio uploads and video/audio generation answer
-`503 MEDIA_TOOLS_MISSING`; set `FFPROBE_PATH`/`FFMPEG_PATH` if the binaries are not on `PATH`.
+FFmpeg validates audio and video, renders the final video, and lets the mock providers make real
+test files. Install it with your package manager (`apt-get install ffmpeg`, `brew install ffmpeg`).
+Without it, media features answer `503 MEDIA_TOOLS_MISSING`; set `FFPROBE_PATH`/`FFMPEG_PATH` if
+the binaries are not on `PATH`.
 
-## First-time setup
+## 2. First-time setup
 
 ```bash
 cp .env.example .env
@@ -26,217 +26,124 @@ cp .env.example .env
 pnpm install
 ```
 
+Start PostgreSQL 17, Redis 7.4 and SeaweedFS 4.54 (S3 storage) and wait until healthy. Ports are
+bound to `127.0.0.1` only:
+
 ```bash
 pnpm infra:up
 ```
 
-`pnpm infra:up` starts PostgreSQL 17, Redis 7.4 and SeaweedFS 4.54 (S3-compatible object storage
-for asset files, M4a) from `infra/compose/docker-compose.yml` and waits until all are healthy. The
-ports are bound to `127.0.0.1` only (SeaweedFS S3: 8333).
+Create the database roles, apply migrations and grant access (idempotent; run again after pulling
+new migrations; see `docs/DATABASE.md` §8):
 
 ```bash
 pnpm db:setup
 ```
 
-`pnpm db:setup` creates the database roles `acf_migrator` (schema owner) and `acf_app` (runtime,
-DML only) from the URLs in `.env`, makes `acf_migrator` the owner of the `acf` and `acf_shadow`
-databases, applies the migrations as `acf_migrator`, and grants `acf_app` access. It is
-idempotent: run it again after pulling new migrations. See `docs/DATABASE.md` §8.
-
-Create the asset bucket (`S3_BUCKET`) with the storage admin key from `.env`. Idempotent:
+Create the asset bucket (idempotent):
 
 ```bash
 pnpm storage:setup
 ```
 
+Check the environment:
+
 ```bash
 pnpm env:check
 ```
 
-For a ready-made demo workspace (development only), seed it. This creates
-`owner@demo.acf.test`, `editor@demo.acf.test` and `viewer@demo.acf.test` with random passwords
-(printed once), and a "Demo Studio" project with a channel, a content brief, a reference asset,
-and a character and an environment that each have an approved master version. It does nothing if
-the demo users already exist, and refuses to run with `NODE_ENV=production`:
+Seed a demo workspace (development only). It creates `owner@`, `editor@` and `viewer@demo.acf.test`
+with random passwords (printed once), a "Demo Studio" project with a channel, a brief, a
+reference asset, a character and an environment, and the AI registry with free mock models:
 
 ```bash
 pnpm db:seed
 ```
 
-Then sign in at http://localhost:3000/login.
-
-Or create your own account (there is no sign-up page; decision D6). The CLI asks for the password
-without echoing it (or reads it from a pipe) and never accepts it as an argument:
+Or create your own account (no sign-up page). The password is read from the terminal, never from
+arguments:
 
 ```bash
 pnpm user:create --email you@example.com --name "Your Name"
 ```
 
-| Command                                    | What it does                                                 |
-| ------------------------------------------ | ------------------------------------------------------------ |
-| `pnpm user:create --email … --name …`      | Creates an active user (password ≥ 12 characters)            |
-| `pnpm user:set-password --email …`         | Sets a new password and revokes all of the user's sessions   |
-| `pnpm user:disable --email …`              | Disables the account and revokes all of its sessions         |
+Other user commands: `pnpm user:set-password --email …` (revokes all sessions) and
+`pnpm user:disable --email …`.
 
-Authentication settings live in `.env` (`SESSION_SECRETS`, `CSRF_SECRET`,
-`SESSION_COOKIE_SECURE`, `TRUST_PROXY`, `WEB_ORIGINS`; see `.env.example`). Generate each secret
-with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`.
-Production requires `SESSION_COOKIE_SECURE=true` and a `TRUST_PROXY` that names the Next.js hop;
-the TLS proxy in front of Next.js must overwrite `X-Forwarded-Proto`, and the API must not be
-publicly reachable.
+Secrets in `.env` (`SESSION_SECRETS`, `CSRF_SECRET`; see `.env.example`) can be generated with:
 
-## Run the apps
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
+```
 
-To run the API and web together (this builds the shared packages first):
+## 3. Run
+
+API and web together (builds the shared packages first):
 
 ```bash
 pnpm dev
 ```
 
-Or run them in separate terminals:
-
-```bash
-pnpm dev:api
-```
-
-```bash
-pnpm dev:web
-```
-
-Both apps read the repository-root `.env` automatically. Variables already set in the shell take
-precedence. The API validates its environment at startup and exits with a list of the invalid
-variable names.
-
-| URL                                       | What                                                        |
-| ----------------------------------------- | ----------------------------------------------------------- |
-| http://localhost:3000                     | Web shell                                                   |
-| http://localhost:3000/status              | System status page (server-side call to API readiness)      |
-| http://localhost:4000/api/v1/health       | API liveness                                                |
-| http://localhost:4000/api/v1/health/ready | API readiness (PostgreSQL + Redis); `503` if either is down |
-
-To check by hand:
-
-```bash
-curl -s localhost:4000/api/v1/health/ready
-```
-
-## Quality checks
-
-| Command                             | What it does                                                           |
-| ----------------------------------- | ---------------------------------------------------------------------- |
-| `pnpm lint`                         | ESLint (type-aware), zero warnings allowed                             |
-| `pnpm format` / `pnpm format:check` | Prettier write / check                                                 |
-| `pnpm typecheck`                    | Builds shared packages, then `tsc --noEmit` in every workspace         |
-| `pnpm test`                         | Unit and HTTP tests with mocked dependencies (no Docker, no network)   |
-| `pnpm test:integration`             | Integration tests against real PostgreSQL and Redis (requires `pnpm infra:up` and `pnpm db:setup`) |
-| `pnpm test:e2e`                     | Playwright in Chromium against the built API, worker and web (requires `pnpm build`, PostgreSQL, Redis, SeaweedFS) |
-| `pnpm test:coverage`                | Unit tests with V8 coverage                                            |
-| `pnpm build`                        | Builds all packages and apps (`next build`, `nest build`)              |
-| `pnpm check`                        | format:check + lint + typecheck + test + build (run before pushing)    |
-
-## Database (Prisma 7)
-
-| Command                  | What it does                                                                                   |
-| ------------------------ | ---------------------------------------------------------------------------------------------- |
-| `pnpm db:setup`          | Roles, databases and grants, then `prisma migrate deploy`, then grants again (idempotent)      |
-| `pnpm db:bootstrap`      | Roles, databases and grants only                                                               |
-| `pnpm db:generate`       | Generates the Prisma client into `packages/database/src/generated` (git-ignored)               |
-| `pnpm db:validate`       | Validates `packages/database/prisma/schema.prisma`                                             |
-| `pnpm db:migrate`        | `prisma migrate dev`: creates and applies a migration (uses the `acf_shadow` database)         |
-| `pnpm db:migrate:deploy` | Applies pending migrations without creating new ones                                           |
-| `pnpm db:studio`         | Prisma Studio                                                                                  |
-
-Connection URLs (all in the repository-root `.env`):
-
-| Variable                 | Role           | Used by                                                       |
-| ------------------------ | -------------- | ------------------------------------------------------------- |
-| `DATABASE_URL`           | `acf_app`      | The API (DML only)                                            |
-| `DATABASE_MIGRATION_URL` | `acf_migrator` | The Prisma CLI (`packages/database/prisma.config.ts`)         |
-| `DATABASE_SHADOW_URL`    | `acf_migrator` | `prisma migrate dev` shadow database                          |
-| `DATABASE_ADMIN_URL`     | superuser      | `pnpm db:setup` and the integration-test setup only           |
-
-The M1 migration ends with hand-written SQL (CHECK constraints, functions and triggers) that
-Prisma does not model. When you create a migration that touches a guarded table, keep the
-triggers intact; the `integration:database` tests fail if any trigger or CHECK is missing or if
-the database drifts from `schema.prisma`.
-
-### Object storage (M4a)
-
-Asset files (uploaded references, generated images) live in S3-compatible storage — SeaweedFS
-locally, in CI and on staging (ADR-0006, amended). The API and worker use `S3_ENDPOINT`,
-`S3_BUCKET`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` (all or none; without them uploads and
-image generation answer `503 STORAGE_NOT_CONFIGURED`). `STORAGE_ADMIN_*` is used only by
-`pnpm storage:setup` and the integration-test setup. Browsers never talk to storage: uploads are
-`POST /api/v1/projects/:projectId/assets/upload` (raw image body, ≤ 25 MB) and reads are
-`GET /api/v1/assets/:assetId/content`. `pnpm test:integration` includes `integration:storage`
-(bucket `acf-test-storage`); the API tests use `acf-test-api`.
-
-### Worker (M3)
-
-Generation jobs (scripts, storyboards) run in a separate process, `apps/worker` (ADR-0013):
+The worker, needed for any generation or rendering:
 
 ```bash
 pnpm dev:worker
 ```
 
-It needs `DATABASE_URL`, `REDIS_URL` and, for real models, `OPENROUTER_API_KEY` (validated by
-`packages/config/src/worker-env.ts`; `WORKER_CONCURRENCY`, `WORKER_RECONCILE_INTERVAL_MS` and
-`QUEUE_PREFIX` are optional). PostgreSQL is the source of truth: if Redis was down when a job was
-created, the worker's reconciler enqueues it within a minute. `pnpm test:integration` includes
-`integration:worker` (its own `acf_test_worker` database and a unique Redis key prefix).
+Or each on its own: `pnpm dev:api`, `pnpm dev:web`. All apps read the root `.env`; shell
+variables take precedence. Each app validates its environment at startup and lists invalid
+variable names.
 
-### AI registry and providers (M2)
+| URL | What |
+|---|---|
+| http://localhost:3000 | Content Studio (sign in at `/login`) |
+| http://localhost:3000/status | System status |
+| http://localhost:4000/api/v1/health | API liveness |
+| http://localhost:4000/api/v1/health/ready | API readiness (PostgreSQL + Redis); `503` if either is down |
+| http://localhost:4000/api/v1/openapi.json | OpenAPI document (outside production) |
 
-`pnpm db:seed` also seeds the AI registry: the `openrouter` provider (enabled only if
-`OPENROUTER_API_KEY` is set when it is first seeded), three OpenRouter models with the
-2026-11-17 catalog prices (all **disabled**: none is benchmarked or terms-reviewed), and a
-`mock` provider with a zero-priced `mock/echo` model for development.
+Production-style run after `pnpm build`: `pnpm start:api`, `pnpm start:web`, `pnpm start:worker`.
 
-`OPENROUTER_API_KEY` is optional; without it the provider reports `configured: false` and is
-never called. Tests never need it and cannot reach `openrouter.ai` (network guard in
-`test-support/network-guard.ts`).
+## 4. Quality checks
 
 | Command | What it does |
 |---|---|
-| `pnpm ai:registry provider list` | Providers with kind and status |
-| `pnpm ai:registry provider set-status <key> <enabled\|disabled\|degraded>` | Change a provider's status |
-| `pnpm ai:registry model list` | Models with status, tier and active prices |
-| `pnpm ai:registry model import-openrouter <modelKey>... [--tier <tier>] [--apply]` | Reads OpenRouter's public catalog and prints a plan; with `--apply`, creates new models **disabled** (a tier is required) and appends a price row only for a changed published price |
-| `pnpm ai:registry model set-status <modelKey> <status>` | Enable/disable a model |
-| `pnpm ai:registry model import-openrouter-images <modelKey>... [--tier <tier>] [--endpoint <slug>] [--apply]` | M4: reads the public image endpoint records and prints a plan (limits: `n`, references, aspect ratios, resolutions, seed; per-image/megapixel/token prices with resolution tiers); with `--apply`, creates image models **disabled** |
-| `pnpm ai:registry price add <modelKey> <metric> <usdPerUnit> --source <source> --url <url>` | Append a price row (rows are never edited) |
-| `pnpm ai:registry route list` / `route set <script_generation\|storyboard_generation\|image_generation> <modelKey> [--provider <key>]` | Which model each generation task uses (M3, M4); `pnpm db:seed` routes the text tasks to `mock/echo` and image generation to `mock/solid-image` (free, offline) |
-| `pnpm ai:registry invocations mark-abandoned` | Marks invocations stuck in `started` past every deadline as `outcome_unknown` (never re-sent) |
-| `ACF_PAID_SMOKE=1 pnpm ai:registry smoke <modelKey> --project <slug> --max-cost-usd <usd>` | **One real, paid call.** Refused unless enabled, a key is set, input and output prices are known, and the worst case (fixed tiny prompt, 16 output tokens) is within the cap. Prints reported vs estimated cost to check assumptions A1–A3 |
+| `pnpm check` | format:check + lint + typecheck + test + build (run before pushing) |
+| `pnpm lint` | ESLint (type-aware), zero warnings |
+| `pnpm format` / `format:check` | Prettier |
+| `pnpm typecheck` | `tsc --noEmit` in every workspace |
+| `pnpm test` | Unit, contract and HTTP tests (no Docker, no network) |
+| `pnpm test:coverage` | Unit tests with coverage |
+| `pnpm test:integration` | Against real PostgreSQL, Redis and SeaweedFS (needs `infra:up` and `db:setup`) |
+| `pnpm test:drills` | Backup/restore drills only |
+| `pnpm test:e2e` | Playwright against built apps (needs `pnpm build` and the infra) |
+| `pnpm media:selftest` | Renders a short synthetic video and runs QC (no network, no cost) |
+| `pnpm build` | Builds all packages and apps |
 
-| `ACF_PAID_SMOKE=1 pnpm ai:registry smoke-image <modelKey> --project <slug> --max-cost-usd <usd> [--count 1-10] [--resolution 2K] [--out dir]` | **Real, paid image calls** (M4 benchmark): a fixed 9:16 product prompt, refused unless the per-image price is known and `count × price × 2` is within the cap. Saves each image to `--out` (default `./smoke-images`) and prints size, latency and reported vs estimated cost. Benchmark: run it with `--count 10` per candidate and score the images |
-| `pnpm ai:registry model import-openrouter-videos <modelKey>... [--tier <tier>] [--apply]` | M5: plans (dry run) or imports video models from the public catalog `GET /videos/models`: constraints (durations, resolutions, ratios, frame inputs, audio, seed) and per-second prices by resolution and audio (`output_video_seconds`, variants such as `720p-silent`; cents converted exactly). Token-priced and special SKUs are listed as warnings (estimates unknown). New models start **disabled** |
-| `pnpm ai:registry model import-openrouter-tts <modelKey>... [--tier <tier>] [--apply]` | M5: same for TTS models (`GET /models?output_modalities=speech`): voices, MP3 or PCM-only, `input_characters` prices (token-priced models keep token prices; estimates unknown) |
-| `ACF_PAID_SMOKE=1 pnpm ai:registry smoke-video <modelKey> --project <slug> --max-cost-usd <usd> [--frame img] [--duration s] [--resolution 720p] [--count 1-10] [--out dir]` | **Real, paid video jobs** (M5 benchmark, cap USD 15 in total): a fixed 9:16 prompt, optionally from a first-frame image; refused unless the per-second price is known and `count × estimate × 2` is within the cap. Submits once, polls (15 s → 60 s, 20 min limit), downloads, validates with FFprobe, saves to `--out` (default `./smoke-videos`) and records reported vs estimated cost |
-| `ACF_PAID_SMOKE=1 pnpm ai:registry smoke-tts <modelKey> --voice <id> --project <slug> --max-cost-usd <usd> [--text "…"] [--count 1-10] [--out dir]` | **Real, paid TTS calls** (M5 benchmark, cap USD 2): a fixed Vietnamese + English sentence by default, ZDR required; saves MP3/WAV and records the reported cost |
+Tests never call real providers: `test-support/network-guard.ts` blocks outside hosts.
 
-Behind an HTTPS proxy, Node's built-in `fetch` (catalog import, smoke test) ignores
-`HTTPS_PROXY` unless `NODE_USE_ENV_PROXY=1` is set (and `NODE_EXTRA_CA_CERTS` for a custom CA);
-without it the import reports that the catalog could not be reached.
+### Integration tests
 
-Before enabling a model for real work: review its commercial terms, run the smoke test,
-benchmark it (`docs/AI_PROVIDER_STRATEGY.md` §9), then `model set-status … enabled`.
+Each project builds its own disposable database from the migrations
+(`acf_test`, `acf_test_api`, `acf_test_worker`, …) and its own bucket and queue prefix:
 
-### End-to-end tests (Playwright)
+- `integration:database`: every constraint and trigger, lock-order concurrency (any deadlock
+  fails), schema drift and `acf_app` privilege limits.
+- `integration:api`: the real API on an ephemeral port (sessions, CSRF, permissions, generation,
+  budgets).
+- `integration:worker`, `integration:storage`: jobs end to end with real Redis and SeaweedFS.
 
-`pnpm test:e2e` runs `apps/web/e2e` in Chromium. Its global setup recreates a disposable
-`acf_test_e2e` database from the migrations and seeds it with the real seed CLI; Playwright then
-starts the production builds of the API (port 4100), the worker and web (port 3100), so they do
-not clash with `pnpm dev`. The API and worker run through E2E entry points
-(`apps/api/test/e2e/api-server.ts`, `apps/worker/test/e2e/worker-server.ts`, run by Node's type
-stripping) that register a **fixture LLM** as the `mock` provider: schema-valid scripts and
-storyboards, no network, no cost. Both use the queue prefix `acf-e2e`. Playwright starts web
-servers before global setup, so the worker waits for a marker file that global setup writes once
-the database is seeded (`apps/web/e2e/env.ts`).
+Run one project:
 
-Specs: `auth.spec.ts` (login, logout, sessions) and `pipeline.spec.ts` (editor: generate script →
-edit → approve → generate storyboard → edit scene → approve; viewer: no generate, edit or review
-controls). Build first, and install the browser once:
+```bash
+pnpm build:packages && pnpm vitest run --project integration:database
+```
+
+### End-to-end tests
+
+`pnpm test:e2e` recreates an `acf_test_e2e` database, seeds it, and starts the production builds of
+the API (port 4100), worker and web (port 3100) with **fixture models** (no network, no cost) and
+queue prefix `acf-e2e`. Specs are in `apps/web/e2e/`. Install the browser once:
 
 ```bash
 pnpm build
@@ -250,59 +157,99 @@ pnpm --filter @acf/web exec playwright install chromium
 pnpm test:e2e
 ```
 
-### Database integration tests
+## 5. Database (Prisma 7)
 
-`pnpm test:integration` includes the `integration:database` project. Its global setup drops and
-recreates a disposable `acf_test` database, runs `prisma migrate deploy` as `acf_migrator`, and the
-tests connect as `acf_app`:
+| Command | What it does |
+|---|---|
+| `pnpm db:setup` | Roles, databases, grants, `prisma migrate deploy` (idempotent) |
+| `pnpm db:bootstrap` | Roles, databases and grants only |
+| `pnpm db:generate` | Generates the Prisma client (`packages/database/src/generated`, git-ignored) |
+| `pnpm db:validate` | Validates `schema.prisma` |
+| `pnpm db:migrate` | `prisma migrate dev`: creates and applies a migration (uses `acf_shadow`) |
+| `pnpm db:migrate:deploy` | Applies pending migrations |
+| `pnpm db:studio` | Prisma Studio |
 
-- `direct-sql`: every constraint and trigger rejects forbidden direct SQL with the exact SQLSTATE.
-- `concurrency`: a deterministic two-session lock-boundary matrix (approval vs archive, owner
-  changes, out-of-order and double approvals, session `set()` vs logout). Any deadlock (`40P01`)
-  fails the test.
-- `schema-objects`: trigger/CHECK presence, Prisma drift, and the `acf_app` privilege limits.
-- `prisma-errors`: how Prisma surfaces the integrity errors (`databaseErrorInfo`).
+| Variable | Role | Used by |
+|---|---|---|
+| `DATABASE_URL` | `acf_app` | API and worker (DML only) |
+| `DATABASE_MIGRATION_URL` | `acf_migrator` | Prisma CLI, seed |
+| `DATABASE_SHADOW_URL` | `acf_migrator` | `prisma migrate dev` shadow database |
+| `DATABASE_ADMIN_URL` | superuser | `pnpm db:setup` and test setup only |
 
-The `integration:api` project builds its own disposable `acf_test_api` database the same way
-and runs the real API on an ephemeral port: the session suite (expiry, fixation, CSRF, logout
-races R1–R8), login/Origin/secure-cookie/throttling behaviour, and the user CLI service.
+Migrations end with hand-written SQL (CHECKs, functions, triggers). Keep the triggers intact when
+you change a guarded table; `integration:database` fails if one is missing (`docs/DATABASE.md` §5).
 
-To run only these:
+## 6. Object storage
 
-```bash
-pnpm build:packages && pnpm vitest run --project integration:database
-```
+Files live in SeaweedFS locally, in CI and on staging (ADR-0006). The API and worker need
+`S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` (all or none; without
+them uploads and generation answer `503 STORAGE_NOT_CONFIGURED`). `STORAGE_ADMIN_*` is used only by
+`pnpm storage:setup` and test setup.
 
-## Infrastructure lifecycle
+## 7. Worker
 
-| Command            | What it does                                        |
-| ------------------ | --------------------------------------------------- |
-| `pnpm infra:up`    | Start PostgreSQL and Redis and wait until healthy   |
-| `pnpm infra:down`  | Stop the containers and keep the data volumes       |
+`apps/worker` needs `DATABASE_URL`, `REDIS_URL`, the S3 variables and, for real models,
+`OPENROUTER_API_KEY`. Optional: `WORKER_CONCURRENCY`, `WORKER_RECONCILE_INTERVAL_MS`,
+`QUEUE_PREFIX`. If Redis was down when a job was created, the reconciler enqueues it within a
+minute.
+
+## 8. AI registry
+
+`pnpm db:seed` seeds the `openrouter` provider (enabled only if `OPENROUTER_API_KEY` is set at
+seed time), benchmark candidate models (all **disabled**), and the `mock` provider with free
+models routed for every task: `mock/echo`, `mock/solid-image`, `mock/still-video`,
+`mock/tone-tts`. Without a key, OpenRouter reports `configured: false` and is never called.
+
+Operator CLI (`pnpm ai:registry …`):
+
+| Command | What it does |
+|---|---|
+| `provider list` · `provider set-status <key> <enabled\|disabled\|degraded>` | Providers |
+| `model list` · `model set-status <modelKey> <status>` | Models with status, tier and active prices |
+| `model set-schema-mode <modelKey> <full\|basic>` | `basic` sends the JSON schema without value constraints (output is still fully validated) |
+| `model import-openrouter <modelKey>… [--tier <tier>] [--apply]` | Plan (dry run) or import LLMs from OpenRouter's public catalog; new models start disabled |
+| `model import-openrouter-images\|-videos\|-tts <modelKey>… [--tier] [--apply]` | Same for image, video and TTS models, with their limits and prices |
+| `price add <modelKey> <metric> <usdPerUnit> --source <s> --url <url>` | Append a price row (rows are never edited) |
+| `route list` · `route set <task> <modelKey> [--provider <key>]` | Routed model per task (`script_generation`, `storyboard_generation`, `image_generation`, `video_generation`) |
+| `circuit list\|open\|close <providerKey>` | Provider circuit breakers |
+| `invocations mark-abandoned` | Marks calls stuck in `started` past every deadline as `outcome_unknown` (never re-sent) |
+
+Paid smoke tests make **real, paid calls**. Each needs `ACF_PAID_SMOKE=1`, an enabled model with a
+known price, `--project <slug>` and `--max-cost-usd <usd>`, and refuses if the worst case exceeds
+the cap. They print reported vs estimated cost:
+
+| Command | Calls |
+|---|---|
+| `smoke <modelKey>` | One tiny LLM call |
+| `smoke-image <modelKey> [--count 1-10] [--resolution 2K] [--out dir]` | Fixed 9:16 image prompt; saves images |
+| `smoke-video <modelKey> [--frame img] [--duration s] [--resolution 720p] [--count] [--out dir]` | Submit, poll (20 min limit), download, FFprobe; saves clips |
+| `smoke-tts <modelKey> --voice <id> [--text "…"] [--count] [--out dir]` | ZDR required; saves MP3/WAV |
+
+Before enabling a model for real work: review its terms, run the smoke test, benchmark it
+(`docs/AI_PROVIDER_STRATEGY.md` §7), then `model set-status … enabled` and `route set`.
+
+Behind an HTTPS proxy, Node's `fetch` (catalog import, smoke tests) needs `NODE_USE_ENV_PROXY=1`
+(and `NODE_EXTRA_CA_CERTS` for a custom CA).
+
+## 9. Infrastructure
+
+| Command | What it does |
+|---|---|
+| `pnpm infra:up` | Start PostgreSQL, Redis and SeaweedFS and wait until healthy |
+| `pnpm infra:down` | Stop the containers, keep the data |
 | `pnpm infra:reset` | Stop the containers and **delete** the data volumes |
-| `pnpm infra:logs`  | Follow the container logs                           |
+| `pnpm infra:logs` | Follow the container logs |
 
-## Production-style run (after `pnpm build`)
+## 10. Troubleshooting
 
-```bash
-pnpm start:api
-```
-
-```bash
-pnpm start:web
-```
-
-## Troubleshooting
-
-- **`Invalid API environment configuration`**: compare `.env` with `.env.example`. The message
-  lists each invalid variable by name.
-- **Readiness `503` with `unreachable`**: run `pnpm infra:up` and check `docker compose ps`.
-- **Port already in use**: change `POSTGRES_PORT`, `REDIS_PORT` or `API_PORT` in `.env`. If you
-  change a port, update `DATABASE_URL` / `REDIS_URL` to match.
-- **`Cannot find module '@acf/...'`**: the shared packages are not built yet. Run `pnpm build:packages`.
-- **`Invalid API environment configuration` after pulling M1b**: add `SESSION_SECRETS` and
-  `CSRF_SECRET` to `.env` (see `.env.example`).
-- **`permission denied` or `password authentication failed for user "acf_app"`**: run
-  `pnpm db:setup`. Existing `.env` files from M0 must add `DATABASE_ADMIN_URL`,
-  `DATABASE_MIGRATION_URL` and `DATABASE_SHADOW_URL`, and point `DATABASE_URL` at `acf_app`
-  (compare with `.env.example`).
+- **Invalid environment configuration**: compare `.env` with `.env.example`; the message names each
+  invalid variable.
+- **Readiness `503 unreachable`**: run `pnpm infra:up`, check `docker compose ps`.
+- **Port in use**: change `POSTGRES_PORT`, `REDIS_PORT` or `API_PORT` in `.env` and update
+  `DATABASE_URL`/`REDIS_URL` to match.
+- **`Cannot find module '@acf/...'`**: run `pnpm build:packages`.
+- **`permission denied` / password failed for `acf_app`**: run `pnpm db:setup`; check the four
+  database URLs against `.env.example`.
+- **Generation answers "No usable model for this task"**: no enabled route; run `pnpm db:seed` or
+  set a route.
+- **Jobs stay queued**: the worker is not running (`pnpm dev:worker`).

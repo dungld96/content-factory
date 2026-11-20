@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-/** Every input that determines a generation's result (CONTENT_PIPELINE §3, M3 design §7.5). */
+/** Every input that determines a generation's result (CONTENT_PIPELINE §4, M3 design §7.5). */
 export interface ExecutionKeyInput {
   readonly kind:
     | 'script_generation'
