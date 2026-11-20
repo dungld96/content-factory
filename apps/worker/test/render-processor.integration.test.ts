@@ -267,9 +267,9 @@ describe('render jobs', () => {
     expect(probe.streams.map((s) => s.codec)).toEqual(['h264', 'aac']);
     const srt = await store.get(render.subtitleAsset?.storageKey ?? '');
     if (!srt) throw new Error('caption object missing');
-    expect(new TextDecoder().decode(await readAll(srt.stream, 100_000))).toContain(
-      'Năm món đồ nhỏ giúp bàn làm việc',
-    );
+    // Captions wrap at balanced line breaks (M8.5 Q7): compare the text, not the line layout.
+    const captions = new TextDecoder().decode(await readAll(srt.stream, 100_000));
+    expect(captions.replace(/\n(?!\n|\d)/g, ' ')).toContain('Năm món đồ nhỏ giúp bàn làm việc');
 
     const job = await prisma.generationJob.findUniqueOrThrow({
       where: { id: jobId },

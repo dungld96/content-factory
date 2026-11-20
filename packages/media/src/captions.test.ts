@@ -35,6 +35,43 @@ describe('chunkCaptionText', () => {
   });
 });
 
+describe('phrase-aware captions (M8.5 Q7)', () => {
+  it('keeps phrases together, breaks lines after punctuation and absorbs tiny tails', () => {
+    expect(
+      chunkCaptionText('Pha cà phê ở nhà mãi không ngon bằng ngoài quán? Thử ba mẹo này nhé.'),
+    ).toEqual([['Pha cà phê ở nhà mãi không', 'ngon bằng ngoài quán?'], ['Thử ba mẹo này nhé.']]);
+    expect(
+      chunkCaptionText(
+        'Ba: rót chút nước, ủ ba mươi giây cho bột nở đều, rồi rót đầy. Thử ngay sáng mai nhé!',
+      ),
+    ).toEqual([
+      ['Ba: rót chút nước,', 'ủ ba mươi giây cho bột nở đều,'],
+      ['rồi rót đầy.', 'Thử ngay sáng mai nhé!'],
+    ]);
+    expect(
+      chunkCaptionText(
+        'Five small tools make your desk tidier every single day, and they cost less than lunch.',
+      ),
+    ).toEqual([
+      ['Five small tools make your', 'desk tidier every single day,'],
+      ['and they cost less than lunch.'],
+    ]);
+    // A one-word tail never stands alone when it fits the previous cue.
+    expect(chunkCaptionText('Mẹo này giúp phin giữ nhiệt tốt hơn rất nhiều. Nhé.')).toEqual([
+      ['Mẹo này giúp phin giữ nhiệt', 'tốt hơn rất nhiều. Nhé.'],
+    ]);
+  });
+
+  it('never times a cue under one second when its neighbour can take the text', () => {
+    const cues = buildCaptionCues([
+      { startMs: 0, text: 'Một câu khá dài để chiếm gần hết thời gian, ngắn.', speechMs: 2000 },
+    ]);
+    for (const c of cues) expect(c.endMs - c.startMs).toBeGreaterThanOrEqual(1000);
+    for (const c of cues)
+      for (const line of c.lines) expect(Array.from(line).length).toBeLessThanOrEqual(32);
+  });
+});
+
 describe('buildCaptionCues', () => {
   it('times cues per scene in proportion to their characters, within the speech', () => {
     const cues = buildCaptionCues([

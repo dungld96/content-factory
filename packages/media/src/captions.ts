@@ -25,48 +25,177 @@ export const CAPTION_MAX_CHARS = 32;
 
 const charCount = (s: string) => Array.from(s).length;
 
-/** Words to lines of ≤ maxChars (a longer single word gets its own line), lines to cues. */
+/** Punctuation that ends a phrase: a caption may break after it (M8.5 Q7). */
+const PHRASE_END = /[.,!?;:…)\]"”»]$/u;
+/** A tail this short (in words) is merged into or balanced with its neighbour. */
+const SHORT_TAIL_WORDS = 3;
+/** Cues shorter than this are merged with a neighbour of the same scene when the text fits. */
+export const CAPTION_MIN_CUE_MS = 1000;
+
+const join = (words: readonly string[]) => words.join(' ');
+
+/** Splits text into phrases (word lists) after punctuation. */
+function phrasesOf(text: string): string[][] {
+  const words = text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  const phrases: string[][] = [];
+  let current: string[] = [];
+  for (const word of words) {
+    current.push(word);
+    if (PHRASE_END.test(word)) {
+      phrases.push(current);
+      current = [];
+    }
+  }
+  if (current.length > 0) phrases.push(current);
+  return phrases;
+}
+
+/**
+ * Wraps words into at most `maxLines` lines of ≤ maxChars, as evenly as possible and preferring a
+ * break right after punctuation; null when they do not fit. A single word longer than maxChars
+ * gets a line of its own.
+ */
+function wrapBalanced(
+  words: readonly string[],
+  maxChars: number,
+  maxLines: number,
+): string[] | null {
+  const whole = join(words);
+  if (charCount(whole) <= maxChars || words.length === 1) return [whole];
+  if (maxLines < 2) return null;
+  let best: { lines: string[]; score: number } | null = null;
+  for (let k = 1; k < words.length; k += 1) {
+    const first = join(words.slice(0, k));
+    const rest = wrapBalanced(words.slice(k), maxChars, maxLines - 1);
+    if (!rest) continue;
+    const firstOk = charCount(first) <= maxChars || k === 1;
+    if (!firstOk) break;
+    const lengths = [first, ...rest].map(charCount);
+    const spread = Math.max(...lengths) - Math.min(...lengths);
+    const atPhrase = PHRASE_END.test(words[k - 1] ?? '') ? 14 : 0;
+    const score = spread - atPhrase;
+    if (!best || score < best.score) best = { lines: [first, ...rest], score };
+  }
+  return best?.lines ?? null;
+}
+
+/** Greedy word cues for a phrase that does not fit one cue. */
+function greedyCues(words: readonly string[], maxChars: number, maxLines: number): string[][] {
+  const cues: string[][] = [];
+  let current: string[] = [];
+  for (const word of words) {
+    const next = [...current, word];
+    if (current.length > 0 && !wrapBalanced(next, maxChars, maxLines)) {
+      cues.push(current);
+      current = [word];
+    } else {
+      current = next;
+    }
+  }
+  if (current.length > 0) cues.push(current);
+  return cues;
+}
+
+/**
+ * Narration text to caption cues (each a list of lines): whole phrases are kept together and
+ * packed while they fit `maxLines` × `maxChars`; lines are balanced and break after punctuation
+ * where possible; a short tail is merged into, or balanced with, the previous cue.
+ */
 export function chunkCaptionText(
   text: string,
   maxChars = CAPTION_MAX_CHARS,
   maxLines = CAPTION_MAX_LINES,
 ): string[][] {
-  const words = text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
-  const lines: string[] = [];
-  let line = '';
-  for (const word of words) {
-    const candidate = line ? `${line} ${word}` : word;
-    if (line && charCount(candidate) > maxChars) {
-      lines.push(line);
-      line = word;
+  const cueWords: string[][] = [];
+  let current: string[] = [];
+  for (const phrase of phrasesOf(text)) {
+    const together = [...current, ...phrase];
+    if (wrapBalanced(together, maxChars, maxLines)) {
+      current = together;
+      continue;
+    }
+    if (current.length > 0) cueWords.push(current);
+    if (wrapBalanced(phrase, maxChars, maxLines)) {
+      current = [...phrase];
     } else {
-      line = candidate;
+      const parts = greedyCues(phrase, maxChars, maxLines);
+      cueWords.push(...parts.slice(0, -1));
+      current = parts.at(-1) ?? [];
     }
   }
-  if (line) lines.push(line);
-  const cues: string[][] = [];
-  for (let i = 0; i < lines.length; i += maxLines) cues.push(lines.slice(i, i + maxLines));
-  return cues;
+  if (current.length > 0) cueWords.push(current);
+
+  // A short tail (e.g. "nhé.") joins the previous cue when it fits; otherwise words move over
+  // from the previous cue so both read as phrases of similar length.
+  if (cueWords.length >= 2) {
+    const last = cueWords[cueWords.length - 1] ?? [];
+    const prev = cueWords[cueWords.length - 2] ?? [];
+    if (last.length <= SHORT_TAIL_WORDS) {
+      const merged = [...prev, ...last];
+      if (wrapBalanced(merged, maxChars, maxLines)) {
+        cueWords.splice(-2, 2, merged);
+      } else {
+        let a = prev;
+        let b = last;
+        while (a.length > SHORT_TAIL_WORDS && b.length <= SHORT_TAIL_WORDS) {
+          const moved = [a[a.length - 1] ?? '', ...b];
+          if (!wrapBalanced(moved, maxChars, maxLines)) break;
+          a = a.slice(0, -1);
+          b = moved;
+        }
+        cueWords.splice(-2, 2, a, b);
+      }
+    }
+  }
+  return cueWords.map(
+    (words) => wrapBalanced(words, maxChars, maxLines) ?? greedyCues(words, maxChars, 1).map(join),
+  );
 }
 
-/** Cues of every scene; each scene's cues share its speech time in proportion to characters. */
+/**
+ * Cues of every scene; each scene's cues share its speech time in proportion to characters. A cue
+ * shorter than {@link CAPTION_MIN_CUE_MS} is merged with its neighbour in the same scene when the
+ * text fits.
+ */
 export function buildCaptionCues(scenes: readonly CaptionScene[]): CaptionCue[] {
   const cues: CaptionCue[] = [];
   for (const scene of scenes) {
-    const chunks = chunkCaptionText(scene.text);
+    let chunks = chunkCaptionText(scene.text);
     if (chunks.length === 0 || scene.speechMs <= 0) continue;
-    const weights = chunks.map((c) => charCount(c.join(' ')));
-    const total = weights.reduce((a, b) => a + b, 0);
-    let at = scene.startMs;
-    let used = 0;
+    const timed = () => {
+      const weights = chunks.map((c) => charCount(c.join(' ')));
+      const total = weights.reduce((a, b) => a + b, 0);
+      let used = 0;
+      return chunks.map((_, i) => {
+        const startUsed = used;
+        used += weights[i] ?? 0;
+        return {
+          startMs: scene.startMs + Math.round((scene.speechMs * startUsed) / total),
+          endMs:
+            i === chunks.length - 1
+              ? scene.startMs + scene.speechMs
+              : scene.startMs + Math.round((scene.speechMs * used) / total),
+        };
+      });
+    };
+    let times = timed();
+    for (let guard = 0; guard < 10; guard += 1) {
+      const short = times.findIndex((t) => t.endMs - t.startMs < CAPTION_MIN_CUE_MS);
+      if (short < 0 || chunks.length < 2) break;
+      const other = short === chunks.length - 1 ? short - 1 : short + 1;
+      const [a, b] = [Math.min(short, other), Math.max(short, other)];
+      const merged = wrapBalanced(
+        [...(chunks[a] ?? []), ...(chunks[b] ?? [])].join(' ').split(' '),
+        CAPTION_MAX_CHARS,
+        CAPTION_MAX_LINES,
+      );
+      if (!merged) break;
+      chunks = [...chunks.slice(0, a), merged, ...chunks.slice(b + 1)];
+      times = timed();
+    }
     chunks.forEach((lines, i) => {
-      used += weights[i] ?? 0;
-      const end =
-        i === chunks.length - 1
-          ? scene.startMs + scene.speechMs
-          : scene.startMs + Math.round((scene.speechMs * used) / total);
-      cues.push({ startMs: at, endMs: end, lines });
-      at = end;
+      const t = times[i];
+      if (t) cues.push({ startMs: t.startMs, endMs: t.endMs, lines });
     });
   }
   return cues;
