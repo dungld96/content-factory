@@ -29,6 +29,8 @@ export const imageGenerationRequestSchema = z
       .optional(),
     /** Generate even when identical inputs already produced candidates (costs again). */
     regenerate: z.boolean().optional(),
+    /** M7: proceed although a soft budget would be exceeded (recorded as an override). */
+    acceptOverBudget: z.boolean().optional(),
     /** Required to generate when the cost cannot be estimated (COST_STRATEGY §3). */
     acceptUnknownCost: z.boolean().optional(),
   })

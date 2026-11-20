@@ -5,6 +5,7 @@ import type { ApiEnv } from '@acf/config';
 import { AiModule } from './ai/ai.module.js';
 import { AssetsModule } from './assets/assets.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { BudgetsModule } from './budgets/budgets.module.js';
 import { BrandModule } from './brand/brand.module.js';
 import { ChannelsModule } from './channels/channels.module.js';
 import { ApiConfigModule } from './config/api-config.module.js';
@@ -32,6 +33,7 @@ export class AppModule {
         BrandModule,
         AssetsModule,
         AiModule,
+        BudgetsModule,
         GenerationModule,
       ],
     };

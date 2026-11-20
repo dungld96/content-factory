@@ -1,5 +1,5 @@
 // Scene clips, voice-overs and voice profiles over HTTP (M5 design §6–§7, §9.2, §11): plans and
-// estimates, the confirmed-estimate and spend guards, generation intent, selection (AC016),
+// estimates, the confirmed-estimate guard and per-request budget, generation intent, selection (AC016),
 // keyframe changes, "check again", cancel, and voice snapshots. The worker is not running: a
 // finished job is simulated by inserting its result rows as the worker does (apps/worker covers
 // the real path, including FFprobe validation).
@@ -228,7 +228,7 @@ describe('clip plans and estimates', () => {
       generateAudio: false,
       totalEstimatedUsd: '0',
       unknownCost: false,
-      spendGuardUsd: '5',
+      requestBudgetUsd: '2',
       providerRetainsInputs: true,
     });
     expect(estimate.scenes).toEqual([
@@ -600,8 +600,8 @@ describe('voice profiles and voice-overs', () => {
 });
 
 // Last: prices are append-only and shared by every test of this file.
-describe('spend guard (decision V10)', () => {
-  it('refuses a request whose estimate is above the per-request limit, or above the confirmed one', async () => {
+describe('per-request budget (decisions V10, B5)', () => {
+  it('refuses a request whose estimate is above the per-request budget, or above the confirmed one', async () => {
     await setDurations([5, 10, 30]);
     const model = await prisma.aiModel.findFirstOrThrow({
       where: { modelKey: 'mock/still-video' },
@@ -633,7 +633,12 @@ describe('spend guard (decision V10)', () => {
     const guarded = await as('editor', 'POST', `/storyboards/${w.storyboardId}/videos/generate`, {
       body: { confirmedEstimateUsd: '15' },
     });
-    expect([guarded.status, codeOf(guarded)]).toEqual([422, 'SPEND_GUARD']);
+    expect([guarded.status, codeOf(guarded)]).toEqual([402, 'BUDGET_EXCEEDED']);
+    expect(
+      await prisma.budgetReservation.count({
+        where: { contentItemId: w.contentId, job: { kind: 'video_generation' } },
+      }),
+    ).toBe(0);
     expect(
       await prisma.generationJob.count({
         where: { kind: 'video_generation', contentItemId: w.contentId },

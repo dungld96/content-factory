@@ -78,3 +78,12 @@ describe('UsdAmount', () => {
     expect(() => UsdAmount.fromUnits(-1n)).toThrow(MoneyError);
   });
 });
+
+describe('UsdAmount.minusOrZero', () => {
+  it('subtracts exactly and floors at zero', () => {
+    expect(
+      UsdAmount.parse('10').minusOrZero(UsdAmount.parse('0.000000000000000001')).toString(),
+    ).toBe('9.999999999999999999');
+    expect(UsdAmount.parse('1').minusOrZero(UsdAmount.parse('2')).isZero()).toBe(true);
+  });
+});

@@ -181,6 +181,8 @@ model User {
   rendersReviewed    Render[]              @relation("RenderReviewedBy")
   rendersExported    Render[]              @relation("RenderExportedBy")
   rendersCreated     Render[]              @relation("RenderCreatedBy")
+  budgetsUpdated     ProjectBudget[]       @relation("BudgetUpdatedBy")
+  budgetEvents       BudgetEvent[]         @relation("BudgetEventActor")
 
   @@map("users")
 }
@@ -233,11 +235,14 @@ model Project {
   contentItems  ContentItem[]
   aiInvocations AiInvocation[]
 
-  contentMasters ContentMaster[]
-  productionRuns ProductionRun[]
-  generationJobs GenerationJob[]
-  voiceProfiles  VoiceProfile[]
-  renders        Render[]
+  contentMasters     ContentMaster[]
+  productionRuns     ProductionRun[]
+  generationJobs     GenerationJob[]
+  voiceProfiles      VoiceProfile[]
+  renders            Render[]
+  budget             ProjectBudget?
+  budgetEvents       BudgetEvent[]
+  budgetReservations BudgetReservation[]
 
   @@index([createdById])
   @@map("projects")
@@ -598,12 +603,13 @@ model ContentItem {
   generationJobs              GenerationJob[]
 
   /// Narration voice for TTS (M5 design §7.1); a voice profile of the same project.
-  voiceProfileId   String?       @map("voice_profile_id") @db.Uuid
-  voiceProfile     VoiceProfile? @relation(fields: [projectId, voiceProfileId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  voiceProfileId     String?             @map("voice_profile_id") @db.Uuid
+  voiceProfile       VoiceProfile?       @relation(fields: [projectId, voiceProfileId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   /// M6 gate 5: the approved render (an approved render of this item; trigger AC017).
-  approvedRenderId String?       @map("approved_render_id") @db.Uuid
-  approvedRender   Render?       @relation("ContentApprovedRender", fields: [id, approvedRenderId], references: [contentItemId, id], onDelete: Restrict, onUpdate: Restrict)
-  renders          Render[]      @relation("ContentRenders")
+  approvedRenderId   String?             @map("approved_render_id") @db.Uuid
+  approvedRender     Render?             @relation("ContentApprovedRender", fields: [id, approvedRenderId], references: [contentItemId, id], onDelete: Restrict, onUpdate: Restrict)
+  renders            Render[]            @relation("ContentRenders")
+  budgetReservations BudgetReservation[]
 
   @@unique([projectId, id]) // composite-FK target
   @@index([projectId, createdAt(sort: Desc), id(sort: Desc)])
@@ -1015,6 +1021,7 @@ model GenerationJob {
   invocation       AiInvocation?       @relation("JobInFlightInvocation", fields: [projectId, invocationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   assets           Asset[]             @relation("JobAssets")
   render           Render?
+  reservation      BudgetReservation?
   events           JobEvent[]
   invocations      AiInvocation[]
   scripts          ScriptVersion[]     @relation("ScriptGeneratedBy")
@@ -1428,4 +1435,96 @@ model Render {
   @@index([exportedById])
   @@index([createdById])
   @@map("renders")
+}
+
+// ----------------------------------------------------------------------------- budgets (M7)
+
+enum BudgetMode {
+  hard
+  soft
+
+  @@map("budget_mode")
+}
+
+enum ReservationKind {
+  estimate
+  unknown_placeholder
+
+  @@map("reservation_kind")
+}
+
+enum ReservationStatus {
+  /// The job may still incur this cost.
+  open
+  /// The ledger holds the actual cost; the reservation no longer counts.
+  settled
+  /// Nothing was charged (refused, canceled before the call).
+  released
+  /// The outcome is unknown (e.g. a lost video submission): keeps counting until resolved.
+  held
+
+  @@map("reservation_status")
+}
+
+/// Spending limits of a project (M7 design §3). One row per project; amounts in exact USD.
+model ProjectBudget {
+  projectId       String     @id @map("project_id") @db.Uuid
+  monthlyLimitUsd Decimal    @map("monthly_limit_usd") @db.Decimal(14, 6)
+  monthlyMode     BudgetMode @default(hard) @map("monthly_mode")
+  itemLimitUsd    Decimal?   @map("item_limit_usd") @db.Decimal(14, 6)
+  itemMode        BudgetMode @default(soft) @map("item_mode")
+  requestLimitUsd Decimal?   @map("request_limit_usd") @db.Decimal(14, 6)
+  requestMode     BudgetMode @default(hard) @map("request_mode")
+  updatedById     String?    @map("updated_by_id") @db.Uuid
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  updatedBy User?   @relation("BudgetUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([updatedById])
+  @@map("project_budgets")
+}
+
+/// Append-only history of budget changes, confirmed overrides and blocks.
+model BudgetEvent {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  projectId String   @map("project_id") @db.Uuid
+  actorId   String?  @map("actor_id") @db.Uuid
+  /// changed | override | blocked | settled | released
+  type      String   @db.VarChar(16)
+  detail    Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  actor   User?   @relation("BudgetEventActor", fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([actorId])
+  @@map("budget_events")
+}
+
+/// The cost a job may still incur (M7 design §4): created with the job intent, then settled,
+/// released or held. One per job.
+model BudgetReservation {
+  id            String            @id @default(uuid(7)) @db.Uuid
+  projectId     String            @map("project_id") @db.Uuid
+  contentItemId String            @map("content_item_id") @db.Uuid
+  jobId         String            @map("job_id") @db.Uuid
+  amountUsd     Decimal           @map("amount_usd") @db.Decimal(14, 6)
+  kind          ReservationKind
+  status        ReservationStatus @default(open)
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  resolvedAt    DateTime?         @map("resolved_at") @db.Timestamptz(3)
+
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contentItem ContentItem   @relation(fields: [projectId, contentItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  job         GenerationJob @relation(fields: [projectId, jobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([jobId])
+  @@unique([projectId, jobId])
+  @@index([projectId, status, createdAt])
+  @@index([contentItemId, status])
+  @@map("budget_reservations")
 }

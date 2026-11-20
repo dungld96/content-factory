@@ -2,7 +2,14 @@ import { randomUUID } from 'node:crypto';
 
 import { HttpStatus, Injectable } from '@nestjs/common';
 
-import { Capability, filterCandidates, LlmParameter, type QualityTier } from '@acf/ai-core';
+import {
+  activePrices,
+  Capability,
+  filterCandidates,
+  LlmParameter,
+  type PriceComponent,
+  type QualityTier,
+} from '@acf/ai-core';
 import { ModelCatalog, VideoService } from '@acf/ai-runtime';
 import {
   activeJobKey,
@@ -16,6 +23,7 @@ import {
   type ScriptJobInput,
   type StoryboardJobInput,
   type TextJobKind,
+  estimateTextJob,
 } from '@acf/content-domain';
 import {
   ApiErrorCode,
@@ -37,6 +45,7 @@ import {
 } from '@acf/database';
 
 import type { Actor } from '../auth/actor.js';
+import { BudgetsService } from '../budgets/budgets.service.js';
 import { ApiError } from '../common/api-error.js';
 import { archived, notFound } from '../common/domain-errors.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
@@ -88,6 +97,7 @@ export class GenerationService {
     private readonly catalog: ModelCatalog,
     private readonly queue: GenerationQueue,
     private readonly videos: VideoService,
+    private readonly budgets: BudgetsService,
   ) {}
 
   async validateBrief(actor: Actor, contentId: string): Promise<BriefValidationDto> {
@@ -353,7 +363,7 @@ export class GenerationService {
     kind: TextJobKind,
     input: ScriptJobInput | StoryboardJobInput,
     inputVersionIds: readonly string[],
-    model: { id: string; modelKey: string },
+    model: { id: string; modelKey: string; prices: readonly PriceComponent[] },
     request: GenerateRequest,
     clientKey: string | undefined,
   ): Promise<GenerateResponseDto> {
@@ -432,6 +442,14 @@ export class GenerationService {
           },
         });
         await tx.contentItem.update({ where: { id: item.id }, data: { status: next } });
+        const { estimate, calls } = estimateTextJob(kind, model.prices);
+        await this.budgets.reserve(tx, {
+          actorId: actor.userId,
+          projectId: item.projectId,
+          contentItemId: item.id,
+          jobs: [{ jobId: created.id, estimate, calls }],
+          acceptOverBudget: request.acceptOverBudget,
+        });
         return created;
       });
     } catch (error) {
@@ -481,7 +499,7 @@ export class GenerationService {
   private async resolveModel(
     kind: TextJobKind,
     modelKey: string | undefined,
-  ): Promise<{ id: string; modelKey: string }> {
+  ): Promise<{ id: string; modelKey: string; prices: readonly PriceComponent[] }> {
     const key =
       modelKey ??
       (
@@ -503,7 +521,12 @@ export class GenerationService {
     );
     const chosen = decision.eligible[0];
     if (!chosen) throw noModelRoute(decision.explanation.join('; ') || `${key} is not registered`);
-    return { id: chosen.modelId, modelKey: chosen.modelKey };
+    const row = rows.find((r) => r.candidate.modelId === chosen.modelId);
+    return {
+      id: chosen.modelId,
+      modelKey: chosen.modelKey,
+      prices: activePrices(row?.prices ?? [], new Date()),
+    };
   }
 
   private async resolveBrief(item: ContentItem): Promise<ResolvedBrief> {

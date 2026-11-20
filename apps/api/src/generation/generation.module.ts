@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { AiModule } from '../ai/ai.module.js';
+import { BudgetsModule } from '../budgets/budgets.module.js';
 import { ProjectsModule } from '../projects/projects.module.js';
 import { ArtifactsService } from './artifacts.service.js';
 import { GenerationController } from './generation.controller.js';
@@ -17,7 +18,7 @@ import { VoiceProfilesService } from './voice-profiles.service.js';
 
 /** Script, storyboard (M3), scene image (M4) and clip/voice-over (M5) pipeline. The worker runs the jobs. */
 @Module({
-  imports: [ProjectsModule, AiModule],
+  imports: [ProjectsModule, AiModule, BudgetsModule],
   controllers: [GenerationController, ImagesController, MediaController, RendersController],
   providers: [
     GenerationService,

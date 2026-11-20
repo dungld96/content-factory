@@ -38,6 +38,8 @@ export type {
   SceneVoiceover,
   VoiceProfile,
   Render,
+  ProjectBudget,
+  BudgetReservation,
 } from './generated/prisma/client.js';
 export * from './generated/prisma/enums.js';
 export {

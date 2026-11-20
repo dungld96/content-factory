@@ -47,6 +47,7 @@ import {
 } from '@acf/database';
 
 import type { Actor } from '../auth/actor.js';
+import { BudgetsService } from '../budgets/budgets.service.js';
 import { ApiError } from '../common/api-error.js';
 import { archived, notFound, referenceNotFound } from '../common/domain-errors.js';
 import { toAssetDto } from '../assets/assets.service.js';
@@ -115,6 +116,7 @@ export const videoScene = (s: StoryboardScene): VideoScene => ({
 export class VideosService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly budgets: BudgetsService,
     private readonly access: ProjectAccess,
     private readonly videos: VideoService,
     private readonly catalog: ModelCatalog,
@@ -128,7 +130,7 @@ export class VideosService {
     storyboardId: string,
     request: VideoGenerationRequest,
   ): Promise<VideoEstimateDto> {
-    return this.estimateDto(await this.plan(actor, storyboardId, request, 'viewer'));
+    return await this.estimateDto(await this.plan(actor, storyboardId, request, 'viewer'));
   }
 
   async generate(
@@ -137,7 +139,7 @@ export class VideosService {
     request: VideoGenerationRequest,
   ): Promise<VideoGenerateResponseDto> {
     const plan = await this.plan(actor, storyboardId, request, 'editor');
-    const estimate = this.estimateDto(plan);
+    const estimate = await this.estimateDto(plan);
     const toGenerate = plan.scenes.filter((s) => s.action === 'generate');
     if (toGenerate.length > 0) {
       if (estimate.unknownCost && !request.acceptUnknownCost) {
@@ -149,19 +151,6 @@ export class VideosService {
         );
       }
       this.assertConfirmed(estimate, request.confirmedEstimateUsd);
-      if (
-        estimate.totalEstimatedUsd !== null &&
-        UsdAmount.parse(estimate.totalEstimatedUsd).compare(
-          UsdAmount.parse(estimate.spendGuardUsd),
-        ) > 0
-      ) {
-        throw error(
-          HttpStatus.UNPROCESSABLE_ENTITY,
-          ApiErrorCode.SpendGuard,
-          `This request is estimated at $${estimate.totalEstimatedUsd}, above the $${estimate.spendGuardUsd} per-request limit. Generate fewer scenes at a time.`,
-          estimate,
-        );
-      }
       await this.assertKeyframeFiles(plan.item.projectId, toGenerate);
     }
 
@@ -253,6 +242,16 @@ export class VideosService {
           });
           jobs.push(job);
         }
+        await this.budgets.reserve(tx, {
+          actorId: actor.userId,
+          projectId: plan.item.projectId,
+          contentItemId: plan.item.id,
+          jobs: jobs.map((job, i) => ({
+            jobId: job.id,
+            estimate: toGenerate[i]?.estimate ?? null,
+          })),
+          acceptOverBudget: request.acceptOverBudget,
+        });
         if (next !== status) {
           await tx.contentItem.update({ where: { id: plan.item.id }, data: { status: next } });
         }
@@ -707,7 +706,7 @@ export class VideosService {
     }
   }
 
-  private estimateDto(plan: Plan): VideoEstimateDto {
+  private async estimateDto(plan: Plan): Promise<VideoEstimateDto> {
     const generating = plan.scenes.filter((s) => s.action === 'generate');
     const unknownCost = generating.some((s) => s.estimate === null);
     return {
@@ -728,7 +727,7 @@ export class VideosService {
         ? null
         : UsdAmount.sum(generating.map((s) => s.estimate ?? UsdAmount.ZERO)).toString(),
       unknownCost,
-      spendGuardUsd: UsdAmount.parse(this.env.VIDEO_MAX_ESTIMATED_USD_PER_REQUEST).toString(),
+      requestBudgetUsd: await this.budgets.requestLimit(plan.item.projectId),
       providerRetainsInputs: true,
     };
   }

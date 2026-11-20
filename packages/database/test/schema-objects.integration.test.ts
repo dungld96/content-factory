@@ -33,6 +33,8 @@ const EXPECTED_TRIGGERS: readonly (readonly [string, string, boolean])[] = [
   ['asset_inputs', 'asset_inputs_append_only', false],
   ['assets', 'assets_guard', false],
   ['assets', 'assets_no_delete', false],
+  ['budget_events', 'budget_events_append_only', false],
+  ['budget_reservations', 'budget_reservations_guard', false],
   ['channels', 'channels_no_delete', false],
   ['character_version_assets', 'character_version_assets_guard', false],
   ['character_versions', 'character_versions_approval_sets_master', true],
@@ -52,6 +54,7 @@ const EXPECTED_TRIGGERS: readonly (readonly [string, string, boolean])[] = [
   ['generation_jobs', 'generation_jobs_guard', false],
   ['job_events', 'job_events_append_only', false],
   ['production_runs', 'production_runs_guard', false],
+  ['project_budgets', 'project_budgets_no_delete', false],
   ['project_members', 'project_members_keep_owner', true],
   ['projects', 'projects_created_with_owner', true],
   ['projects', 'projects_no_delete', false],
@@ -108,6 +111,10 @@ const EXPECTED_CHECKS = [
   'assets.assets_scene_only_generated',
   'assets.assets_size_nonnegative',
   'assets.assets_storage_key_nonempty',
+  'budget_events.budget_events_detail_object',
+  'budget_events.budget_events_type_known',
+  'budget_reservations.budget_reservations_amount_nonnegative',
+  'budget_reservations.budget_reservations_resolved_consistent',
   'character_versions.character_versions_approval_consistent',
   'character_versions.character_versions_not_based_on_self',
   'character_versions.character_versions_version_positive',
@@ -132,6 +139,9 @@ const EXPECTED_CHECKS = [
   'job_events.job_events_attempt_nonnegative',
   'job_events.job_events_detail_object',
   'production_runs.production_runs_completion_consistent',
+  'project_budgets.project_budgets_item_nonnegative',
+  'project_budgets.project_budgets_monthly_nonnegative',
+  'project_budgets.project_budgets_request_nonnegative',
   'renders.renders_duration_positive',
   'renders.renders_execution_key_format',
   'renders.renders_export_consistent',
@@ -274,7 +284,7 @@ describe('role separation (U3)', () => {
       `SELECT tablename, has_table_privilege(current_user, 'public.' || tablename, 'SELECT, INSERT, UPDATE, DELETE') AS ok
        FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`,
     );
-    expect(rows.length).toBe(37); // M1–M3: 27; R0: content_masters; M4: 3 image tables; M5: 5 media tables; M6: renders
+    expect(rows.length).toBe(40); // M1–M3: 27; R0: content_masters; M4: 3 image tables; M5: 5 media tables; M6: renders; M7: 3 budget tables
     expect(rows.filter((r) => !r.ok)).toEqual([]);
   });
 });

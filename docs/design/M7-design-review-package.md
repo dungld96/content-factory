@@ -1,6 +1,7 @@
 # M7 Design Review Package — Reliability and Cost Controls
 
-- Status: **Revision 1, proposed (2026-11-20)** — waiting for owner review; no code before approval.
+- Status: **Revision 1, approved by the owner (2026-11-20)**: B1–B10 as proposed. Implemented in
+  slices M7a–M7d (§14).
 - Date: 2026-11-20
 - Baseline: M6 approved (`1d3adbe`); ADR-0012 (ledger, money), ADR-0013 (jobs, retries, DLQ,
   reconciler), ADR-0017 (async provider jobs), ADR-0018 (rendering)
@@ -215,3 +216,13 @@ No paid calls: mock providers simulate failures, costs and outages.
 | M7b   | Worker re-check and reservation settlement; circuit breaker (state, routing filter, waits, CLI); redaction sweep                                   |
 | M7c   | Resume; operations summary; cost dashboard API                                                                                                     |
 | M7d   | Web: budget editor and warnings, Costs tab, Operations page, Resume; E2E; docs (COST_STRATEGY, API_SPEC, DATABASE, DEPLOYMENT alerts); ADR-0019    |
+
+## 15. Deviations and clarifications found during implementation
+
+| Slice | Item                                                                                                                                                                                                                                                                                                                |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M7a   | **Hard beats soft.** Limits are checked request → item → month, but a hard breach anywhere decides the request, so accepting a soft breach (`acceptOverBudget`) can never override a hard limit (e.g. item soft and month hard both exceeded → `402`, scope `month`).                                               |
+| M7a   | **Text reservations.** A script or storyboard job reserves its worst case: prompt allowance (6 000 / 12 000 tokens) plus the output ceiling, priced with the model's active prices, times two (one repair call). An unpriced model reserves USD 0.50 per call (USD 1.00 per job).                                   |
+| M7a   | **Images** reserve per scene job; an unknown image estimate reserves USD 0.50 per image requested (`count`).                                                                                                                                                                                                        |
+| M7a   | **Budget rows are created lazily** with the `DEFAULT_*_BUDGET_USD` values on first read or reservation; the migration backfills existing projects. `GET` creates the row too (its defaults are then visible and editable).                                                                                          |
+| M7a   | The video estimate's `spendGuardUsd` is replaced by `requestBudgetUsd` (`null` when the project has no per-request limit); `422 SPEND_GUARD` and `VIDEO_MAX_ESTIMATED_USD_PER_REQUEST` are removed. The clips panel blocks a request above the per-request budget; the full soft-limit confirmation arrives in M7d. |

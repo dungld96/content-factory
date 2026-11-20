@@ -31,6 +31,7 @@ import {
 } from '@acf/database';
 
 import type { Actor } from '../auth/actor.js';
+import { BudgetsService } from '../budgets/budgets.service.js';
 import { ApiError } from '../common/api-error.js';
 import { archived, notFound, referenceNotFound } from '../common/domain-errors.js';
 import { toAssetDto } from '../assets/assets.service.js';
@@ -79,6 +80,7 @@ const voiceParams = (v: VoiceSnapshot) => ({
 export class VoiceoversService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly budgets: BudgetsService,
     private readonly access: ProjectAccess,
     private readonly tts: TtsService,
     private readonly queue: GenerationQueue,
@@ -193,6 +195,16 @@ export class VoiceoversService {
           });
           jobs.push(job);
         }
+        await this.budgets.reserve(tx, {
+          actorId: actor.userId,
+          projectId: plan.item.projectId,
+          contentItemId: plan.item.id,
+          jobs: jobs.map((job, i) => ({
+            jobId: job.id,
+            estimate: toGenerate[i]?.estimate ?? null,
+          })),
+          acceptOverBudget: request.acceptOverBudget,
+        });
         if (next !== status) {
           await tx.contentItem.update({ where: { id: plan.item.id }, data: { status: next } });
         }

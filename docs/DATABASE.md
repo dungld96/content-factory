@@ -120,6 +120,23 @@ Migrations `m6_job_kinds` (enum value) and `m6_renders` (design: `docs/design/M6
 
 Verified by `packages/database/test/renders.integration.test.ts`.
 
+## 0.7 Implemented schema (M7a: budgets and reservations)
+
+Migration `m7_budgets` (design: `docs/design/M7-design-review-package.md` §3–§4). Money is
+`DECIMAL(14,6)` USD; existing projects are backfilled with the defaults (monthly 10 hard, per item
+3 soft, per request 2 hard; `DEFAULT_*_BUDGET_USD` seed projects created later, on first use).
+
+| Table | Purpose |
+|---|---|
+| `project_budgets` | One row per project (PK `project_id`): `monthly_limit_usd` + mode, optional `item_limit_usd` and `request_limit_usd` + modes (`budget_mode`: `hard` blocks, `soft` needs confirmation), `updated_by_id`. Changed, never deleted (`AC011`); limits never negative. Locked `FOR UPDATE` while a request reserves, so concurrent requests cannot together exceed it. |
+| `budget_events` | Append-only audit (`AC011`): `changed` (before/after limits), `override` (a soft limit accepted, with the breach), and later `blocked`, `settled`, `released`. |
+| `budget_reservations` | One per paid job (`job_id` unique), written in the same transaction as the job: `amount_usd` (estimate, or USD 0.50 per call when the cost is unknown: `kind` = `estimate`/`unknown_placeholder`), `status` (`open` → `settled`/`released`/`held`, `held` → `settled`/`released`; `resolved_at` set exactly when resolved). Amount, job and kind are immutable; never deleted (trigger `acf_budget_reservation_guard`, `AC011`). |
+
+Usage against a limit = ledger costs (reported, else estimated) of calls not covered by an open or
+held reservation + open and held reservations; the month is the UTC calendar month. Verified by
+`packages/database/test/budgets.integration.test.ts` and
+`apps/api/test/generation/budgets.integration.test.ts`.
+
 ## 1. Entity groups
 
 ### Identity and workspace
@@ -278,13 +295,8 @@ Implemented in M2 as `ai_invocations` (per call) and `ai_usage_records` (per met
 - `recordedAt`
 
 ### Budget
-- `id`
-- `projectId`
-- `period` (per_content, daily, monthly)
-- `limitMicros`
-- `currency`
-- `enforcementMode` (hard, soft)
-- `active`
+Implemented in M7a as `project_budgets` (monthly, per item, per request; §0.7) rather than one row
+per period; daily budgets are not planned.
 
 ## 4. Enums
 

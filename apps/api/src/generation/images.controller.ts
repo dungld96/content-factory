@@ -59,7 +59,7 @@ export class ImagesController {
     params: storyboardVersionIdParamsSchema,
     body: imageGenerationRequestSchema,
     responses: { 202: { description: 'Queued', schema: imageGenerateResponseSchema } },
-    errors: [400, 401, 403, 404, 409, 422, 503],
+    errors: [400, 401, 402, 403, 404, 409, 422, 503],
   })
   generate(
     @CurrentActor() actor: Actor,

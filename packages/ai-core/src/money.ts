@@ -63,6 +63,11 @@ export class UsdAmount {
     return new UsdAmount(this.units + other.units);
   }
 
+  /** Exact difference, floored at zero (amounts cannot be negative). */
+  minusOrZero(other: UsdAmount): UsdAmount {
+    return this.units > other.units ? new UsdAmount(this.units - other.units) : UsdAmount.ZERO;
+  }
+
   /** Exact product with a non-negative integer quantity (tokens, requests). */
   times(quantity: number | bigint): UsdAmount {
     const q = typeof quantity === 'bigint' ? quantity : BigInt(checkQuantity(quantity));

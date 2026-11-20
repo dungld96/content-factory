@@ -388,7 +388,7 @@ scene; the original per-scene/per-content sketches are replaced.
 
 | Endpoint | Viewer | Editor/Owner | Notes |
 |---|:-:|:-:|---|
-| `POST /storyboards/:storyboardVersionId/videos/estimate` | ✓ | ✓ | Per scene: action, scene seconds, billed seconds, price; total, `spendGuardUsd`, `providerRetainsInputs` |
+| `POST /storyboards/:storyboardVersionId/videos/estimate` | ✓ | ✓ | Per scene: action, scene seconds, billed seconds, price; total, `requestBudgetUsd` (the project's per-request budget, `null` = none), `providerRetainsInputs` |
 | `POST /storyboards/:storyboardVersionId/videos/generate` | 403 | 202 | Same body + `confirmedEstimateUsd` (the total shown; `null` confirms an unknown one) |
 | `GET /storyboards/:storyboardVersionId/videos` | ✓ | ✓ | Per scene: keyframe, clip, candidates, active/last job, provider `progress`; `clipsComplete` |
 | `PUT /scenes/:sceneId/clip` | 403 | ✓ | `{ assetId }`: an approved clip of the scene or generated from its keyframe |
@@ -422,15 +422,15 @@ Video request body (estimate and generate):
 Defaults: every scene with a keyframe and no clip, 720p, no native audio, the model routed to
 `video_generation` (`pnpm ai:registry route set video_generation <modelKey>`). The clip length
 requested from the provider (`requestedSeconds`) is the smallest supported duration ≥ the scene;
-`billedSeconds` is that or the model's minimum billed seconds, if higher (estimates and the spend
-guard use it). Plan actions: `generate`, `reuse_clip`,
+`billedSeconds` is that or the model's minimum billed seconds, if higher (estimates and budget
+reservations use it). Plan actions: `generate`, `reuse_clip`,
 `skip_has_clip`, `skip_existing_result`, `skip_in_progress`, `skip_no_keyframe`,
 `skip_exceeds_model_maximum`. Voice-over actions: `generate`, `reuse_voiceover`,
 `skip_has_voiceover`, `skip_existing_result`, `skip_in_progress`, `skip_no_text`.
 
 Errors: `409 STORYBOARD_NOT_APPROVED`, `409 ESTIMATE_CHANGED` (no or a lower confirmed total; the
-current plan is in `error.current`), `422 SPEND_GUARD` (above
-`VIDEO_MAX_ESTIMATED_USD_PER_REQUEST`, default USD 5), `422 UNKNOWN_COST_NOT_ACCEPTED`, `409
+current plan is in `error.current`), `402 BUDGET_EXCEEDED` / `409 BUDGET_CONFIRMATION_REQUIRED`
+(budgets, §8; M7 replaced the M5 spend guard), `422 UNKNOWN_COST_NOT_ACCEPTED`, `409
 VOICE_PROFILE_REQUIRED`, `409 CLIP_INVALID`, `409 VOICEOVER_INVALID`, `409 SCENE_SELECTION_INVALID`
 (AC016), `409 JOB_NOT_RECHECKABLE`, `409 GENERATION_IN_PROGRESS`, `422 NO_MODEL_ROUTE`, `422
 MODEL_LIMITS`, `422 REFERENCE_FILE_MISSING` (keyframe file), `503 STORAGE_NOT_CONFIGURED`.
@@ -532,6 +532,25 @@ returned; money is a decimal string in USD (`unitPriceUsd`), never a JSON number
 
 No endpoint calls a model in M2 (decision P7): the first caller is the M3 script job, through
 `LlmService` (`apps/api/src/ai/llm.service.ts`).
+
+### Budgets (implemented in M7a)
+
+| Endpoint | Viewer | Editor | Owner | Notes |
+|---|---|---|---|---|
+| `GET /projects/:projectId/budget` | ✓ | ✓ | ✓ | Limits and modes; this UTC month's `spentUsd` (ledger, reported else estimated), `reservedUsd` (open reservations), `heldUsd`, `unknownCalls`, `remainingUsd`, `warning` (≥ 80 % used or reserved) |
+| `PUT /projects/:projectId/budget` | 403 | 403 | ✓ | `{ monthly?: { limitUsd, mode }, item?: { limitUsd \| null, mode }, request?: { limitUsd \| null, mode } }` (at least one); recorded as a `changed` budget event |
+
+Every paid generate request (scripts, storyboards, images, clips, voice-overs) reserves its cost in
+the transaction that queues its jobs: the estimate (text: the worst case of prompt allowance plus
+output ceiling, twice), or USD 0.50 per call when the cost is unknown. Limits are checked request,
+then item, then month; a hard breach always wins over a soft one.
+
+- `402 BUDGET_EXCEEDED`: a hard limit would be exceeded; nothing is queued. `acceptOverBudget`
+  does not override it.
+- `409 BUDGET_CONFIRMATION_REQUIRED`: a soft limit would be exceeded; resend with
+  `acceptOverBudget: true` (recorded as an `override` budget event).
+
+Both carry `error.current = { scope: request|item|month, mode, limitUsd, spentUsd, requestedUsd }`.
 
 ### Planned
 

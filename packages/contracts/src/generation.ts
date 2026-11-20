@@ -46,6 +46,8 @@ export const generateRequestSchema = z
     modelKey: z.string().min(1).max(200).optional(),
     /** Generate even when identical inputs already produced a result (costs again). */
     regenerate: z.boolean().optional(),
+    /** M7: proceed although a soft budget would be exceeded (recorded as an override). */
+    acceptOverBudget: z.boolean().optional(),
   })
   .meta({ id: 'GenerateRequest' });
 export type GenerateRequest = z.output<typeof generateRequestSchema>;

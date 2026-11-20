@@ -108,10 +108,11 @@ export function SceneClipsPanel(props: {
   }
 
   const toGenerate = estimate?.scenes.filter((s) => s.action === 'generate') ?? [];
-  const overGuard =
-    estimate?.totalEstimatedUsd !== null &&
+  const overRequestBudget =
     estimate !== null &&
-    Number(estimate.totalEstimatedUsd) > Number(estimate.spendGuardUsd);
+    estimate.totalEstimatedUsd !== null &&
+    estimate.requestBudgetUsd !== null &&
+    Number(estimate.totalEstimatedUsd) > Number(estimate.requestBudgetUsd);
 
   return (
     <div aria-label="Scene clip controls">
@@ -165,7 +166,7 @@ export function SceneClipsPanel(props: {
           <button
             type="button"
             className="btn primary"
-            disabled={busy || !estimate || toGenerate.length === 0 || overGuard}
+            disabled={busy || !estimate || toGenerate.length === 0 || overRequestBudget}
             title={estimate ? undefined : 'Estimate the cost first'}
             onClick={() => void generate()}
           >
@@ -180,7 +181,8 @@ export function SceneClipsPanel(props: {
             {estimate.unknownCost
               ? 'cost unknown (not priced for these settings)'
               : `estimated ${formatUsd(estimate.totalEstimatedUsd ?? '0')}`}{' '}
-            · limit {formatUsd(estimate.spendGuardUsd)} per request
+            {estimate.requestBudgetUsd !== null &&
+              ` · budget ${formatUsd(estimate.requestBudgetUsd)} per request`}
           </p>
           <ul className="plain-list small-text">
             {estimate.scenes.map((s) => (
@@ -207,9 +209,10 @@ export function SceneClipsPanel(props: {
               still be charged.
             </p>
           )}
-          {overGuard && (
+          {overRequestBudget && (
             <p className="form-error" role="alert">
-              Above the per-request limit: generate fewer scenes at a time.
+              Above the per-request budget: generate fewer scenes at a time, or ask a project owner
+              to raise the budget.
             </p>
           )}
         </div>

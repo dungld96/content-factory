@@ -35,6 +35,8 @@ export const videoGenerationRequestSchema = z
     regenerate: z.boolean().optional(),
     /** Required to generate when the cost cannot be estimated (COST_STRATEGY §3). */
     acceptUnknownCost: z.boolean().optional(),
+    /** M7: proceed although a soft budget would be exceeded (recorded as an override). */
+    acceptOverBudget: z.boolean().optional(),
     /**
      * Generate only: the total the user was shown (decision V10). The request is refused when
      * the current estimate is higher. Null confirms an unknown estimate.
@@ -80,8 +82,8 @@ export const videoEstimateSchema = z
     /** Sum over scenes to generate; null when any is unknown. Never 0 for unknown. */
     totalEstimatedUsd: usdAmountSchema.nullable(),
     unknownCost: z.boolean(),
-    /** Largest estimate one request may queue until M7 budgets (`SPEND_GUARD`). */
-    spendGuardUsd: usdAmountSchema,
+    /** The project's per-request budget (M7); null when none is set. */
+    requestBudgetUsd: usdAmountSchema.nullable(),
     /** The provider keeps prompts and keyframes (no zero-data-retention for video; risk R1). */
     providerRetainsInputs: z.boolean(),
   })
@@ -149,6 +151,8 @@ export const voiceoverGenerationRequestSchema = z
     /** Scenes to generate; default: every scene with voice-over text and no voice-over. */
     sceneIds: z.array(z.uuid()).min(1).max(50).optional(),
     regenerate: z.boolean().optional(),
+    /** M7: proceed although a soft budget would be exceeded (recorded as an override). */
+    acceptOverBudget: z.boolean().optional(),
     acceptUnknownCost: z.boolean().optional(),
   })
   .meta({ id: 'VoiceoverGenerationRequest' });

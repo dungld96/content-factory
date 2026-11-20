@@ -88,7 +88,7 @@ export class MediaController {
     params: storyboardVersionIdParamsSchema,
     body: videoGenerationRequestSchema,
     responses: { 202: { description: 'Queued', schema: videoGenerateResponseSchema } },
-    errors: [400, 401, 403, 404, 409, 422, 503],
+    errors: [400, 401, 402, 403, 404, 409, 422, 503],
   })
   generateVideos(
     @CurrentActor() actor: Actor,
@@ -176,7 +176,7 @@ export class MediaController {
     params: storyboardVersionIdParamsSchema,
     body: voiceoverGenerationRequestSchema,
     responses: { 202: { description: 'Queued', schema: voiceoverGenerateResponseSchema } },
-    errors: [400, 401, 403, 404, 409, 422],
+    errors: [400, 401, 402, 403, 404, 409, 422],
   })
   generateVoiceovers(
     @CurrentActor() actor: Actor,

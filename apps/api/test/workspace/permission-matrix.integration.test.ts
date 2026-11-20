@@ -366,6 +366,18 @@ const ROWS: Record<string, Row> = {
     path: (f) => `/voice-profiles/${f.voiceProfileId}/archive`,
     expect: [401, 404, 403, 200, 200],
   },
+  // Budgets (M7a): members read, only the owner changes limits.
+  'GET /projects/:projectId/budget': {
+    method: 'GET',
+    path: (f) => `/projects/${f.projectId}/budget`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'PUT /projects/:projectId/budget': {
+    method: 'PUT',
+    path: (f) => `/projects/${f.projectId}/budget`,
+    body: () => ({ monthly: { limitUsd: '12', mode: 'hard' } }),
+    expect: [401, 404, 403, 403, 200],
+  },
   // Renders (M6c). The fixture has a finished, unreviewed render; its storyboard is pending, so a
   // new render is blocked (409); export needs an approved render (409).
   'GET /content/:contentId/render-plan': {

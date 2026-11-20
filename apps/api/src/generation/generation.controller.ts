@@ -105,7 +105,7 @@ export class GenerationController {
         schema: generateResponseSchema,
       },
     },
-    errors: [400, 401, 403, 404, 409, 422],
+    errors: [400, 401, 402, 403, 404, 409, 422],
   })
   generateScript(
     @CurrentActor() actor: Actor,
@@ -214,7 +214,7 @@ export class GenerationController {
         schema: generateResponseSchema,
       },
     },
-    errors: [400, 401, 403, 404, 409, 422],
+    errors: [400, 401, 402, 403, 404, 409, 422],
   })
   generateStoryboard(
     @CurrentActor() actor: Actor,
