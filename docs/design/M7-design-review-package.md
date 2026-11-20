@@ -1,7 +1,7 @@
 # M7 Design Review Package — Reliability and Cost Controls
 
 - Status: **Revision 1, approved by the owner (2026-11-20)**: B1–B10 as proposed. Implemented in
-  slices M7a–M7d (§14); deviations and clarifications in §15; ADR-0019. Awaiting review.
+  slices M7a–M7d (§14); deviations and clarifications in §15; ADR-0019. **M7 done and approved (2026-11-20).**
 - Date: 2026-11-20
 - Baseline: M6 approved (`1d3adbe`); ADR-0012 (ledger, money), ADR-0013 (jobs, retries, DLQ,
   reconciler), ADR-0017 (async provider jobs), ADR-0018 (rendering)
