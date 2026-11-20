@@ -37,3 +37,6 @@ apps/web/AGENTS.md
 
 # Paid benchmark outputs (media; results are recorded in docs/design/m5/benchmark-results.md)
 benchmark/
+
+# Backups taken on the VM (M8, infra/deploy/backup.sh)
+infra/deploy/backups/

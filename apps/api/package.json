@@ -11,7 +11,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "user": "node --env-file-if-exists=../../.env --enable-source-maps dist/cli/user-cli.js",
     "seed": "node --env-file-if-exists=../../.env --enable-source-maps dist/cli/seed.js",
-    "ai": "node --env-file-if-exists=../../.env --enable-source-maps dist/cli/ai-registry-cli.js"
+    "ai": "node --env-file-if-exists=../../.env --enable-source-maps dist/cli/ai-registry-cli.js",
+    "storage": "node --env-file-if-exists=../../.env --enable-source-maps dist/cli/storage-cli.js"
   },
   "dependencies": {
     "@acf/ai-core": "workspace:*",

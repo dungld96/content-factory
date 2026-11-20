@@ -201,10 +201,39 @@ printf 'S3_ACCESS_KEY_ID=acf_app_%s\nS3_SECRET_ACCESS_KEY=%s\nSTORAGE_ADMIN_ACCE
 Asset files live in the `seaweedfs-data` volume on the VM's persistent disk; disk snapshots
 back them up together with the database volume.
 
-Back up the database (store the file privately; it contains user data and password hashes):
+#### Backup and restore (M8, ADR-0020)
+
+A backup is the database dump plus every stored object with a SHA-256 manifest, in
+`infra/deploy/backups/<UTC timestamp>/`. It can run while the stack is up; the last 7 are kept.
+It contains user data and password hashes: keep it private. Secrets (`.env.production`) are not
+included; keep your own private copy of that file.
 
 ```bash
-./acf.sh exec -T postgres pg_dump -U acf acf > "acf-$(date -u +%Y%m%d).sql"
+./acf.sh backup
+```
+
+Copy backups off the VM (replace the bucket with yours):
+
+```bash
+gcloud storage cp -r infra/deploy/backups/<timestamp> gs://<your-backup-bucket>/acf/
+```
+
+Nightly at 02:15 UTC (optional; add with `crontab -e` on the VM, adjusting the path):
+
+```bash
+15 2 * * * cd /home/$USER/content-factory/infra/deploy && ./acf.sh backup >> backups/backup.log 2>&1
+```
+
+Restore needs **empty volumes** (a new VM, or after `./acf.sh down -v`, which deletes all data):
+it restores the database, writes the objects back, checks every object and asset checksum, and
+applies any newer migrations. Then start the stack.
+
+```bash
+./acf.sh restore <timestamp>
+```
+
+```bash
+./acf.sh up -d
 ```
 
 Stop the stack (data is kept in Docker volumes):

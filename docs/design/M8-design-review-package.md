@@ -1,6 +1,7 @@
 # M8 Design Review Package — Pilot and Hardening
 
-- Status: **Revision 1, proposed (2026-11-20)**: awaiting the owner's decisions P1–P10.
+- Status: **Revision 1, approved by the owner (2026-11-20)**: P1–P10 as proposed (default pilot
+  brief, USD 3 cap). Implemented in slices M8a–M8d (§10).
 - Date: 2026-11-20
 - Baseline: M7 approved (`f8ce93e`); ADR-0014 (single-VM staging), ADR-0017 (async provider
   jobs), ADR-0018 (rendering), ADR-0019 (budgets, circuits)

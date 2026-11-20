@@ -3,6 +3,7 @@ import { Readable } from 'node:stream';
 import {
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
   S3ServiceException,
@@ -48,6 +49,10 @@ function wrap(error: unknown, action: string): never {
 export class S3ObjectStore implements ObjectStore {
   private readonly client: S3Client;
   private readonly bucket: string;
+
+  get bucketName(): string {
+    return this.bucket;
+  }
 
   constructor(settings: S3StoreSettings, client?: S3Client) {
     this.bucket = settings.bucket;
@@ -123,6 +128,27 @@ export class S3ObjectStore implements ObjectStore {
       if (status(error) === 404) return null;
       return wrap(error, 'get');
     }
+  }
+
+  /** Every key (optionally under `prefix`), in pages of 1000: operator tooling only (backups). */
+  async *listKeys(prefix?: string): AsyncIterable<string> {
+    let token: string | undefined;
+    do {
+      let out;
+      try {
+        out = await this.client.send(
+          new ListObjectsV2Command({
+            Bucket: this.bucket,
+            ...(prefix ? { Prefix: prefix } : {}),
+            ...(token ? { ContinuationToken: token } : {}),
+          }),
+        );
+      } catch (error) {
+        return wrap(error, 'list');
+      }
+      for (const item of out.Contents ?? []) if (item.Key) yield item.Key;
+      token = out.IsTruncated ? out.NextContinuationToken : undefined;
+    } while (token);
   }
 
   async getBytes(key: string, maxBytes: number): Promise<Uint8Array | null> {
