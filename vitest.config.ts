@@ -61,6 +61,16 @@ export default defineConfig({
       },
       {
         test: {
+          // Deployment scripts (M8.5 Q9), run with stub `gcloud`/`crontab`/`docker` on PATH.
+          name: 'unit:infra',
+          root: path.join(root, 'infra'),
+          include: ['**/*.test.ts'],
+          environment: 'node',
+          setupFiles: [networkGuard],
+        },
+      },
+      {
+        test: {
           name: 'integration:database',
           root: path.join(root, 'packages/database'),
           include: ['test/**/*.integration.test.ts'],

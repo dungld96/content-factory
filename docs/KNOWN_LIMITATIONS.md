@@ -1,8 +1,8 @@
-# Known limitations (MVP, after M8)
+# Known limitations (MVP, after M8.5)
 
 What the AI Content Factory does not do, or does only partly, as of 2026-11-20. Items marked
-**(pilot)** were found in the M8 pilot (`docs/design/m8/pilot-report.md`); follow-ups are listed
-there.
+**(pilot)** were found in the M8 pilot (`docs/design/m8/pilot-report.md`); M8.5 fixed most of the
+workflow gaps it found (`docs/design/M8.5-design-review-package.md`).
 
 ## Product scope
 
@@ -11,8 +11,9 @@ there.
 - **No publishing**: the export is a downloadable package (MP4, SRT, thumbnail, manifest, cost
   report). Nothing is posted to TikTok, YouTube or other platforms (out of MVP scope).
 - **One language per content item**; translation or multi-language variants are separate items.
-- **Captions come from the voice-over text** (no speech recognition); cue splitting is simple and
-  can produce very short cues or line breaks inside a phrase **(pilot)**.
+- **Captions come from the voice-over text** (no speech recognition): cue timing is proportional
+  to text length within each scene, not aligned to the spoken words. Line breaks follow punctuation
+  and balanced lengths; without a dictionary they can still split a multi-word term.
 - **Music** must be uploaded by the user with a licence note; there is no music library.
 - **No automatic visual quality scoring**: automated QC checks the technical output (format, size,
   frame rate, duration, loudness, black/frozen/silent stretches); whether the content is good,
@@ -21,16 +22,13 @@ there.
 - **Single tenant, one deployment**: projects and roles (owner, editor, viewer), but no
   organisations, billing, invoicing or per-user quotas.
 
-## Workflow gaps (pilot)
+## Workflow gaps
 
-- Only the **latest** script version can be approved from the UI.
-- The storyboard model is not told the clip model's lengths (e.g. Veo 3.1 Lite: 4, 6, 8 s): scenes
-  may need retiming (the scene editor has a duration field).
-- Scene edits are validated one at a time (total-duration rule) and the error does not name the
-  rule.
-- A voice-over longer than its scene is only reported by the render preflight.
-- The voice-profile form expects the provider's exact voice id; it offers no list, and the model
-  list starts with a disabled model.
+- Scene edits are validated one at a time against the total-duration rule: when retiming several
+  scenes, change them in an order that keeps the total in range (the error names the rule and the
+  measured total) **(pilot)**.
+- Generated storyboards use the routed clip model's lengths; scenes edited by hand may use any
+  length (the clip plan marks scenes longer than the model allows).
 
 ## Providers and models
 
@@ -38,7 +36,8 @@ there.
   automatic fallback to another model or provider: when a provider's circuit is open, work waits
   (up to 2 h) and then fails.
 - **Model capabilities are recorded, not discovered**: a routable model can still reject a request
-  (Gemini 3.5 Flash Lite rejects the storyboard JSON schema) **(pilot)**.
+  or ignore an instruction. Gemini 3.5 Flash Lite accepts the storyboard schema in `basic` schema
+  mode but did not keep to the clip lengths, so storyboards stay on Claude Haiku 5.5 (M8.5).
 - **Video providers keep prompts and keyframes** (no zero-data-retention option for video).
 - **A lost video submission may be charged** (`SUBMIT_OUTCOME_UNKNOWN`): it is never resubmitted
   automatically; its reserved amount stays counted until an owner resolves it.
@@ -56,12 +55,13 @@ there.
 ## Operations and security
 
 - **One VM** (Docker Compose): no high availability; a VM failure means restoring a backup.
-- **Backups are whole-system snapshots** (database + objects); no point-in-time recovery. Copying
-  them off the VM and scheduling them is the operator's step (DEPLOYMENT.md).
+- **Backups are whole-system snapshots** (database + objects), nightly at most; no point-in-time
+  recovery. The schedule and the off-VM copy (Cloud Storage) are set up once by the operator
+  (DEPLOYMENT.md); the bucket's retention is its lifecycle rule.
 - An interrupted image or render attempt can leave stored objects that no record references
   (harmless, not served; they only use disk).
-- **No Content-Security-Policy on pages yet** (Next.js inline scripts need nonces); other security
-  headers are set by Caddy.
+- The Content-Security-Policy allows inline `style` attributes (`style-src 'unsafe-inline'`), which
+  React components use; scripts need the per-request nonce.
 - **Monitoring is log-based**: fixed event names for alerts (DEPLOYMENT.md), no metrics stack or
   paging.
 - Accounts are created by an operator (CLI); there is no self-service sign-up or password reset by

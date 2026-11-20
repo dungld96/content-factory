@@ -671,6 +671,12 @@ M3 error codes: `BRIEF_INVALID` (422, details list the errors), `NO_MODEL_ROUTE`
 (409), `SCRIPT_NOT_APPROVED` (409), `STALE_STORYBOARD` (409), `ARTIFACT_IMMUTABLE` (409),
 `NOT_CANCELABLE` (409).
 
+Storyboard jobs (M8.5, template `storyboard.v2`) are given the routed clip model's lengths and the
+voice profile's narration pace; a generated scene with another length breaks the rule
+`scene_duration_allowed` ("10 s is not a clip length; use one of 4, 6, 8 s"), which the one repair
+call fixes or the job fails with `OUTPUT_INVALID`. Rule errors on edits (`422`) list each broken
+rule with the measured values in `details`, and the web shows them.
+
 ## 11. API conventions
 
 - Use UUID identifiers.
@@ -699,3 +705,6 @@ Implemented conventions (M1):
   malformed value returns `412 PRECONDITION_FAILED`. With `REQUIRE_IF_MATCH=true`, a missing
   header returns `428 PRECONDITION_REQUIRED`.
 - **Security headers**: `helmet` defaults on every response; no `X-Powered-By`.
+- **Web pages (M8.5)**: every page from the web app carries a `Content-Security-Policy` with a
+  per-request script nonce (`script-src 'self' 'nonce-…' 'strict-dynamic'`, `default-src 'self'`,
+  `frame-ancestors 'none'`); `/api/v1/*` responses are the API's own (helmet).

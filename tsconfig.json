@@ -5,5 +5,11 @@
     "allowJs": true,
     "checkJs": false
   },
-  "include": ["eslint.config.js", "vitest.config.ts", "test-support/**/*.ts", "scripts/**/*.mjs"]
+  "include": [
+    "eslint.config.js",
+    "vitest.config.ts",
+    "test-support/**/*.ts",
+    "scripts/**/*.mjs",
+    "infra/**/*.ts"
+  ]
 }

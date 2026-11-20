@@ -251,7 +251,7 @@ back them up together with the database volume.
 #### Backup and restore (M8, ADR-0020)
 
 A backup is the database dump plus every stored object with a SHA-256 manifest, in
-`infra/deploy/backups/<UTC timestamp>/`. It can run while the stack is up; the last 7 are kept.
+`infra/deploy/backups/<UTC timestamp>/`. It can run while the stack is up; the last 7 are kept on the VM (nightly copies off the VM: below).
 It contains user data and password hashes: keep it private. Secrets (`.env.production`) are not
 included; keep your own private copy of that file.
 
@@ -259,16 +259,65 @@ included; keep your own private copy of that file.
 ./acf.sh backup
 ```
 
-Copy backups off the VM (replace the bucket with yours):
+#### Scheduled, off-VM backups (M8.5)
+
+A backup on the VM's own disk does not survive losing the VM. Once, set up a Cloud Storage bucket
+that the VM may write to, then schedule the nightly backup. Replace `YOUR_BACKUP_BUCKET` with a
+new, globally unique name (lowercase letters, digits, dashes).
+
+Create the bucket (**your computer**; same region as the VM, no public access, objects deleted
+after 30 days):
 
 ```bash
-gcloud storage cp -r infra/deploy/backups/<timestamp> gs://<your-backup-bucket>/acf/
+gcloud storage buckets create gs://YOUR_BACKUP_BUCKET --location=asia-southeast1 --uniform-bucket-level-access --public-access-prevention
 ```
 
-Nightly at 02:15 UTC (optional; add with `crontab -e` on the VM, adjusting the path):
+```bash
+printf '{"rule":[{"action":{"type":"Delete"},"condition":{"age":30}}]}' > lifecycle.json && gcloud storage buckets update gs://YOUR_BACKUP_BUCKET --lifecycle-file=lifecycle.json
+```
+
+Let the VM's service account write to it (**your computer**). The VM was created with read-only
+storage access, so its access scopes change once; this stops the VM for a minute:
 
 ```bash
-15 2 * * * cd /home/$USER/content-factory/infra/deploy && ./acf.sh backup >> backups/backup.log 2>&1
+SA="$(gcloud compute instances describe acf-staging --zone=asia-southeast1-b --format='value(serviceAccounts[0].email)')" && gcloud storage buckets add-iam-policy-binding gs://YOUR_BACKUP_BUCKET --member="serviceAccount:$SA" --role=roles/storage.objectUser
+```
+
+```bash
+gcloud compute instances stop acf-staging --zone=asia-southeast1-b && gcloud compute instances set-service-account acf-staging --zone=asia-southeast1-b --service-account="$SA" --scopes=default,storage-rw && gcloud compute instances start acf-staging --zone=asia-southeast1-b
+```
+
+On the VM (after `gcloud compute ssh …`; the stack restarts by itself), name the bucket and
+schedule the backup (02:15 every night, VM time, UTC on Debian images):
+
+```bash
+cd ~/content-factory/infra/deploy && echo 'BACKUP_GCS_BUCKET=YOUR_BACKUP_BUCKET' >> .env.production
+```
+
+```bash
+./acf.sh backup-schedule install
+```
+
+Each night the backup is checked, copied to `gs://YOUR_BACKUP_BUCKET/acf/<timestamp>/` (the
+`backup.json` manifest last, so a copy with `backup.json` is complete), and only then are local
+backups beyond the last 7 removed. A failed backup or copy removes nothing and writes a line with
+`"event":"backup_failed"` to `backups/backup.log`. Check it, and the bucket, the next morning:
+
+```bash
+./acf.sh backup-schedule status
+```
+
+```bash
+gcloud storage ls gs://YOUR_BACKUP_BUCKET/acf/
+```
+
+`./acf.sh backup-schedule remove` removes the schedule. Without `BACKUP_GCS_BUCKET` the schedule
+still runs and keeps the last 7 backups on the VM only.
+
+To restore from the bucket on a new VM, copy one backup back first, then restore as below:
+
+```bash
+mkdir -p backups && gcloud storage cp -r gs://YOUR_BACKUP_BUCKET/acf/<timestamp> backups/
 ```
 
 Restore needs **empty volumes** (a new VM, or after `./acf.sh down -v`, which deletes all data):
@@ -327,6 +376,7 @@ shipper, e.g. `./acf.sh logs -f api worker | grep -E '"msg":"(budget_exceeded|ci
 | `job_dead_lettered` | worker | A job failed after all retries (shown on the Operations page). |
 | `reservation_held` | worker | A provider call's charge is unknown; an owner must resolve it. |
 | `reconciler_requeued` | worker | Queue state was repaired after a restart or a Redis loss. |
+| `backup_failed` (`event`, in `infra/deploy/backups/backup.log`) | backup.sh | A scheduled backup or its off-VM copy failed; nothing was removed. `./acf.sh backup-schedule status` shows the last failure. |
 
 Circuits can also be inspected or forced from the VM:
 
