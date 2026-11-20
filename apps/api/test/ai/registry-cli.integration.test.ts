@@ -213,6 +213,24 @@ describe('model import-openrouter', () => {
   });
 });
 
+describe('schema mode (M8.5)', () => {
+  it('switches a text model to basic structured output and back', async () => {
+    await cli('model import-openrouter deepseek/deepseek-v4-flash --tier economy --apply');
+    const basic = await cli('model set-schema-mode deepseek/deepseek-v4-flash basic');
+    expect([basic.code, basic.out]).toEqual([
+      0,
+      "✔ openrouter/deepseek/deepseek-v4-flash: structured output sends the schema's structure only",
+    ]);
+    expect((await cli('model list')).out).toMatch(
+      /deepseek\/deepseek-v4-flash\t.*\tschema=basic$/m,
+    );
+    expect((await cli('model set-schema-mode deepseek/deepseek-v4-flash full')).code).toBe(0);
+    expect((await cli('model list')).out).not.toContain('schema=basic');
+    expect((await cli('model set-schema-mode deepseek/deepseek-v4-flash loose')).code).toBe(2);
+    expect((await cli('model set-schema-mode no/such-model basic')).code).not.toBe(0);
+  });
+});
+
 describe('circuits (M7b)', () => {
   it('lists, opens and closes a provider circuit, and refuses an unknown provider', async () => {
     const mock = await prisma.aiProvider.upsert({

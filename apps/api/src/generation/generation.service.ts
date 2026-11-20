@@ -7,6 +7,7 @@ import {
   Capability,
   filterCandidates,
   LlmParameter,
+  videoConstraintsSchema,
   type PriceComponent,
   type QualityTier,
 } from '@acf/ai-core';
@@ -24,6 +25,7 @@ import {
   type StoryboardJobInput,
   type TextJobKind,
   estimateTextJob,
+  narrationWordsPerSecond,
 } from '@acf/content-domain';
 import {
   ApiErrorCode,
@@ -75,7 +77,7 @@ const REQUIRED_PARAMETERS = new Set<string>([
 ]);
 const TEMPLATE: Readonly<Record<TextJobKind, string>> = {
   script_generation: 'script.v1',
-  storyboard_generation: 'storyboard.v1',
+  storyboard_generation: 'storyboard.v2',
 };
 const DEFAULT_TIER: QualityTier = 'economy';
 
@@ -205,6 +207,7 @@ export class GenerationService {
       characterVersionIds: brief.characterVersionId ? [brief.characterVersionId] : [],
       environmentVersionIds: brief.environmentVersionId ? [brief.environmentVersionId] : [],
       qualityTier: DEFAULT_TIER,
+      ...(await this.productionConstraints(item)),
     });
     const inputVersionIds = [
       script.id,
@@ -531,6 +534,33 @@ export class GenerationService {
       id: chosen.modelId,
       modelKey: chosen.modelKey,
       prices: activePrices(row?.prices ?? [], new Date()),
+    };
+  }
+
+  /**
+   * What the storyboard must fit (M8.5 Q1): the routed video model's clip lengths and the narration
+   * pace of the content's voice profile (its language and speed; else the content's language).
+   */
+  private async productionConstraints(
+    item: ContentItem,
+  ): Promise<{ clipDurations: number[] | null; wordsPerSecond: number }> {
+    const route = await this.prisma.client.aiTaskRoute.findUnique({
+      where: { task: 'video_generation' },
+      include: { model: true },
+    });
+    const constraints = videoConstraintsSchema.safeParse(route?.model.mediaConstraints);
+    const durations = constraints.success
+      ? [...new Set(constraints.data.durations)].sort((a, b) => a - b)
+      : null;
+    const profile = item.voiceProfileId
+      ? await this.prisma.client.voiceProfile.findUnique({ where: { id: item.voiceProfileId } })
+      : null;
+    return {
+      clipDurations: durations && durations.length > 0 ? durations : null,
+      wordsPerSecond: narrationWordsPerSecond(
+        profile?.language ?? item.language,
+        profile?.speed === null || profile?.speed === undefined ? 1 : Number(profile.speed),
+      ),
     };
   }
 

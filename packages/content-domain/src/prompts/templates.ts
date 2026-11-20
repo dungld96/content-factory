@@ -108,6 +108,45 @@ export const storyboardV1: PromptTemplate<StoryboardV1Variables> = {
   ],
 };
 
+// ----------------------------------------------------------------------------- storyboard.v2
+
+/**
+ * storyboard.v1 plus two production constraints found in the M8 pilot (M8.5 Q1): every scene lasts
+ * one of the video model's clip lengths, and each scene's narration fits its duration.
+ */
+export const storyboardV2Variables = storyboardV1Variables.extend({
+  clipDurations: z.array(z.number().int().positive()).min(1).nullable(),
+  wordsPerSecond: z.number().positive(),
+});
+export type StoryboardV2Variables = z.infer<typeof storyboardV2Variables>;
+
+export const storyboardV2: PromptTemplate<StoryboardV2Variables> = {
+  id: 'storyboard.v2',
+  variables: storyboardV2Variables,
+  build: (v) => {
+    const [system, user] = storyboardV1.build(v);
+    const extra = [
+      v.clipDurations
+        ? `Every scene's durationSeconds must be exactly one of: ${v.clipDurations.join(', ')} (the video model only makes clips of these lengths). Choose the number of scenes so that these lengths add up to the target.`
+        : null,
+      `Each scene's voiceOverSegment must be speakable within its duration at about ${v.wordsPerSecond.toFixed(1)} words per second (at most ${String(Math.floor(v.wordsPerSecond * 0.9 * 10) / 10)} × durationSeconds words); move or shorten narration rather than exceed it.`,
+    ].filter((x): x is string => x !== null);
+    return [
+      { role: 'system', content: `${system?.content ?? ''}\n${extra.join('\n')}` },
+      ...(user ? [user] : []),
+    ];
+  },
+};
+
+/** Narration pace by language (words per second at speed 1), from the M8 pilot measurements. */
+export function narrationWordsPerSecond(
+  language: string,
+  speed: number | null | undefined,
+): number {
+  const base = language.toLowerCase().startsWith('vi') ? 2.7 : 2.4;
+  return Math.round(base * (speed ?? 1) * 100) / 100;
+}
+
 // ----------------------------------------------------------------------------- repair.v1
 
 export const repairV1Variables = z.strictObject({

@@ -94,6 +94,7 @@ const EXPECTED_CHECKS = [
   'ai_models.ai_models_max_output_positive',
   'ai_models.ai_models_media_constraints_kind',
   'ai_models.ai_models_model_key_nonempty',
+  'ai_models.ai_models_schema_mode_known',
   'ai_providers.ai_providers_key_format',
   'ai_providers.ai_providers_kind_known',
   'ai_providers.ai_providers_name_nonempty',

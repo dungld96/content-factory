@@ -186,6 +186,10 @@ native Vietnamese voices, e.g. `vi-VN-Harper:MAI-Voice-2.1`).
 ./acf.sh exec api node dist/cli/ai-registry-cli.js route set storyboard_generation anthropic/claude-haiku-5.5
 ```
 
+Storyboards are written to fit the routed clip model's lengths (M8.5): no retiming is needed when
+the video route is set before storyboards are generated. Optional, for Gemini on structured tasks:
+`./acf.sh exec api node dist/cli/ai-registry-cli.js model set-schema-mode google/gemini-3.5-flash-lite basic`.
+
 Image, video and TTS models are imported disabled (`model import-openrouter-images|videos|tts`,
 see LOCAL_DEVELOPMENT.md); enable and route the ones above the same way
 (`route set image_generation bytedance-seed/seedream-5-0-flash`,

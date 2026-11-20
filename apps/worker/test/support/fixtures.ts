@@ -211,6 +211,7 @@ export async function createJob(
   w: World,
   kind: TextJobKind,
   input: ScriptJobInput | StoryboardJobInput,
+  promptTemplateId: string = kind === 'script_generation' ? 'script.v1' : 'storyboard.v1',
 ): Promise<string> {
   return prisma.$transaction(async (tx) => {
     const item = await tx.contentItem.findUniqueOrThrow({ where: { id: w.contentItemId } });
@@ -230,12 +231,12 @@ export async function createJob(
           contentItemId: w.contentItemId,
           brief: input,
           inputVersionIds: [],
-          promptTemplateId: kind === 'script_generation' ? 'script.v1' : 'storyboard.v1',
+          promptTemplateId,
           modelId: w.modelId,
         }),
         input: input,
         previousContentStatus: item.status,
-        promptTemplateId: kind === 'script_generation' ? 'script.v1' : 'storyboard.v1',
+        promptTemplateId,
         modelId: w.modelId,
         requestedById: w.userId,
       },

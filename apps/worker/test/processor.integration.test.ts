@@ -233,6 +233,49 @@ describe('storyboard generation', () => {
     return id;
   }
 
+  it('storyboard.v2: scenes must use the clip lengths; a basic-schema model gets the structure only (M8.5)', async () => {
+    const scriptId = await approvedScript();
+    await prisma.aiModel.update({ where: { id: world.modelId }, data: { schemaMode: 'basic' } });
+    const jobId = await createJob(
+      prisma,
+      world,
+      'storyboard_generation',
+      { ...storyboardInput(world, scriptId), clipDurations: [4, 6, 8], wordsPerSecond: 2.7 },
+      'storyboard.v2',
+    );
+    // First answer: 5 + 10 + 7 + 8 = 30 s, but 5, 10 and 7 are not clip lengths → one repair.
+    const off = sampleStoryboard(4, 6);
+    [5, 10, 7, 8].forEach((d, i) => {
+      const scene = off.scenes[i];
+      if (scene) scene.durationSeconds = d;
+    });
+    mock.enqueue({ kind: 'result', text: json(off) });
+    const fixed = sampleStoryboard(4, 6);
+    [6, 8, 8, 8].forEach((d, i) => {
+      const scene = fixed.scenes[i];
+      if (scene) scene.durationSeconds = d;
+    });
+    mock.enqueue({ kind: 'result', text: json(fixed) });
+
+    const before = mock.calls.length;
+    expect((await processor.process(jobId)).type).toBe('succeeded');
+    const [first, repair] = mock.calls.slice(before);
+    const system = first?.request.messages[0]?.content ?? '';
+    expect(system).toContain('exactly one of: 4, 6, 8');
+    expect(system).toContain('2.7 words per second');
+    // The provider got no value constraints; the repair prompt names the broken lengths.
+    expect(JSON.stringify(first?.request.responseFormat)).not.toContain('maxLength');
+    expect(repair?.request.messages.map((m) => m.content).join('\n')).toContain(
+      '5 s is not a clip length',
+    );
+    const job = await jobRow(jobId);
+    const scenes = await prisma.storyboardScene.findMany({
+      where: { storyboardVersionId: job.resultStoryboardVersionId ?? '' },
+      orderBy: { sceneNumber: 'asc' },
+    });
+    expect(scenes.map((sc) => Number(sc.durationSeconds))).toEqual([6, 8, 8, 8]);
+  });
+
   it('stores scenes with offered character/environment versions and reference assets', async () => {
     const scriptId = await approvedScript();
     const jobId = await createJob(

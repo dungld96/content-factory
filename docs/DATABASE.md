@@ -160,6 +160,14 @@ Migrations `m7_resume` and `m7_settled_charge`:
 | `production_runs.resumed_from_run_id` | The run a resume came from (composite FK, same project; never itself; set once, `AC011`). |
 | `budget_reservations.settled_charge_usd` | When an owner settles a **held** reservation, its amount is recorded here and counts as spent from then on (the ledger row of a lost call cannot be priced). Set only on held → settled, then frozen (`AC011`); only on settled rows (CHECK). |
 
+## 0.10 Implemented schema (M8.5)
+
+Migration `m85_schema_mode`: `ai_models.schema_mode` (`full` default, `basic`; CHECK). `basic`
+models receive the structured-output schema without value constraints (patterns, formats, bounds,
+lengths); the worker still validates and repairs with the full schema
+(`pnpm ai:registry model set-schema-mode <modelKey> <full|basic>`). Storyboard job inputs may carry
+`clipDurations` and `wordsPerSecond` (template `storyboard.v2`).
+
 ## 1. Entity groups
 
 ### Identity and workspace

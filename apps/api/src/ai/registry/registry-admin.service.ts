@@ -63,6 +63,24 @@ export class RegistryAdminService {
    * Records a video model's minimum billed seconds (observed billing, not in the catalog), so
    * estimates and the spend guard bill at least that much. `null` removes it.
    */
+  /** `full` | `basic` structured-output requests for an LLM (M8.5 Q2). */
+  async setSchemaMode(
+    providerKey: string,
+    modelKey: string,
+    mode: 'full' | 'basic',
+  ): Promise<void> {
+    const { count } = await this.prisma.aiModel.updateMany({
+      where: {
+        modelKey,
+        provider: { key: providerKey },
+        capabilities: { some: { capability: 'llm' } },
+      },
+      data: { schemaMode: mode },
+    });
+    if (count === 0)
+      throw new RegistryAdminError(`${providerKey}/${modelKey} is not a registered text model`);
+  }
+
   async setMinBilledSeconds(
     providerKey: string,
     modelKey: string,

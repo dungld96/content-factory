@@ -403,6 +403,18 @@ describe('versions, review and gates', () => {
     expect(await status(f)).toBe('storyboarding');
     const sbInput = await prisma.generationJob.findUniqueOrThrow({ where: { id: sbJob.job.id } });
     expect(storyboardJobInputSchema.safeParse(sbInput.input).success).toBe(true);
+    // M8.5 Q1: the job uses storyboard.v2 and carries the routed clip model's lengths and the pace.
+    const route = await prisma.aiTaskRoute.findUnique({
+      where: { task: 'video_generation' },
+      include: { model: true },
+    });
+    const expectedDurations = route
+      ? [...new Set((route.model.mediaConstraints as { durations: number[] }).durations)].sort(
+          (a, b) => a - b,
+        )
+      : null;
+    expect(sbInput.promptTemplateId).toBe('storyboard.v2');
+    expect(sbInput.input).toMatchObject({ clipDurations: expectedDurations, wordsPerSecond: 2.7 });
     const sbId = await completeJob(sbJob.job.id);
 
     // Edit a scene: new storyboard version, durations re-validated.

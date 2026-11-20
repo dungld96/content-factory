@@ -18,6 +18,7 @@
 //   pnpm ai:registry model import-openrouter-videos <modelKey>... [--tier <tier>] [--apply]   (M5)
 //   pnpm ai:registry model import-openrouter-tts <modelKey>... [--tier <tier>] [--apply]      (M5)
 //   pnpm ai:registry model set-min-billed-seconds <modelKey> <seconds|none> [--provider openrouter]
+//   pnpm ai:registry model set-schema-mode <modelKey> <full|basic> [--provider openrouter]   (M8.5)
 //   ACF_PAID_SMOKE=1 pnpm ai:registry smoke-video <modelKey> --project <slug> --max-cost-usd <usd>
 //                              [--frame <png|jpg>] [--duration <s>] [--resolution 720p] [--count n] [--out <dir>]
 //   ACF_PAID_SMOKE=1 pnpm ai:registry smoke-tts <modelKey> --voice <id> --project <slug> --max-cost-usd <usd>
@@ -250,7 +251,7 @@ export async function runAiRegistryCli(
           .sort()
           .join(' ');
         io.out(
-          `${m.provider.key}\t${m.modelKey}\t${m.status}\t${m.qualityTier}\t${active || '(no prices: cost unknown)'}`,
+          `${m.provider.key}\t${m.modelKey}\t${m.status}\t${m.qualityTier}\t${active || '(no prices: cost unknown)'}${m.schemaMode === 'basic' ? '\tschema=basic' : ''}`,
         );
       }
       return 0;
@@ -261,6 +262,18 @@ export async function runAiRegistryCli(
         return usage('model set-status <modelKey> <enabled|disabled|degraded>');
       await admin.setModelStatus(values.provider, modelKey, status as AiProviderStatus);
       io.out(`✔ model ${values.provider}/${modelKey} is ${status}`);
+      return 0;
+    }
+    if (group === 'model' && command === 'set-schema-mode') {
+      const [modelKey, mode] = positionals;
+      if (!modelKey || (mode !== 'full' && mode !== 'basic'))
+        return usage('model set-schema-mode <modelKey> <full|basic>');
+      await admin.setSchemaMode(values.provider, modelKey, mode);
+      io.out(
+        mode === 'basic'
+          ? `✔ ${values.provider}/${modelKey}: structured output sends the schema's structure only`
+          : `✔ ${values.provider}/${modelKey}: structured output sends the full schema`,
+      );
       return 0;
     }
     if (group === 'model' && command === 'set-min-billed-seconds') {

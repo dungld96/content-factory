@@ -45,6 +45,9 @@ import {
   storyboardJobInputSchema,
   storyboardRuleIssues,
   storyboardV1,
+  storyboardV2,
+  narrationWordsPerSecond,
+  basicJsonSchema,
   buildImagePrompt,
   imageJobInputSchema,
   IMAGE_PROMPT_TEMPLATE_ID,
@@ -314,7 +317,7 @@ export class GenerationProcessor {
       input.environmentVersionIds.map((id) => this.offered('environment', id)),
     );
     const toleranceSeconds = durationTolerance(input.targetDurationSeconds);
-    const prompt = renderPrompt(storyboardV1, {
+    const variables = {
       language: input.language,
       targetDurationSeconds: input.targetDurationSeconds,
       toleranceSeconds,
@@ -322,7 +325,16 @@ export class GenerationProcessor {
       script: scriptContent,
       characters,
       environments,
-    });
+    };
+    // The job records its template: jobs queued before M8.5 replay storyboard.v1 exactly.
+    const prompt =
+      job.promptTemplateId === storyboardV2.id
+        ? renderPrompt(storyboardV2, {
+            ...variables,
+            clipDurations: input.clipDurations ?? null,
+            wordsPerSecond: input.wordsPerSecond ?? narrationWordsPerSecond(input.language, 1),
+          })
+        : renderPrompt(storyboardV1, variables);
     const allowedAssetIds = [...characters, ...environments].flatMap((v) => v.referenceAssetIds);
     const content = await this.generate(job, prompt.snapshot, prompt.messages, input.qualityTier, {
       name: 'storyboard_content',
@@ -333,6 +345,7 @@ export class GenerationProcessor {
           allowedCharacterVersionIds: input.characterVersionIds,
           allowedEnvironmentVersionIds: input.environmentVersionIds,
           allowedAssetIds,
+          allowedSceneDurations: input.clipDurations ?? null,
         }),
     });
 
@@ -415,6 +428,8 @@ export class GenerationProcessor {
       include: { provider: true },
     });
     const jsonSchema = toResponseJsonSchema(structured.schema);
+    // `basic` models get the structure only (M8.5 Q2); validation and repair use the full schema.
+    const requestSchema = model.schemaMode === 'basic' ? basicJsonSchema(jsonSchema) : jsonSchema;
     const context: GenerationContext = {
       projectId: job.projectId,
       contentItemId: job.contentItemId,
@@ -433,7 +448,7 @@ export class GenerationProcessor {
           responseFormat: {
             type: 'json_schema',
             name: structured.name,
-            schema: jsonSchema,
+            schema: requestSchema,
             strict: true,
           },
         },

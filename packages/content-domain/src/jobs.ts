@@ -73,6 +73,13 @@ export const storyboardJobInputSchema = z.strictObject({
   characterVersionIds: z.array(z.uuid()),
   environmentVersionIds: z.array(z.uuid()),
   qualityTier,
+  /**
+   * Clip lengths of the routed video model at request time (M8.5 Q1); every scene must use one.
+   * Absent (jobs before M8.5) or null (no video model routed): any length.
+   */
+  clipDurations: z.array(z.number().int().positive()).min(1).nullable().optional(),
+  /** Narration pace for the words-per-scene budget (voice profile language and speed). */
+  wordsPerSecond: z.number().positive().max(10).optional(),
 });
 export type StoryboardJobInput = z.infer<typeof storyboardJobInputSchema>;
 

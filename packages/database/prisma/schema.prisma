@@ -745,6 +745,8 @@ model AiModel {
   displayName         String           @map("display_name") @db.VarChar(200)
   /// Request parameters the model supports (ai-core `LlmParameter` vocabulary).
   supportedParameters String[]         @default([]) @map("supported_parameters")
+  /// full | basic (CHECK): what the structured-output request carries (M8.5 Q2).
+  schemaMode          String           @default("full") @map("schema_mode") @db.VarChar(8)
   inputModalities     String[]         @default([]) @map("input_modalities")
   outputModalities    String[]         @default([]) @map("output_modalities")
   contextLength       Int?             @map("context_length")

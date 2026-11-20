@@ -47,6 +47,8 @@ export interface StoryboardRuleContext {
   readonly allowedEnvironmentVersionIds: readonly string[];
   /** Assets attached to those versions. */
   readonly allowedAssetIds: readonly string[];
+  /** Clip lengths of the routed video model (M8.5 Q1); null or absent: any length. */
+  readonly allowedSceneDurations?: readonly number[] | null;
 }
 
 /** Domain rules beyond the schema: numbering, total duration, ID allow-lists (M3 design §5.3). */
@@ -84,6 +86,17 @@ export function storyboardRuleIssues(
       }
     });
   });
+  const allowed = ctx.allowedSceneDurations;
+  if (allowed && allowed.length > 0) {
+    content.scenes.forEach((scene, i) => {
+      if (!allowed.includes(scene.durationSeconds)) {
+        issues.push({
+          path: `scenes.${String(i)}.durationSeconds`,
+          message: `${String(scene.durationSeconds)} s is not a clip length; use one of ${allowed.join(', ')} s`,
+        });
+      }
+    });
+  }
   const total = totalDuration(content);
   const tolerance = durationTolerance(ctx.targetDurationSeconds);
   if (Math.abs(total - ctx.targetDurationSeconds) > tolerance) {
