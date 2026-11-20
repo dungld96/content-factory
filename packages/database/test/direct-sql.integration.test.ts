@@ -230,6 +230,45 @@ describe('assets', () => {
     );
   });
 
+  it('freezes the metadata keys the platform writes (P2a A2)', async () => {
+    const A5 = '20000000-0000-7000-8000-0000000000fc';
+    await commit(
+      app,
+      `INSERT INTO assets (id, project_id, asset_type, source_type, storage_key, mime_type, size_bytes, checksum_sha256, created_by_id, updated_at, metadata)
+       VALUES ('${A5}', '${P1}', 'audio', 'upload', 'p1/voice.mp3', 'audio/mpeg', 1, repeat('5', 64), '${U1}', now(),
+               '{"purpose":"voiceover","clipHash":"h1","note":"a"}')`,
+    );
+    for (const [name, sql] of [
+      [
+        'change purpose',
+        `UPDATE assets SET metadata = jsonb_set(metadata, '{purpose}', '"music"') WHERE id = '${A5}'`,
+      ],
+      [
+        'remove a reuse hash',
+        `UPDATE assets SET metadata = metadata - 'clipHash' WHERE id = '${A5}'`,
+      ],
+      ['replace all metadata', `UPDATE assets SET metadata = '{}' WHERE id = '${A5}'`],
+      [
+        'add a reserved key later',
+        `UPDATE assets SET metadata = metadata || '{"sceneHash":"x"}' WHERE id = '${A5}'`,
+      ],
+    ] as const) {
+      expect(await fails(sql), name).toBe('AC005');
+    }
+    // Other keys stay editable.
+    await commit(
+      app,
+      `UPDATE assets SET metadata = metadata || '{"note":"b","tag":"x"}' WHERE id = '${A5}'`,
+    );
+  });
+
+  it('lists the reserved metadata keys in one SQL function', async () => {
+    const { rows } = await app.query<{ keys: string[] }>(
+      'SELECT acf_system_metadata_keys() AS keys',
+    );
+    expect(rows[0]?.keys).toContain('purpose');
+  });
+
   it('allows a same-project derived asset but never re-parenting it', async () => {
     await commit(app, insertAsset(A3, P1, 'p1/a1-crop.png', '0', A1));
     expect(await fails(`UPDATE assets SET source_asset_id = '${A2}' WHERE id = '${A3}'`)).toBe(

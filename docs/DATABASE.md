@@ -41,7 +41,8 @@ milestone packages in `docs/design/` and ADR-0010, ADR-0011, ADR-0012.
 
 Rules: approved versions and their links are immutable (`AC001`, `AC002`); the master pointer
 moves only forward to an approved version (`AC003`, `AC004`); asset identity and lineage never
-change (`AC005`); an asset in use cannot be archived (`AC008`) and an archived asset blocks
+change, nor the metadata keys the platform writes (`acf_system_metadata_keys()`: `purpose`, reuse
+hashes, probe data; `AC005`); an asset in use cannot be archived (`AC008`) and an archived asset blocks
 approval (`AC010`).
 
 ### Content

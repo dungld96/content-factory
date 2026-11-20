@@ -155,3 +155,16 @@ P2a-2 is the only slice with a migration; it lands before P2b's picker relies on
 - **`usages` grows**: the extra queries use existing indexes (`asset_inputs.input_asset_id`,
   `asset_id` on the selection and scene-reference tables, the render asset columns) and are
   capped per kind.
+
+## 8. Deploy notes
+
+Before applying `p2_asset_metadata_guard`, list assets whose reserved keys look edited by hand (a
+reuse hash on an asset that was not generated, or a purpose on a non-audio asset). The guard
+freezes whatever is stored, so review these first:
+
+```sql
+SELECT id, asset_type, source_type, metadata
+  FROM assets
+ WHERE (source_type <> 'generated' AND metadata ?| ARRAY['sceneHash','clipHash','voiceoverHash'])
+    OR (asset_type <> 'audio' AND metadata ? 'purpose');
+```

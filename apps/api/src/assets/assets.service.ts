@@ -15,6 +15,7 @@ import {
   type UploadAssetQuery,
 } from '@acf/contracts';
 import { mediaTools, type ApiEnv } from '@acf/config';
+import { mergeEditedMetadata, reservedMetadataKeys } from '@acf/content-domain';
 import {
   inspectAudio,
   MediaToolsMissingError,
@@ -185,6 +186,7 @@ export class AssetsService {
   /** Metadata-only registration (decision D8); bytes arrive via presigned upload in M4. */
   async register(actor: Actor, projectId: string, input: RegisterAssetRequest): Promise<AssetDto> {
     await this.access.require(actor, projectId, 'editor', { mutation: true });
+    refuseReservedKeys(input.metadata);
     if (!input.storageKey.startsWith(`projects/${projectId}/`)) {
       throw validationError([
         { path: 'body.storageKey', message: `must start with projects/${projectId}/` },
@@ -431,12 +433,15 @@ export class AssetsService {
   ): Promise<AssetDto> {
     const asset = await this.load(assetId);
     await this.access.require(actor, asset.projectId, 'editor', { mutation: true });
+    refuseReservedKeys(input.metadata);
+    // P2a A2: an edit replaces the editable keys; the platform's keys keep their stored values.
+    const metadata =
+      input.metadata === undefined
+        ? undefined
+        : (mergeEditedMetadata(asset.metadata, input.metadata) as Prisma.InputJsonObject);
     const { count } = await this.db.asset.updateMany({
       where: { id: assetId, archivedAt: null, ...(expected ? { updatedAt: expected } : {}) },
-      data: definedOnly({
-        label: input.label,
-        metadata: input.metadata as Prisma.InputJsonObject | undefined,
-      }),
+      data: definedOnly({ label: input.label, metadata }),
     });
     const current = await this.db.asset.findUnique({ where: { id: assetId } });
     if (count === 0 || !current) throw guardedUpdateFailure(current, 'asset');
@@ -615,6 +620,18 @@ function mediaError(
 }
 
 /** FFprobe/FFmpeg is not installed (CLAUDE.md §8; M5 design §8). */
+/** P2a A2: callers may not set the metadata keys the platform writes (`SYSTEM_METADATA_KEYS`). */
+function refuseReservedKeys(metadata: Readonly<Record<string, unknown>> | undefined): void {
+  const keys = metadata ? reservedMetadataKeys(metadata) : [];
+  if (keys.length === 0) return;
+  throw new ApiError({
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+    code: ApiErrorCode.MetadataKeyReserved,
+    message: 'These metadata keys are set by the platform and cannot be changed.',
+    details: keys.map((k) => ({ path: `body.metadata.${k}`, message: `${k} is reserved` })),
+  });
+}
+
 export function mediaToolsMissing(): ApiError {
   return new ApiError({
     status: HttpStatus.SERVICE_UNAVAILABLE,

@@ -127,6 +127,9 @@ export const ApiErrorCode = {
   RangeNotSatisfiable: 'RANGE_NOT_SATISFIABLE',
   /** Only images and references can be reviewed. */
   AssetNotReviewable: 'ASSET_NOT_REVIEWABLE',
+  // --- P2a: asset metadata the platform writes is immutable (design A2) ---
+  /** The request sets a metadata key reserved for the platform (`SYSTEM_METADATA_KEYS`). */
+  MetadataKeyReserved: 'METADATA_KEY_RESERVED',
 
   // --- R0: content masters and variants (ADR-0015) ---
   /** The format cannot be published on the target platform. */

@@ -442,7 +442,7 @@ Schemas: `packages/contracts/src/assets.ts`.
 | `GET /assets/:assetId` | viewer | |
 | `GET /assets/:assetId/lineage` | viewer | `?direction=ancestors\|descendants&depth=1..50`; descendants are breadth-first and paginated (`limit`, `cursor`) |
 | `GET /assets/:assetId/usages` | viewer | character/environment versions referencing the asset (`primary` or `link`) |
-| `PATCH /assets/:assetId` | editor | `label`, `metadata` only; `If-Match` |
+| `PATCH /assets/:assetId` | editor | `label`, `metadata` only; `If-Match`. The platform's metadata keys (`SYSTEM_METADATA_KEYS`: `purpose`, the reuse hashes, probe data, …) are kept and cannot be set: `422 METADATA_KEY_RESERVED` (also on registration) |
 | `POST /assets/:assetId/archive` | editor | `409 ASSET_IN_USE` while an approved version references it |
 
 Registration rules: `storageKey` must start with `projects/<projectId>/` and contain no `.`/`..`

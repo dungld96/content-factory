@@ -17,3 +17,4 @@ export * from './platforms.js';
 export * from './render.js';
 export * from './budget.js';
 export * from './job-errors.js';
+export * from './assets.js';

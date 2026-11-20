@@ -84,6 +84,41 @@ describe('registration', () => {
     expect(identity.status).toBe(400);
   });
 
+  it('refuses the metadata keys the platform writes and keeps their stored values (P2a A2)', async () => {
+    const f = await ctx.fixture();
+    const reserved = await register(f.projectId, { metadata: { purpose: 'music', note: 'x' } });
+    expect([reserved.status, codeOf(reserved)]).toEqual([422, 'METADATA_KEY_RESERVED']);
+
+    // A voice-over upload as the platform writes it (reserved keys set at insert).
+    const created = await ctx.prisma.asset.create({
+      data: {
+        projectId: f.projectId,
+        assetType: 'audio',
+        sourceType: 'upload',
+        storageKey: `projects/${f.projectId}/assets/p2a/voice.mp3`,
+        mimeType: 'audio/mpeg',
+        sizeBytes: 10n,
+        checksumSha256: 'a'.repeat(64),
+        metadata: { purpose: 'voiceover', audio: { codec: 'mp3' }, note: 'old' },
+        createdById: ctx.ids['editor'] ?? '',
+      },
+    });
+    const forged = await ctx.as('editor', 'PATCH', `/assets/${created.id}`, {
+      body: { metadata: { purpose: 'music' } },
+    });
+    expect([forged.status, codeOf(forged)]).toEqual([422, 'METADATA_KEY_RESERVED']);
+
+    const edited = await ctx.as('editor', 'PATCH', `/assets/${created.id}`, {
+      body: { metadata: { note: 'new' } },
+    });
+    expect(edited.status).toBe(200);
+    expect(bodyOf<AssetDto>(edited).metadata).toEqual({
+      note: 'new',
+      purpose: 'voiceover',
+      audio: { codec: 'mp3' },
+    });
+  });
+
   it('filters by asset type and paginates', async () => {
     const f = await ctx.fixture();
     await register(f.projectId, {
