@@ -23,6 +23,7 @@ export function sectionOf(path: string): string {
   if (path.startsWith('/masters')) return 'Content masters';
   if (path.startsWith('/pipeline')) return 'Production pipeline';
   if (path.startsWith('/assets')) return 'Asset library';
+  if (path.startsWith('/operations')) return 'Operations';
   if (path.startsWith('/settings')) return 'Settings';
   return 'Workspace';
 }
@@ -69,6 +70,12 @@ export function SidebarNav({ projectCount }: { readonly projectCount: number }) 
           label: 'Asset library',
           icon: '▧',
           match: (p) => p.startsWith('/assets'),
+        },
+        {
+          href: '/operations',
+          label: 'Operations',
+          icon: '◉',
+          match: (p) => p.startsWith('/operations'),
         },
       ],
     },

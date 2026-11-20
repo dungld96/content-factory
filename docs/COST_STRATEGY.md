@@ -62,18 +62,21 @@ Each pricing record must include:
 
 If price is unknown, mark it unknown and require explicit confirmation or a configured hard budget policy. Do not display `$0` for unknown cost.
 
-## 4. Budget enforcement
+## 4. Budget enforcement (implemented in M7, ADR-0019)
 
-Support:
-- Per-generation-job limit.
-- Per-content-item limit.
-- Per-project daily/monthly limit.
+Limits per project: monthly (UTC calendar month), per content item, per request; each `hard`
+(blocks, `402 BUDGET_EXCEEDED`) or `soft` (asks; accepting is recorded). A hard breach always
+decides. Defaults: USD 10 monthly hard, USD 3 per item soft, USD 2 per request hard.
 
-Enforcement modes:
-- `hard`: block job if estimated cost exceeds remaining budget.
-- `soft`: warn and require user confirmation.
-
-For async providers with uncertain final billing, reserve estimated budget at submission and reconcile actual cost on completion.
+- **Reservations**: every paid request reserves its estimate (unknown cost: USD 0.50 per call; text
+  jobs: their worst case, twice for the repair call) in the transaction that queues the jobs, under
+  a lock on the budget. Concurrent requests cannot together exceed it.
+- **Two checks**: the API at request time, the worker right before each attempt's paid call (a
+  budget lowered meanwhile fails the job, never retried).
+- **Resolution**: success settles (the ledger counts), failure releases, an unknown provider outcome
+  holds the amount until an owner records it as charged (kept as a confirmed charge) or not.
+- Usage = ledger costs not covered by a reservation + open and held reservations + confirmed
+  charges. Unknown-cost calls are counted, never priced at $0.
 
 ## 5. Retry policy
 
@@ -84,17 +87,14 @@ For async providers with uncertain final billing, reserve estimated budget at su
 - Require approval for expensive regeneration after configured threshold.
 - Store failed-attempt costs when charged.
 
-## 6. Cost dashboard
+## 6. Cost dashboard (implemented in M7c/M7d)
 
-Show:
-- Cost by content item.
-- Cost by stage.
-- Cost by provider/model.
-- Cost per approved video.
-- Estimated vs actual.
-- Retry cost.
-- Free-tier vs paid usage.
-- Monthly trend.
+The project's **Costs** page (`GET /projects/:projectId/costs`) shows, for a UTC month: the total
+against the monthly limit; cost by content item, by stage and by provider/model; retry cost (calls
+that did not produce their job's result); cost per approved video; the six-month trend. Each figure
+keeps provider-reported, estimated, unknown (count of calls) and held cost apart.
+
+Not yet shown: free-tier vs paid usage (no provider in use offers a free tier we rely on).
 
 ## 7. Initial pilot budget
 

@@ -12,6 +12,7 @@ import type {
 } from '@acf/contracts';
 
 import { Modal } from '@/components/modal';
+import { ResumeRunButton } from '@/components/resume-run';
 import { Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { fetchJson, mutate } from '@/lib/api-client';
@@ -143,6 +144,9 @@ export function GenerateButton(props: {
           {job.attempt > 1 ? ` (attempt ${String(job.attempt)})` : ''}
           {job.errorCode ? ` — ${job.errorCode}` : ''}
         </span>
+      )}
+      {job && (job.status === 'failed' || job.status === 'canceled') && (
+        <ResumeRunButton runId={job.productionRunId} />
       )}
       <ErrorText error={error} />
     </>

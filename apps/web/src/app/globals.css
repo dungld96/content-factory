@@ -2292,3 +2292,41 @@ input.filter {
     grid-template-columns: 1fr;
   }
 }
+
+/* --- Costs and operations (M7d) --------------------------------------------------------- */
+.cost-trend {
+  margin-bottom: 30px;
+}
+
+.cost-trend .bar {
+  width: 28px;
+}
+
+.cost-trend a.bar-group {
+  text-decoration: none;
+}
+
+.budget-editor .form-row {
+  align-items: flex-start;
+}
+
+.plain-list li .btn {
+  margin-left: 6px;
+}
+
+.budget-editor .form-row {
+  margin-bottom: 14px;
+}
+
+.budget-editor .field .small-text {
+  font-weight: 400;
+}
+
+.stack > .page-heading {
+  margin-bottom: 0;
+}
+
+/* Grid children may shrink below their content, so wide tables scroll inside .table-wrap. */
+.stack > * {
+  min-width: 0;
+}

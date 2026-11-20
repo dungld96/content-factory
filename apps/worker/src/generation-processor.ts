@@ -875,6 +875,12 @@ export class GenerationProcessor {
         attempt: job.attempt,
         failedAt: new Date().toISOString(),
       });
+      this.deps.logger.log('error', 'job_dead_lettered', {
+        jobId: job.id,
+        projectId: job.projectId,
+        kind: job.kind,
+        errorCode,
+      });
     } catch (error) {
       // PostgreSQL already holds the failure; the DLQ copy is for operators only.
       this.deps.logger.log('error', 'dead_letter_failed', {

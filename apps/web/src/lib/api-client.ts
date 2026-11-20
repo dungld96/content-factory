@@ -8,13 +8,44 @@ export interface MutationResult<T> {
   readonly data: T | null;
   /** The API's error message, when the request failed. */
   readonly message: string | null;
+  /** The API's error code (`BUDGET_EXCEEDED`, …), when the request failed. */
+  readonly code?: string | null;
+}
+
+/** Asks before spending above a soft budget (M7 §3), with the browser's confirmation dialog. */
+function confirmOverBudget(message: string): boolean {
+  return typeof window !== 'undefined' && window.confirm(`${message}\n\nProceed anyway?`);
 }
 
 /**
  * State-changing request from the browser through the same-origin rewrite, with the CSRF
  * token (ADR-0009). Never throws: network errors become `{ ok: false, status: 0 }`.
+ *
+ * A request refused with `409 BUDGET_CONFIRMATION_REQUIRED` (a soft budget would be exceeded)
+ * is shown to the user once and, if they confirm, sent again with `acceptOverBudget: true`
+ * (recorded as an override). Hard limits (`402 BUDGET_EXCEEDED`) are never retried.
  */
 export async function mutate<T>(
+  method: 'POST' | 'PATCH' | 'PUT',
+  path: string,
+  body?: unknown,
+): Promise<MutationResult<T>> {
+  const first = await send<T>(method, path, body);
+  const plain = typeof body === 'object' && body !== null && !Array.isArray(body);
+  if (
+    first.code === 'BUDGET_CONFIRMATION_REQUIRED' &&
+    (body === undefined || plain) &&
+    confirmOverBudget(first.message ?? 'This request exceeds a soft budget.')
+  ) {
+    return send<T>(method, path, {
+      ...((body ?? {}) as Record<string, unknown>),
+      acceptOverBudget: true,
+    });
+  }
+  return first;
+}
+
+async function send<T>(
   method: 'POST' | 'PATCH' | 'PUT',
   path: string,
   body?: unknown,
@@ -30,12 +61,13 @@ export async function mutate<T>(
       body: JSON.stringify(body ?? {}),
     });
     const json = (await res.json().catch(() => null)) as unknown;
-    const error = (json as { error?: { message?: unknown } } | null)?.error;
+    const error = (json as { error?: { message?: unknown; code?: unknown } } | null)?.error;
     return {
       ok: res.ok,
       status: res.status,
       data: res.ok ? (json as T) : null,
       message: !res.ok && typeof error?.message === 'string' ? error.message : null,
+      code: !res.ok && typeof error?.code === 'string' ? error.code : null,
     };
   } catch {
     return { ok: false, status: 0, data: null, message: 'The server could not be reached.' };

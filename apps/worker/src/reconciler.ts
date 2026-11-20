@@ -123,7 +123,8 @@ export class Reconciler {
     }
     const pollsResumed = await this.videos(now);
     if (enqueued + requeued + failed + pollsResumed > 0) {
-      this.logger.log('warn', 'reconciled', { enqueued, requeued, failed, pollsResumed });
+      // Alert name (M7 design §8): the reconciler had to repair queue state.
+      this.logger.log('warn', 'reconciler_requeued', { enqueued, requeued, failed, pollsResumed });
     }
     return { enqueued, requeued, failed, pollsResumed };
   }

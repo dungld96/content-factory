@@ -2,13 +2,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
-import type { ContentItemDto, ContentMasterDto, ProjectDto } from '@acf/contracts';
+import type { BudgetDto, ContentItemDto, ContentMasterDto, ProjectDto } from '@acf/contracts';
 
 import { ContentTable } from '@/components/content-table';
 import { NewContentButton } from '@/components/forms';
 import { QueryFilters } from '@/components/query-filters';
 import { RecentActivity, StageList } from '@/components/snapshot';
 import { apiGet } from '@/lib/api-server';
+import { addUsd, formatUsd } from '@/lib/money';
 import {
   contentFilterFrom,
   filterContent,
@@ -28,10 +29,11 @@ export default async function ProjectPage(props: {
   readonly searchParams: Promise<SearchParams>;
 }) {
   const [{ projectId }, query] = await Promise.all([props.params, props.searchParams]);
-  const [project, content, masters] = await Promise.all([
+  const [project, content, masters, budget] = await Promise.all([
     apiGet<ProjectDto>(`/projects/${projectId}`),
     apiGetAll<ContentItemDto>(`/projects/${projectId}/content`),
     apiGetAll<ContentMasterDto>(`/projects/${projectId}/content-masters`),
+    apiGet<BudgetDto>(`/projects/${projectId}/budget`),
   ]);
   if (project.kind === 'unauthenticated') redirect('/login');
   if (project.kind === 'error') {
@@ -64,12 +66,23 @@ export default async function ProjectPage(props: {
           </p>
         </div>
         <div className="actions">
+          <Link className="btn" href={`/projects/${projectId}/costs`}>
+            <span aria-hidden="true">$</span> Costs
+          </Link>
           <Link className="btn" href={`/assets?project=${projectId}`}>
             <span aria-hidden="true">▧</span> Assets
           </Link>
           {writable.length > 0 && <NewContentButton projects={writable} projectId={projectId} />}
         </div>
       </div>
+
+      {budget.kind === 'ok' && budget.data.warning && (
+        <p className="notice" role="status">
+          Budget: {formatUsd(addUsdSafe(budget.data))} of {formatUsd(budget.data.monthly.limitUsd)}{' '}
+          used or reserved this month.{' '}
+          <Link href={`/projects/${projectId}/costs`}>Review costs</Link>
+        </p>
+      )}
 
       <QueryFilters
         search={{ name: 'q', placeholder: 'Search content…' }}
@@ -123,4 +136,9 @@ export default async function ProjectPage(props: {
       </div>
     </>
   );
+}
+
+/** Spent + reserved + held of this month (the amount the warning refers to). */
+function addUsdSafe(b: BudgetDto): string {
+  return addUsd(b.spentUsd, b.reservedUsd, b.heldUsd);
 }

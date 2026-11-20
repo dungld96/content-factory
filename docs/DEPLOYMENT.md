@@ -230,6 +230,38 @@ gcloud compute instances delete acf-staging --zone=asia-southeast1-b
 gcloud compute addresses delete acf-staging-ip --region=asia-southeast1
 ```
 
+### Budgets, alerts and operations (M7)
+
+Every project starts with a monthly budget of USD 10 (hard), USD 3 per content item (soft) and USD
+2 per request (hard); owners change them on the project's **Costs** page. Defaults for new projects
+come from `DEFAULT_MONTHLY_BUDGET_USD`, `DEFAULT_ITEM_BUDGET_USD` and `DEFAULT_REQUEST_BUDGET_USD`.
+
+The **Operations** page (sidebar) shows queues, failed jobs (with **Resume**), provider circuits,
+budgets and held reservations. A held reservation is a provider call whose outcome is unknown:
+check the provider's dashboard or invoice, then record it as **Charged** or **Not charged**.
+
+Logs are one JSON object per line (`LOG_JSON=true`). Alert on these `msg` values with any log
+shipper, e.g. `./acf.sh logs -f api worker | grep -E '"msg":"(budget_exceeded|circuit_opened|job_dead_lettered|reservation_held)"'`:
+
+| `msg` | Service | Meaning |
+|---|---|---|
+| `budget_exceeded` | api, worker | A request (API) or a queued job (worker re-check) was refused by a hard limit. |
+| `budget_threshold` | api | A project reached 80 % of its monthly budget (used + reserved). |
+| `circuit_opened` / `circuit_closed` | worker | A provider failed 5 times in 10 min; work waits and retries. / It recovered. |
+| `job_dead_lettered` | worker | A job failed after all retries (shown on the Operations page). |
+| `reservation_held` | worker | A provider call's charge is unknown; an owner must resolve it. |
+| `reconciler_requeued` | worker | Queue state was repaired after a restart or a Redis loss. |
+
+Circuits can also be inspected or forced from the VM:
+
+```bash
+./acf.sh exec api node dist/cli/ai-registry-cli.js circuit list
+```
+
+```bash
+./acf.sh exec api node dist/cli/ai-registry-cli.js circuit close openrouter
+```
+
 ## Security notes
 
 - Only Caddy publishes ports (80/443). PostgreSQL, Redis, SeaweedFS and the API are internal;
