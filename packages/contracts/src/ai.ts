@@ -223,3 +223,18 @@ export const aiRegistryEventSchema = z
   })
   .meta({ id: 'AiRegistryEvent' });
 export type AiRegistryEventDto = z.infer<typeof aiRegistryEventSchema>;
+
+/** `POST /ai/providers/:providerKey/test` (operator): a free credential check (P1 O3). */
+export const aiProviderKeyCheckSchema = z
+  .object({
+    providerKey: z.string(),
+    result: z.enum(['valid', 'rejected', 'unreachable', 'not_configured']),
+    httpStatus: z.number().int().nullable(),
+    /** As the provider reports them; null when not reported. */
+    limitRemaining: z.number().nullable(),
+    usage: z.number().nullable(),
+    isFreeTier: z.boolean().nullable(),
+    checkedAt: z.string(),
+  })
+  .meta({ id: 'AiProviderKeyCheck' });
+export type AiProviderKeyCheckDto = z.infer<typeof aiProviderKeyCheckSchema>;

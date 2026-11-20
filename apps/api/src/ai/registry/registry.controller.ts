@@ -1,9 +1,10 @@
-import { Controller, Get, Inject, Patch, Put } from '@nestjs/common';
+import { Controller, Get, HttpCode, Inject, Patch, Post, Put } from '@nestjs/common';
 import type { ApiEnv } from '@acf/config';
 import type { z } from 'zod';
 
 import {
   aiModelDetailSchema,
+  aiProviderKeyCheckSchema,
   aiProviderKeyParamsSchema,
   aiProviderSchema,
   aiRegistryEventSchema,
@@ -15,6 +16,7 @@ import {
   updateAiModelRequestSchema,
   updateAiProviderRequestSchema,
   type AiProviderDto,
+  type AiProviderKeyCheckDto,
   type AiRegistryEventDto,
   type AiRouteDto,
   type AiRouteList,
@@ -131,6 +133,22 @@ export class RegistryController {
     @ValidBody() body: UpdateAiProviderRequest,
   ): Promise<AiProviderDto> {
     return this.settings.updateProvider(actor, params.providerKey, body);
+  }
+
+  @Post('providers/:providerKey/test')
+  @HttpCode(200)
+  @Endpoint({
+    summary: "Check a provider's credentials without a paid call (operators)",
+    tags: ['ai'],
+    params: aiProviderKeyParamsSchema,
+    responses: { 200: { description: 'The check', schema: aiProviderKeyCheckSchema } },
+    errors: [400, 401, 403, 404],
+  })
+  testProvider(
+    @CurrentActor() actor: Actor,
+    @ValidParams() params: z.infer<typeof aiProviderKeyParamsSchema>,
+  ): Promise<AiProviderKeyCheckDto> {
+    return this.settings.testProvider(actor, params.providerKey);
   }
 
   @Patch('models/:modelId')

@@ -6,5 +6,6 @@ export * from './image-service.js';
 export { createImageProviders } from './providers/image-providers.js';
 export * from './media-service.js';
 export { createTtsProviders, createVideoProviders } from './providers/media-providers.js';
+export { createKeyChecks, type KeyCheck } from './providers/key-checks.js';
 export * from './budget-ledger.js';
 export * from './circuit-breaker.js';

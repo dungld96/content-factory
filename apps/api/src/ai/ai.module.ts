@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import type { ImageProvider, LlmProvider, TtsProvider, VideoProvider } from '@acf/ai-core';
 import {
   createImageProviders,
+  createKeyChecks,
   createLlmProviders,
   createTtsProviders,
   createVideoProviders,
@@ -17,7 +18,13 @@ import type { ApiEnv } from '@acf/config';
 
 import { API_ENV } from '../config/api-config.module.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
-import { IMAGE_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS, VIDEO_PROVIDERS } from './ai.tokens.js';
+import {
+  IMAGE_PROVIDERS,
+  KEY_CHECKS,
+  LLM_PROVIDERS,
+  TTS_PROVIDERS,
+  VIDEO_PROVIDERS,
+} from './ai.tokens.js';
 import { RegistryController } from './registry/registry.controller.js';
 import { RegistryAdminService } from './registry/registry-admin.service.js';
 import { RegistrySettingsService } from './registry/registry-settings.service.js';
@@ -44,6 +51,11 @@ import { RegistryService } from './registry/registry.service.js';
       provide: VIDEO_PROVIDERS,
       inject: [API_ENV],
       useFactory: (env: ApiEnv) => createVideoProviders(env),
+    },
+    {
+      provide: KEY_CHECKS,
+      inject: [API_ENV],
+      useFactory: (env: ApiEnv) => createKeyChecks(env),
     },
     {
       provide: TTS_PROVIDERS,

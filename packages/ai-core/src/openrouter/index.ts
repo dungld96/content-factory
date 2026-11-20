@@ -1,4 +1,5 @@
 export * from './config.js';
+export { checkOpenRouterKey } from './key-check.js';
 export { classifyOpenRouterError, parseRetryAfter } from './errors.js';
 export {
   buildChatCompletionBody,

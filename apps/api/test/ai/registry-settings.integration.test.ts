@@ -141,6 +141,13 @@ describe('status and audit (O5, O6)', () => {
     expect((await as('editor', 'GET', '/ai/registry-events')).status).toBe(403);
   });
 
+  it('checks credentials without a paid call (O3); a provider without a key is not_configured', async () => {
+    const res = await as('owner', 'POST', '/ai/providers/mock/test');
+    expect(res.status).toBe(200);
+    expect(res.json).toMatchObject({ providerKey: 'mock', result: 'not_configured' });
+    expect((await as('editor', 'POST', '/ai/providers/mock/test')).status).toBe(403);
+  });
+
   it('answers 404 for an unknown provider', async () => {
     const res = await as('owner', 'PATCH', '/ai/providers/nope', { body: { status: 'enabled' } });
     expect(res.status).toBe(404);

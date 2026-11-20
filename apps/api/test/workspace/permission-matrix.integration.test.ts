@@ -181,6 +181,11 @@ const ROWS: Record<string, Row> = {
     body: () => ({ status: 'enabled' }),
     expect: [401, 403, 403, 403, 403],
   },
+  'POST /ai/providers/:providerKey/test': {
+    method: 'POST',
+    path: () => '/ai/providers/mock/test',
+    expect: [401, 403, 403, 403, 403],
+  },
   'PATCH /ai/models/:modelId': {
     method: 'PATCH',
     path: (_f, ids) => `/ai/models/${ids['aiModel'] ?? ''}`,

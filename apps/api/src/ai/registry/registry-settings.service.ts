@@ -4,6 +4,7 @@ import {
   ApiErrorCode,
   aiModelSchema,
   type AiModelDto,
+  type AiProviderKeyCheckDto,
   type AiProviderDto,
   type AiRouteDto,
   type AiTask,
@@ -11,6 +12,7 @@ import {
   type UpdateAiModelRequest,
   type UpdateAiProviderRequest,
 } from '@acf/contracts';
+import type { KeyCheck } from '@acf/ai-runtime';
 import type { ApiEnv } from '@acf/config';
 
 import type { Actor } from '../../auth/actor.js';
@@ -19,6 +21,7 @@ import { ApiError } from '../../common/api-error.js';
 import { notFound } from '../../common/domain-errors.js';
 import { API_ENV } from '../../config/api-config.module.js';
 import { PrismaService } from '../../infrastructure/prisma.service.js';
+import { KEY_CHECKS } from '../ai.tokens.js';
 import { RegistryAdminError, RegistryAdminService } from './registry-admin.service.js';
 import { RegistryService } from './registry.service.js';
 
@@ -49,6 +52,7 @@ export class RegistrySettingsService {
     private readonly registry: RegistryService,
     private readonly admin: RegistryAdminService,
     @Inject(API_ENV) private readonly env: ApiEnv,
+    @Inject(KEY_CHECKS) private readonly keyChecks: ReadonlyMap<string, KeyCheck>,
   ) {}
 
   async setRoute(actor: Actor, task: AiTask, input: SetAiRouteRequest): Promise<AiRouteDto> {
@@ -139,6 +143,29 @@ export class RegistrySettingsService {
     }
     const detail = await this.registry.getModel(modelId);
     return aiModelSchema.parse(detail);
+  }
+
+  /** Free credential check (P1 O3): never a paid call, never the key in the answer. */
+  async testProvider(actor: Actor, providerKey: string): Promise<AiProviderKeyCheckDto> {
+    requireOperator(this.env, actor);
+    const provider = await this.prisma.client.aiProvider.findUnique({
+      where: { key: providerKey },
+    });
+    if (!provider) throw notFound('provider');
+    const check = this.keyChecks.get(providerKey);
+    const checkedAt = new Date().toISOString();
+    if (!check) {
+      return {
+        providerKey,
+        result: 'not_configured',
+        httpStatus: null,
+        limitRemaining: null,
+        usage: null,
+        isFreeTier: null,
+        checkedAt,
+      };
+    }
+    return { providerKey, ...(await check()), checkedAt };
   }
 
   /** Registry rule violations (unknown provider, not a text model) become `422`. */

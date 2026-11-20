@@ -11,3 +11,5 @@ export const IMAGE_PROVIDERS = Symbol('IMAGE_PROVIDERS');
 export const VIDEO_PROVIDERS = Symbol('VIDEO_PROVIDERS');
 /** TTS adapters (M5). */
 export const TTS_PROVIDERS = Symbol('TTS_PROVIDERS');
+/** Free credential checks per provider key (P1 O3). */
+export const KEY_CHECKS = Symbol('KEY_CHECKS');
