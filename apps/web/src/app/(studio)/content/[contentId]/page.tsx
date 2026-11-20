@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 
 import type {
   AiModelDto,
+  AiProviderList,
   CostReportDto,
   RenderListDto,
   RenderPlanDto,
@@ -27,6 +28,7 @@ import { ContentStatusPill, Pill, VersionPill } from '@/components/status-pill';
 import { assetContentUrl } from '@/lib/asset-url';
 import { isGenerating } from '@/lib/content-status';
 import { FORMAT_LABEL, jobErrorText, platformLabel, wordCount } from '@/lib/format';
+import { usableModels } from '@/lib/model-options';
 import { addUsd, formatUsd, sumJobCosts } from '@/lib/money';
 import { apiGet } from '@/lib/api-server';
 
@@ -231,6 +233,7 @@ export default async function ContentPage({
     renderPlan,
     renderList,
     textModels,
+    providers,
   ] = await Promise.all([
     apiGet<ProjectDto>(`/projects/${content.projectId}`),
     apiGet<Page<ScriptVersionDto>>(`/content/${contentId}/scripts?limit=20`),
@@ -251,6 +254,7 @@ export default async function ContentPage({
     apiGet<RenderPlanDto>(`/content/${contentId}/render-plan`),
     apiGet<RenderListDto>(`/content/${contentId}/renders`),
     apiGet<Page<AiModelDto>>('/ai/models?capability=llm&status=enabled&limit=100'),
+    apiGet<AiProviderList>('/ai/providers'),
   ]);
   const plan = renderPlan.kind === 'ok' ? renderPlan.data : null;
   const renders = renderList.kind === 'ok' ? renderList.data.items : [];
@@ -260,9 +264,13 @@ export default async function ContentPage({
       ? await apiGet<CostReportDto>(`/renders/${latestRender.id}/cost-report`)
       : null;
   const approvedRender = renders.find((r) => r.isApproved);
+  const providerList = providers.kind === 'ok' ? providers.data.data : [];
   const optionsOf = (list: typeof imageModels) =>
     list.kind === 'ok'
-      ? list.data.data.map((m) => ({ modelKey: m.modelKey, label: m.displayName }))
+      ? usableModels(list.data.data, providerList).map((m) => ({
+          modelKey: m.modelKey,
+          label: m.displayName,
+        }))
       : [];
   const canEdit =
     project.kind === 'ok' && project.data.role !== 'viewer' && content.archivedAt === null;

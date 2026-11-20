@@ -1,7 +1,8 @@
 # P1 Design Review Package — OpenRouter Settings UI
 
 - Status: **Revision 1, approved by the owner (2026-11-20)** by standing instruction ("follow your
-  recommendations until all packages are complete"): O1–O7 as proposed.
+  recommendations until all packages are complete"): O1–O7 as proposed. Slices P1a–P1c
+  implemented (§10); API integration and E2E verification pending.
 - Date: 2026-11-20
 - Baseline: MVP complete; P3 and P2a implemented. Input: `docs/post-mvp/POST_MVP_AUDIT.md` §A1,
   §B1, §C1; owner decision: operators named by an environment allowlist.
@@ -135,3 +136,18 @@ ai_registry_events
   says valid/rejected from the HTTP status.
 - **Operator list in the environment**: changing it needs an API restart (same as the key);
   documented in DEPLOYMENT.md.
+
+## 10. Deviations and results found during implementation
+
+| Item                                  | Planned                        | Done                                                                                                                             | Why                                                                            |
+| ------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Model DTO                             | Unchanged                      | Gains `schemaMode` (additive)                                                                                                    | The Settings UI shows and changes it                                           |
+| Audit CHECK                           | Source and action known        | Also: `api` rows have an actor, `cli` rows none (`ai_registry_events_actor_matches_source`)                                      | Every API change is attributable                                               |
+| `min_billed_seconds`, prices, imports | Audited                        | Audited as `cli` (CLI-only operations)                                                                                           | —                                                                              |
+| Test connection in tests              | Fixture server through the API | The API test covers `not_configured` and `403`; the HTTP behaviour is covered by the adapter contract test (`key-check.test.ts`) | The API test app points at the real OpenRouter host, which tests may not reach |
+| E2E                                   | Route change in the UI         | **Not written**                                                                                                                  | Follow-up with the full stack                                                  |
+
+Verification: lint, typecheck, format, build and unit tests pass; database integration **run**
+(300 passed, incl. `ai_registry_events` and the schema inventory); API integration tests
+(`registry-settings.integration.test.ts`, CLI audit, permission matrix) written, **not run** (the API
+suite needs S3 storage in the implementation session).

@@ -58,8 +58,11 @@ Routes measured in the M8 pilot (`docs/design/m8/pilot-report.md`, `docs/design/
 
 ## 4. Model registry
 
-Stored in PostgreSQL and edited only by the operator CLI (`pnpm ai:registry`); read-only over
-the API. Each model records:
+Stored in PostgreSQL. Platform operators (`OPERATOR_EMAILS`) change provider and model status,
+schema mode and task routes in **Settings → AI providers & models** (or with `pnpm ai:registry`);
+prices and catalog imports stay CLI-only. Every change is audited in `ai_registry_events`. API keys
+stay in the server environment; Settings shows whether a key is configured and can test it for
+free (`GET /key`). Each model records:
 
 - provider, model key, capabilities, modalities, supported parameters;
 - limits: context/output size, image limits (`image_constraints`), video/TTS limits

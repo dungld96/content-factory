@@ -503,18 +503,25 @@ returns the item to the status the render started from.
 
 ## 10. Models, budgets, costs and operations
 
-### Model registry (read-only)
+### Model registry and operator settings
 
-Global (not project-scoped) data: any
-authenticated user may read it (401 otherwise); nothing here is written through the API. Operators
-edit the registry with `pnpm ai:registry` (`docs/LOCAL_DEVELOPMENT.md`). Credentials are never
-returned; money is a decimal string in USD (`unitPriceUsd`), never a JSON number (ADR-0012).
+Global (not project-scoped) data: any authenticated user may read it (401 otherwise). Changes are
+made by **platform operators** (users listed in `OPERATOR_EMAILS`; `GET /auth/me` returns
+`isOperator`) or with `pnpm ai:registry`; every change is audited (`ai_registry_events`). Prices and
+catalog imports stay CLI-only. Credentials are never accepted or returned; money is a decimal string
+in USD (`unitPriceUsd`), never a JSON number (ADR-0012).
 
 | Endpoint | Response |
 |---|---|
 | `GET /ai/providers` | `{ data: AiProvider[] }`: `key`, `name`, `kind` (gateway/direct/mock), `status`, `configured` (credentials present in this deployment), terms and data-policy links |
 | `GET /ai/models` | Paginated `AiModel[]`. Filters `capability`, `status`, `qualityTier`, `providerKey`. Each model lists its capabilities, supported parameters, modalities, limits, quality tier, status, free-variant flag and `activePrices` (one per metric and prompt-size tier; a metric with no price has unknown cost, never zero), and `voices` (TTS models: the provider's voice ids, used by the voice-profile picker; `null` otherwise) |
-| `GET /ai/models/:modelId` | `AiModel` plus `priceHistory` (append-only price rows with source, URL, effective and captured times) |
+| `GET /ai/models/:modelId` | `AiModel` plus `priceHistory` (append-only price rows with source, URL, effective and captured times). `AiModel` includes `schemaMode` |
+| `GET /ai/routes` | Every task (`script_generation`, `storyboard_generation`, `image_generation`, `video_generation`, `tts_generation`) with its model, provider (`status`, `configured`) and `zeroDataRetention`; `model: null` when not routed |
+| `PUT /ai/routes/:task` (operator) | `{ modelKey, providerKey?, zeroDataRetention? }`; only an enabled model of an enabled, configured provider with the task's capability, else `422 MODEL_NOT_ROUTABLE`. Applies to new requests |
+| `PATCH /ai/providers/:providerKey` (operator) | `{ status }` |
+| `PATCH /ai/models/:modelId` (operator) | `{ status?, schemaMode? }` (`schemaMode` for text models only) |
+| `POST /ai/providers/:providerKey/test` (operator) | Free credential check: `result` `valid` / `rejected` / `unreachable` / `not_configured`, with `limitRemaining`, `usage`, `isFreeTier` when the provider reports them. Never a paid call; never the key |
+| `GET /ai/registry-events` (operator) | The audit, newest first, paged: `source` (`api`/`cli`), `actor`, `action`, `target`, `before`, `after` |
 
 ### Budgets
 

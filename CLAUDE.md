@@ -141,6 +141,9 @@ integration/E2E verification pending (package §10).
 (`docs/design/P2a-design-review-package.md`; A1–A3, 2026-11-20); slices P2a-1–P2a-3 implemented,
 API integration/E2E verification pending (package §9). P2b (picker, brand UI, references,
 collections) not started.
+**P1 — OpenRouter Settings UI:** design package revision 1 approved
+(`docs/design/P1-design-review-package.md`; O1–O7); slices P1a–P1c implemented, API
+integration/E2E verification pending (package §10). Operators: `OPERATOR_EMAILS`.
 
 Open items:
 - Off-server backups wait for the backup destination (rclone remote).

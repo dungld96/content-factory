@@ -162,6 +162,10 @@ runs the automated QC and prints the result (exit code 0 = passed; no network, n
 
 ## 5. Real model (OpenRouter, paid)
 
+To manage providers, models and routes in **Settings → AI providers & models** instead of the CLI
+below, add your account to `OPERATOR_EMAILS=you@example.com` in `infra/deploy/.env.production`
+and restart the API (`./acf.sh up -d api`). The key itself is only ever set in that file.
+
 Without a provider key, generation answers "No usable model for this task". To use OpenRouter,
 set `OPENROUTER_API_KEY=` in `infra/deploy/.env.production` (on the server only), then:
 

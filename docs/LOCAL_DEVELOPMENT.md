@@ -195,6 +195,10 @@ minute.
 
 ## 8. AI registry
 
+Operators (users listed in `OPERATOR_EMAILS` in `.env`) can also change provider and model status,
+schema mode and routes in **Settings → AI providers & models**, and test the API key without a paid
+call. Keys are never entered there.
+
 `pnpm db:seed` seeds the `openrouter` provider (enabled only if `OPENROUTER_API_KEY` is set at
 seed time), benchmark candidate models (all **disabled**), and the `mock` provider with free
 models routed for every task: `mock/echo`, `mock/solid-image`, `mock/still-video`,

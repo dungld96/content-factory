@@ -104,6 +104,7 @@ the price is known; `cost_status` matches the stored amounts.
 | `budget_events` | Append-only: `changed`, `override`, `blocked`, `settled`, `released` |
 | `budget_reservations` | One per paid job, written with the job: amount (estimate, or USD 0.50 placeholder for unknown cost), status `open` → `settled`/`released`/`held` (`held` → `settled`/`released`), `settled_charge_usd` for a held charge an owner confirmed |
 | `provider_circuits`, `provider_circuit_events` | Circuit per provider (`closed`, `open`, `half_open`), failure counts, retry time, trial job; append-only transitions |
+| `ai_registry_events` | Append-only audit of registry changes: `source` (`api` with the operator, `cli` without), `action`, `target`, `before`, `after` |
 
 ## 3. Content status
 

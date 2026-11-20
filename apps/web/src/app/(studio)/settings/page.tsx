@@ -2,7 +2,16 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import type { AiModelDto, MeResponse, Page, ProjectDto, VoiceProfileListDto } from '@acf/contracts';
+import type {
+  AiModelDto,
+  AiProviderList,
+  AiRegistryEventDto,
+  AiRouteList,
+  MeResponse,
+  Page,
+  ProjectDto,
+  VoiceProfileListDto,
+} from '@acf/contracts';
 
 import { ProjectSettingsForm } from '@/components/forms';
 import { LocalTime } from '@/components/local-time';
@@ -12,7 +21,10 @@ import { VoiceProfilesCard } from '@/components/voice-profiles';
 import { fetchApiHealth } from '@/lib/api-health';
 import { apiGet } from '@/lib/api-server';
 import { param, type SearchParams } from '@/lib/content-filters';
+import { usableModels } from '@/lib/model-options';
 import { apiGetAll } from '@/lib/workspace';
+
+import { AiSettings } from './ai-settings';
 
 export const metadata: Metadata = { title: 'Settings · Content Studio' };
 export const dynamic = 'force-dynamic';
@@ -23,12 +35,21 @@ export default async function SettingsPage(props: {
   readonly searchParams: Promise<SearchParams>;
 }) {
   const query = await props.searchParams;
-  const [me, projects, health] = await Promise.all([
+  const [me, projects, health, providers, routes, allModels] = await Promise.all([
     apiGet<MeResponse>('/auth/me'),
     apiGetAll<ProjectDto>('/projects'),
     fetchApiHealth(),
+    apiGet<AiProviderList>('/ai/providers'),
+    apiGet<AiRouteList>('/ai/routes'),
+    apiGet<Page<AiModelDto>>('/ai/models?limit=100'),
   ]);
   if (me.kind === 'unauthenticated' || projects.kind === 'unauthenticated') redirect('/login');
+  const isOperator = me.kind === 'ok' && me.data.isOperator;
+  const events = isOperator
+    ? await apiGet<Page<AiRegistryEventDto>>('/ai/registry-events?limit=20')
+    : null;
+  const providerList = providers.kind === 'ok' ? providers.data.data : [];
+  const modelList = allModels.kind === 'ok' ? allModels.data.data : [];
   const list = projects.kind === 'ok' ? projects.data.items : [];
   const selected = list.find((p) => p.id === param(query, 'project')) ?? list[0];
   const [profiles, models] = selected
@@ -37,12 +58,15 @@ export default async function SettingsPage(props: {
         apiGet<Page<AiModelDto>>('/ai/models?capability=tts&limit=100'),
       ])
     : [null, null];
+  const usableTts = new Set(
+    usableModels(models?.kind === 'ok' ? models.data.data : [], providerList).map((m) => m.id),
+  );
   const ttsModels =
     models?.kind === 'ok'
       ? models.data.data.map((m) => ({
           modelKey: m.modelKey,
           label: `${m.displayName} (${m.modelKey})`,
-          enabled: m.status === 'enabled',
+          enabled: usableTts.has(m.id),
           voices: m.voices ?? [],
         }))
       : [];
@@ -53,7 +77,7 @@ export default async function SettingsPage(props: {
         <div>
           <div className="eyebrow">Workspace</div>
           <h1>Settings</h1>
-          <p>Your account, project defaults and the platform’s health.</p>
+          <p>Your account, project defaults, AI providers and models, and the platform’s health.</p>
         </div>
       </div>
 
@@ -150,6 +174,18 @@ export default async function SettingsPage(props: {
               <p className="notice error">The voice profiles could not be loaded.</p>
             )}
           </section>
+        )}
+
+        {providers.kind === 'ok' && routes.kind === 'ok' ? (
+          <AiSettings
+            providers={providerList}
+            routes={routes.data.data}
+            models={modelList}
+            events={events?.kind === 'ok' ? events.data.data : []}
+            isOperator={isOperator}
+          />
+        ) : (
+          <p className="notice error">The AI settings could not be loaded.</p>
         )}
 
         <section className="card card-pad" aria-labelledby="system">
