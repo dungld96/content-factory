@@ -18,13 +18,14 @@ numbered sequentially. Never rewrite an accepted ADR — supersede it with a new
 | [0011](0011-database-enforced-integrity.md) | Database-enforced integrity | Accepted (M1 package, rev. 4) |
 | [0012](0012-ai-registry-usage-ledger-and-money.md) | AI registry, usage ledger and money precision | Accepted (M2 package, rev. 1) |
 | [0013](0013-generation-jobs-queue-and-worker.md) | Generation jobs, queue and worker process | Accepted (M3 package, rev. 1) |
-| [0014](0014-single-vm-staging-deployment.md) | Single-VM staging deployment on Google Cloud | Accepted (owner, option A) |
+| [0014](0014-single-vm-staging-deployment.md) | Single-VM staging deployment on Google Cloud | Accepted (owner, option A); cloud parts superseded by 0021 |
 | [0015](0015-content-masters-and-format-registries.md) | Content masters, variants and format/platform registries | Accepted (M3.5 review, R0) |
 | [0016](0016-scene-image-generation-and-keyframes.md) | Scene image generation, keyframes and the first image provider | Accepted (M4 package, rev. 1) |
 | [0017](0017-async-provider-jobs.md) | Asynchronous provider jobs (video) and text-to-speech | Accepted (M5 package, rev. 1) |
 | [0018](0018-local-rendering-and-export.md) | Local FFmpeg rendering, automated QC and render approval (gate 5) | Accepted (M6 package, rev. 1) |
 | [0019](0019-budgets-reservations-and-circuit-breakers.md) | Budgets with reservations, provider circuit breakers, resume and redaction | Accepted (M7 package, rev. 1) |
 | [0020](0020-backup-and-restore.md) | Backup and restore of database and object storage | Accepted (M8 package, rev. 1) |
+| [0021](0021-ubuntu-vps-staging-deployment.md) | Staging on a generic Ubuntu VPS; off-server backups with rclone | Accepted (owner, 2026-11-20) |
 
 ## Template
 

@@ -151,7 +151,7 @@ Local development:
 - `n8n` (optional)
 - `langfuse` (optional; can be deferred)
 
-Staging (implemented, ADR-0014): one Google Cloud VM with Docker Compose — Caddy (TLS) →
+Staging (implemented, ADR-0014, ADR-0021): one Ubuntu VPS (any provider) with Docker Compose — Caddy (TLS) →
 web → API, plus worker, PostgreSQL and Redis on an internal network. See `docs/DEPLOYMENT.md`.
 
 Production pilot:

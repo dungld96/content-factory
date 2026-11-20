@@ -85,7 +85,7 @@ pnpm test:integration
 | M6 — Rendering and export | Slices M6a–M6d delivered (`docs/design/M6-design-review-package.md` §16, ADR-0018); done and approved (2026-11-20) |
 | M7 — Reliability and cost controls | Slices M7a–M7d delivered (`docs/design/M7-design-review-package.md` §15, ADR-0019); done and approved (2026-11-20) |
 | M8 — Pilot and hardening | Slices M8a–M8d delivered (`docs/design/M8-design-review-package.md`, pilot report, `docs/UAT.md`, `docs/KNOWN_LIMITATIONS.md`, ADR-0020); done and approved (2026-11-20) |
-| M8.5 — Production polish | Done and approved (2026-11-20; `docs/design/M8.5-design-review-package.md`); off-VM backups wait for the bucket name |
+| M8.5 — Production polish | Done and approved (2026-11-20; `docs/design/M8.5-design-review-package.md`); off-server backups wait for the backup destination |
 
 ## Decisions fixed for MVP
 

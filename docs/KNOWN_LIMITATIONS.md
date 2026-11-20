@@ -54,10 +54,11 @@ workflow gaps it found (`docs/design/M8.5-design-review-package.md`).
 
 ## Operations and security
 
-- **One VM** (Docker Compose): no high availability; a VM failure means restoring a backup.
+- **One server** (Docker Compose on an Ubuntu VPS): no high availability; a server failure means
+  restoring a backup.
 - **Backups are whole-system snapshots** (database + objects), nightly at most; no point-in-time
-  recovery. The schedule and the off-VM copy (Cloud Storage) are set up once by the operator
-  (DEPLOYMENT.md); the bucket's retention is its lifecycle rule.
+  recovery. The schedule and the off-server copy (rclone: S3-compatible storage or SFTP) are
+  set up once by the operator (DEPLOYMENT.md); remote copies are kept 30 days by default.
 - An interrupted image or render attempt can leave stored objects that no record references
   (harmless, not served; they only use disk).
 - The Content-Security-Policy allows inline `style` attributes (`style-src 'unsafe-inline'`), which

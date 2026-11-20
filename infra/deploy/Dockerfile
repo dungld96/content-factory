@@ -16,7 +16,7 @@ RUN corepack enable && corepack prepare pnpm@10.28.0 --activate && chmod -R a+rX
 WORKDIR /app
 COPY --chown=node:node . .
 USER node
-# Small VMs: give the TypeScript and Next.js builds enough heap (add swap on 2-4 GB machines).
+# Small servers: give the TypeScript and Next.js builds enough heap (add swap on 2-4 GB machines).
 RUN pnpm install --frozen-lockfile \
  && NODE_OPTIONS=--max-old-space-size=3072 pnpm build
 

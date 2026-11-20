@@ -1,6 +1,7 @@
 # ADR-0014: Single-VM staging deployment on Google Cloud
 
-- Status: Accepted (owner chose option A, 2026-11-18)
+- Status: Accepted (owner chose option A, 2026-11-18); **Google Cloud parts superseded by
+  ADR-0021** (generic Ubuntu VPS, 2026-11-20). The single-server Docker Compose topology stands.
 - Date: 2026-11-18
 - Milestone: none (staging environment to try M3; outside the milestone plan)
 

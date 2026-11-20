@@ -26,15 +26,15 @@ operator creates them), and the site address.
 | 11  | Budget protection            | Set the per-request limit to USD 0.10 (hard), then try to generate clips for a scene again (Regenerate).                                                      | Refused before anything is queued, with a message naming the per-request budget. Set it back afterwards.                         |        |
 | 12  | Operations and Resume        | Open **Operations**.                                                                                                                                          | Queues, failed jobs (each with **Resume**), providers and budgets; nothing unexpected failed.                                    |        |
 | 13  | Roles                        | Sign in as the viewer: open the content and the Costs page. Sign in as the editor: try to change the budget.                                                  | Viewer sees everything but cannot generate, approve or edit; editor generates and approves but cannot change budgets.            |        |
-| 14  | Backup and restore (operator) | On the VM: `./acf.sh backup`; on a scratch VM or after `./acf.sh down -v`, `./acf.sh restore <name>` and `./acf.sh up -d`; sign in and open the exported video. | The restore reports every check passed; the content, its versions and the video are back.                                    |        |
-| 15  | Scheduled off-VM backup (operator) | Set `BACKUP_GCS_BUCKET` (DEPLOYMENT.md), run `./acf.sh backup-schedule install`, the next morning `./acf.sh backup-schedule status` and `gcloud storage ls gs://<bucket>/acf/`. | Status shows the 02:15 schedule and no failure; last night's backup is in the bucket with its `backup.json`. | |
+| 14  | Backup and restore (operator) | On the server: `./acf.sh backup`; on a scratch server or after `./acf.sh down -v`, `./acf.sh restore <name>` and `./acf.sh up -d`; sign in and open the exported video. | The restore reports every check passed; the content, its versions and the video are back.                                    |        |
+| 15  | Scheduled off-server backup (operator) | Set up the rclone remote and `BACKUP_REMOTE` (DEPLOYMENT.md), run `./acf.sh backup-schedule install`, the next morning `./acf.sh backup-schedule status` and `rclone lsd <remote>`. | Status shows the 02:15 schedule and no failure; last night's backup is at the remote with its `backup.json`. | |
 
 ## Run 1: Claude, local stack, 2026-11-20
 
 Scenarios 1–10 and 12 were run through the web UI during the M8 pilot (real providers; screenshots
 and the report: `docs/design/m8/pilot-report.md`); 11 and 13 are covered by the automated end-to-end
 and API tests (budget refusal, permission matrix); 14 by the restore drill
-(`docs/design/m8/restore-drill.md`) on the local stack, not yet on a VM.
+(`docs/design/m8/restore-drill.md`) on the local stack, not yet on a server.
 
 | #   | Result  | Notes                                                                                                                                                  |
 | --- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -51,7 +51,7 @@ and API tests (budget refusal, permission matrix); 14 by the restore drill
 | 11  | Pass    | Automated (`budgets.integration.test.ts`); not repeated by hand                                                                                        |
 | 12  | Pass    | Resume recovered the failed storyboard                                                                                                                 |
 | 13  | Pass    | Automated (permission matrix, Costs page E2E)                                                                                                          |
-| 14  | Partly  | Local drill passed; `acf.sh restore` on a VM still to be run                                                                                           |
+| 14  | Partly  | Local drill passed; `acf.sh restore` on a server still to be run                                                                                           |
 
 Run 1 findings for 4, 5, 7, 8 and 9 are addressed by M8.5 (Q3–Q7); scenario 15 is new in M8.5.
 

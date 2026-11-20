@@ -1,62 +1,67 @@
-# Staging deployment (Google Cloud, one VM)
+# Staging deployment (one Ubuntu VPS)
 
-One Compute Engine VM runs the whole stack with Docker Compose (ADR-0014): Caddy (HTTPS) →
-Next.js → API, plus the worker, PostgreSQL and Redis on an internal network. For trying the
-platform, not for production. Files: `infra/deploy/`.
+One Ubuntu server (any VPS provider) runs the whole stack with Docker Compose (ADR-0014,
+ADR-0021): Caddy (HTTPS) → Next.js → API, plus the worker, PostgreSQL and Redis on an internal
+network. For trying the platform, not for production. Files: `infra/deploy/`.
 
-Commands marked **(your computer)** need the Google Cloud CLI (`gcloud`) signed in to your
-project. Commands marked **(VM)** run over SSH on the VM.
+Commands marked **(your computer)** run in a terminal on your own computer. Commands marked
+**(server)** run over SSH on the VPS.
 
-## 1. Create the VM (your computer)
+## 1. Get a server
 
-Pick a region close to your users (here Singapore). Set your project once:
+Rent a VPS from any provider, in a region close to your users:
+
+- **Ubuntu Server 24.04 LTS** (or a newer LTS), x86-64;
+- at least **2 vCPU, 4 GB memory, 40 GB disk** (building the image needs about 4 GB of memory);
+- a **fixed public IPv4 address** (most VPS plans include one; the certificate is issued for it);
+- SSH key login: add your public key when creating the server (or with `ssh-copy-id`).
+
+If the provider has its own firewall in its control panel, allow inbound TCP 22, 80 and 443 and
+UDP 443 (port 80 is needed for certificate issuance and redirects to HTTPS).
+
+Connect (**your computer**; the provider shows the first user, often `root` or `ubuntu`):
 
 ```bash
-gcloud config set project YOUR_PROJECT_ID
+ssh ubuntu@203.0.113.10
+```
+
+Costs: the provider's monthly price for the plan, plus any backup storage (§ off-server
+backups). Check current prices on the provider's site.
+
+## 2. Prepare the server (server)
+
+If you connected as `root`, create a normal user with sudo, copy your SSH key to it, and
+continue as that user:
+
+```bash
+adduser acf && usermod -aG sudo acf && rsync --archive --chown=acf:acf ~/.ssh /home/acf
+```
+
+Updates, the time zone (the nightly backup runs at 02:15 server time; UTC is assumed below),
+and automatic security updates:
+
+```bash
+sudo apt-get update && sudo apt-get -y upgrade && sudo apt-get install -y git openssl curl rclone unattended-upgrades
 ```
 
 ```bash
-gcloud services enable compute.googleapis.com
+sudo timedatectl set-timezone UTC
 ```
 
-Reserve a static IP so the address (and the certificate) survive restarts:
+Key-only SSH (only after you have checked that key login works for your user):
 
 ```bash
-gcloud compute addresses create acf-staging-ip --region=asia-southeast1
+printf 'PasswordAuthentication no\nPermitRootLogin no\n' | sudo tee /etc/ssh/sshd_config.d/90-acf.conf && sudo systemctl reload ssh
 ```
+
+Firewall (UFW): SSH, HTTP and HTTPS only. Only Caddy publishes ports; Docker's own rules bypass
+UFW for published ports, so nothing else in the compose file is published.
 
 ```bash
-gcloud compute addresses describe acf-staging-ip --region=asia-southeast1 --format='value(address)'
+sudo ufw allow OpenSSH && sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw allow 443/udp && sudo ufw --force enable
 ```
 
-Allow HTTP and HTTPS to VMs tagged `acf-web` (port 80 is needed for certificate issuance and
-redirects to HTTPS):
-
-```bash
-gcloud compute firewall-rules create acf-allow-web --allow=tcp:80,tcp:443,udp:443 --target-tags=acf-web
-```
-
-Create the VM (2 vCPU, 4 GB; building the image needs about 4 GB of memory):
-
-```bash
-gcloud compute instances create acf-staging --zone=asia-southeast1-b --machine-type=e2-medium --image-family=debian-12 --image-project=debian-cloud --boot-disk-size=30GB --tags=acf-web --address=acf-staging-ip
-```
-
-```bash
-gcloud compute ssh acf-staging --zone=asia-southeast1-b
-```
-
-Costs: an e2-medium VM, its disk and the static IP are billed while they exist (the IP also
-while the VM is stopped). Check current prices with the Google Cloud pricing calculator.
-
-## 2. Prepare the VM (VM)
-
-Install Docker Engine with the Compose plugin (Docker's official install script), git and
-openssl:
-
-```bash
-sudo apt-get update && sudo apt-get install -y git openssl curl
-```
+Install Docker Engine with the Compose plugin (Docker's official install script):
 
 ```bash
 curl -fsSL https://get.docker.com | sudo sh
@@ -66,8 +71,8 @@ curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker "$USER"
 ```
 
-Log out and in again (`exit`, then `gcloud compute ssh …`) so the group applies. Add 4 GB of swap
-for the build:
+Log out and in again (`exit`, then `ssh …`) so the group applies. Add 4 GB of swap for the
+build:
 
 ```bash
 sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile && echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
@@ -84,23 +89,23 @@ git clone https://github.com/dungld96/content-factory.git && cd content-factory
 git checkout claude/gracious-planck-kuf4pq
 ```
 
-## 3. Configure (VM)
+## 3. Configure (server)
 
 Choose the site address:
 
-- your own domain: create a DNS `A` record pointing to the static IP first, then use the
+- your own domain: create a DNS `A` record pointing to the server's IP first, then use the
   domain (e.g. `acf.example.com`);
-- no domain: use `<IP>.sslip.io` (e.g. `34.1.2.3.sslip.io`), a public DNS name that resolves
+- no domain: use `<IP>.sslip.io` (e.g. `203.0.113.10.sslip.io`), a public DNS name that resolves
   to the IP.
 
 ```bash
-infra/deploy/generate-env.sh 34.1.2.3.sslip.io
+infra/deploy/generate-env.sh 203.0.113.10.sslip.io
 ```
 
 It writes `infra/deploy/.env.production` (random passwords and secrets, mode 600, git-ignored).
 Never commit or share it; back it up somewhere private (it holds the database passwords).
 
-## 4. Build, migrate, start (VM)
+## 4. Build, migrate, start (server)
 
 ```bash
 cd infra/deploy
@@ -159,7 +164,7 @@ runs the automated QC and prints the result (exit code 0 = passed; no network, n
 ## 5. Real model (OpenRouter, paid)
 
 Without a provider key, generation answers "No usable model for this task". To use OpenRouter,
-set `OPENROUTER_API_KEY=` in `infra/deploy/.env.production` (on the VM only), then:
+set `OPENROUTER_API_KEY=` in `infra/deploy/.env.production` (on the server only), then:
 
 ```bash
 ./acf.sh up -d api worker
@@ -201,7 +206,7 @@ If the provider was seeded as `disabled` (no key at seed time), enable it too:
 `docs/LOCAL_DEVELOPMENT.md` for the registry commands). Every call's reported cost is recorded
 per job.
 
-## 6. Operate (VM)
+## 6. Operate (server)
 
 Users (passwords are read from the terminal, never from arguments):
 
@@ -245,13 +250,13 @@ once (then run `./acf.sh up -d seaweedfs` and `./acf.sh run --rm storage-setup` 
 printf 'S3_ACCESS_KEY_ID=acf_app_%s\nS3_SECRET_ACCESS_KEY=%s\nSTORAGE_ADMIN_ACCESS_KEY_ID=acf_admin_%s\nSTORAGE_ADMIN_SECRET_ACCESS_KEY=%s\n' "$(openssl rand -hex 6)" "$(openssl rand -hex 24)" "$(openssl rand -hex 6)" "$(openssl rand -hex 24)" >> .env.production
 ```
 
-Asset files live in the `seaweedfs-data` volume on the VM's persistent disk; disk snapshots
-back them up together with the database volume.
+Asset files live in the `seaweedfs-data` volume on the server's disk; provider snapshots of the
+disk (if your VPS plan offers them) back them up together with the database volume.
 
 #### Backup and restore (M8, ADR-0020)
 
 A backup is the database dump plus every stored object with a SHA-256 manifest, in
-`infra/deploy/backups/<UTC timestamp>/`. It can run while the stack is up; the last 7 are kept on the VM (nightly copies off the VM: below).
+`infra/deploy/backups/<UTC timestamp>/`. It can run while the stack is up; the last 7 are kept on the server (nightly copies off the server: below).
 It contains user data and password hashes: keep it private. Secrets (`.env.production`) are not
 included; keep your own private copy of that file.
 
@@ -259,68 +264,67 @@ included; keep your own private copy of that file.
 ./acf.sh backup
 ```
 
-#### Scheduled, off-VM backups (M8.5)
+#### Scheduled, off-server backups (M8.5)
 
-A backup on the VM's own disk does not survive losing the VM. Once, set up a Cloud Storage bucket
-that the VM may write to, then schedule the nightly backup. Replace `YOUR_BACKUP_BUCKET` with a
-new, globally unique name (lowercase letters, digits, dashes).
+A backup on the server's own disk does not survive losing the server. Once, give the server a
+place to copy backups to, then schedule the nightly backup. The copy uses
+[rclone](https://rclone.org), so the destination can be any S3-compatible object storage
+(most VPS providers sell one; also Backblaze B2, Cloudflare R2, Wasabi), or a second server over
+SFTP. Use a bucket or folder **only for these backups**: copies older than the retention period
+are deleted there.
 
-Create the bucket (**your computer**; same region as the VM, no public access, objects deleted
-after 30 days):
+Create the destination at your storage provider (a private bucket and an access key limited to
+it, or an SSH login on the other server), then add it on the server as an rclone remote named
+`offsite`. `rclone config` is interactive: choose **n** (new remote), name `offsite`, then the
+type (`s3` with your provider and its endpoint, `b2`, or `sftp`) and the key. It stores them in
+`~/.config/rclone/rclone.conf` (mode 600, outside the repository); the key never goes into the
+shell history or `.env.production`.
 
 ```bash
-gcloud storage buckets create gs://YOUR_BACKUP_BUCKET --location=asia-southeast1 --uniform-bucket-level-access --public-access-prevention
+rclone config
 ```
 
+Check it:
+
 ```bash
-printf '{"rule":[{"action":{"type":"Delete"},"condition":{"age":30}}]}' > lifecycle.json && gcloud storage buckets update gs://YOUR_BACKUP_BUCKET --lifecycle-file=lifecycle.json
+rclone lsd offsite:YOUR_BACKUP_BUCKET
 ```
 
-Let the VM's service account write to it (**your computer**). The VM was created with read-only
-storage access, so its access scopes change once; this stops the VM for a minute:
+Name the destination and schedule the backup (02:15 every night, server time):
 
 ```bash
-SA="$(gcloud compute instances describe acf-staging --zone=asia-southeast1-b --format='value(serviceAccounts[0].email)')" && gcloud storage buckets add-iam-policy-binding gs://YOUR_BACKUP_BUCKET --member="serviceAccount:$SA" --role=roles/storage.objectUser
-```
-
-```bash
-gcloud compute instances stop acf-staging --zone=asia-southeast1-b && gcloud compute instances set-service-account acf-staging --zone=asia-southeast1-b --service-account="$SA" --scopes=default,storage-rw && gcloud compute instances start acf-staging --zone=asia-southeast1-b
-```
-
-On the VM (after `gcloud compute ssh …`; the stack restarts by itself), name the bucket and
-schedule the backup (02:15 every night, VM time, UTC on Debian images):
-
-```bash
-cd ~/content-factory/infra/deploy && echo 'BACKUP_GCS_BUCKET=YOUR_BACKUP_BUCKET' >> .env.production
+cd ~/content-factory/infra/deploy && printf 'BACKUP_REMOTE=offsite:YOUR_BACKUP_BUCKET/acf\nBACKUP_REMOTE_KEEP_DAYS=30\n' >> .env.production
 ```
 
 ```bash
 ./acf.sh backup-schedule install
 ```
 
-Each night the backup is checked, copied to `gs://YOUR_BACKUP_BUCKET/acf/<timestamp>/` (the
-`backup.json` manifest last, so a copy with `backup.json` is complete), and only then are local
-backups beyond the last 7 removed. A failed backup or copy removes nothing and writes a line with
-`"event":"backup_failed"` to `backups/backup.log`. Check it, and the bucket, the next morning:
+Each night the backup is checked and copied to `offsite:YOUR_BACKUP_BUCKET/acf/<timestamp>/` (the
+`backup.json` manifest last, so a copy with `backup.json` is complete). Then copies there older
+than `BACKUP_REMOTE_KEEP_DAYS` (default 30) are deleted, and local backups beyond the last 7. A
+failed backup or copy removes nothing and writes a line with `"event":"backup_failed"` to
+`backups/backup.log`. Check it, and the destination, the next morning:
 
 ```bash
 ./acf.sh backup-schedule status
 ```
 
 ```bash
-gcloud storage ls gs://YOUR_BACKUP_BUCKET/acf/
+rclone lsd offsite:YOUR_BACKUP_BUCKET/acf
 ```
 
-`./acf.sh backup-schedule remove` removes the schedule. Without `BACKUP_GCS_BUCKET` the schedule
-still runs and keeps the last 7 backups on the VM only.
+`./acf.sh backup-schedule remove` removes the schedule. Without `BACKUP_REMOTE` the schedule
+still runs and keeps the last 7 backups on the server only.
 
-To restore from the bucket on a new VM, copy one backup back first, then restore as below:
+To restore on a new server, set up the same rclone remote there, copy one backup back first,
+then restore as below:
 
 ```bash
-mkdir -p backups && gcloud storage cp -r gs://YOUR_BACKUP_BUCKET/acf/<timestamp> backups/
+rclone copy offsite:YOUR_BACKUP_BUCKET/acf/<timestamp> backups/<timestamp>
 ```
 
-Restore needs **empty volumes** (a new VM, or after `./acf.sh down -v`, which deletes all data):
+Restore needs **empty volumes** (a new server, or after `./acf.sh down -v`, which deletes all data):
 it restores the database, writes the objects back, checks every object and asset checksum, and
 applies any newer migrations. Then start the stack.
 
@@ -338,22 +342,8 @@ Stop the stack (data is kept in Docker volumes):
 ./acf.sh down
 ```
 
-Stop paying for compute when not in use (your computer); the disk and static IP are still
-billed:
-
-```bash
-gcloud compute instances stop acf-staging --zone=asia-southeast1-b
-```
-
-Remove everything (your computer; deletes the VM, its disk and all data):
-
-```bash
-gcloud compute instances delete acf-staging --zone=asia-southeast1-b
-```
-
-```bash
-gcloud compute addresses delete acf-staging-ip --region=asia-southeast1
-```
+When you no longer need the server, take a last backup and copy it off the server, then cancel
+or delete the server in your provider's control panel (this deletes its disk and all data).
 
 ### Budgets, alerts and operations (M7)
 
@@ -376,9 +366,9 @@ shipper, e.g. `./acf.sh logs -f api worker | grep -E '"msg":"(budget_exceeded|ci
 | `job_dead_lettered` | worker | A job failed after all retries (shown on the Operations page). |
 | `reservation_held` | worker | A provider call's charge is unknown; an owner must resolve it. |
 | `reconciler_requeued` | worker | Queue state was repaired after a restart or a Redis loss. |
-| `backup_failed` (`event`, in `infra/deploy/backups/backup.log`) | backup.sh | A scheduled backup or its off-VM copy failed; nothing was removed. `./acf.sh backup-schedule status` shows the last failure. |
+| `backup_failed` (`event`, in `infra/deploy/backups/backup.log`) | backup.sh | A scheduled backup or its off-server copy failed; nothing was removed. `./acf.sh backup-schedule status` shows the last failure. |
 
-Circuits can also be inspected or forced from the VM:
+Circuits can also be inspected or forced from the server:
 
 ```bash
 ./acf.sh exec api node dist/cli/ai-registry-cli.js circuit list
@@ -397,4 +387,5 @@ Circuits can also be inspected or forced from the VM:
 - Each container receives only the variables it needs; the admin and migrator database URLs go
   only to the one-off `migrate` tool, and the storage admin key only to `storage-setup`. The
   OpenRouter and storage keys never reach the browser.
-- SSH access is through `gcloud compute ssh` (Google identity); no password login.
+- SSH access is by key only (password and root login disabled, §2); UFW allows only SSH, HTTP
+  and HTTPS; unattended-upgrades installs Ubuntu security updates.

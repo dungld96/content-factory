@@ -1,4 +1,4 @@
-# Single-VM staging deployment (ADR-0014, docs/DEPLOYMENT.md). Run through ./acf.sh, which
+# Single-server staging deployment (ADR-0014, ADR-0021, docs/DEPLOYMENT.md). Run through ./acf.sh, which
 # passes .env.production for variable substitution. Only Caddy publishes ports.
 name: acf-staging
 
@@ -96,7 +96,7 @@ services:
       STORAGE_ADMIN_SECRET_ACCESS_KEY: ${STORAGE_ADMIN_SECRET_ACCESS_KEY:?}
 
   # One-off tool: object export, import and verification for backups (`./acf.sh backup|restore`,
-  # backup.sh). Writes only below ./backups on the VM.
+  # backup.sh). Writes only below ./backups on the server.
   backup:
     <<: *app
     profiles: [tools]

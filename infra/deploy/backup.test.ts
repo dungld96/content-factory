@@ -15,9 +15,9 @@ import { promisify } from 'node:util';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-// M8.5 Q9: off-VM copy, pruning only after a successful copy, the `backup_failed` line and the
-// cron schedule. backup.sh runs from a scratch copy of infra/deploy with stub `gcloud` and
-// `crontab` on PATH that record their calls; no Docker, cloud or real crontab is touched.
+// M8.5 Q9: off-server copy, pruning only after a successful copy, the `backup_failed` line and the
+// cron schedule. backup.sh runs from a scratch copy of infra/deploy with stub `rclone` and
+// `crontab` on PATH that record their calls; no Docker, remote storage or real crontab is touched.
 const run = promisify(execFile);
 const source = import.meta.dirname;
 
@@ -66,8 +66,8 @@ beforeEach(async () => {
   await chmod(path.join(deploy, 'backup.sh'), 0o755);
   await chmod(path.join(deploy, 'acf.sh'), 0o755);
   await writeFile(path.join(deploy, '.env.production'), 'POSTGRES_USER=acf\n');
-  // gcloud records its arguments; GCLOUD_FAIL=1 makes it fail like a missing permission.
-  await stub('gcloud', 'echo "gcloud $*" >> "$CALLS"; [[ "${GCLOUD_FAIL:-}" != 1 ]]');
+  // rclone records its arguments; RCLONE_FAIL=1 makes it fail like an unreachable remote.
+  await stub('rclone', 'echo "rclone $*" >> "$CALLS"; [[ "${RCLONE_FAIL:-}" != 1 ]]');
   // crontab keeps its table in $HOME/crontab.
   await stub(
     'crontab',
@@ -81,7 +81,7 @@ afterEach(async () => {
 });
 
 describe('backup.sh ship (off-VM copy and pruning)', () => {
-  it('without a bucket: keeps the last 7 local backups and calls no gcloud', async () => {
+  it('without a remote: keeps the last 7 local backups and calls no rclone', async () => {
     const result = await backupSh(['ship', '20261109T021500Z']);
     expect(result.code).toBe(0);
     expect(await local()).toHaveLength(7);
@@ -89,25 +89,27 @@ describe('backup.sh ship (off-VM copy and pruning)', () => {
     expect(await calls()).toEqual(['']);
   });
 
-  it('with a bucket: copies the data, then the manifest, then prunes', async () => {
+  it('with a remote: copies the data, then the manifest, then prunes both sides', async () => {
     await writeFile(
       path.join(deploy, '.env.production'),
-      'POSTGRES_USER=acf\nBACKUP_GCS_BUCKET=acf-backups-test\n',
+      'POSTGRES_USER=acf\nBACKUP_REMOTE=offsite:acf-backups/\nBACKUP_REMOTE_KEEP_DAYS=14\n',
     );
     const result = await backupSh(['ship', '20261109T021500Z']);
     expect(result.code).toBe(0);
-    const [data, manifest] = await calls();
-    expect(data).toMatch(/^gcloud storage cp --recursive .*\/database\.dump .*\/storage /);
-    expect(data).toContain('gs://acf-backups-test/acf/20261109T021500Z/');
-    expect(manifest).toMatch(
-      /backup\.json gs:\/\/acf-backups-test\/acf\/20261109T021500Z\/backup\.json$/,
+    const [data, manifest, remotePrune] = await calls();
+    expect(data).toMatch(
+      /^rclone copy --exclude \/backup\.json .*\/backups\/20261109T021500Z offsite:acf-backups\/20261109T021500Z$/,
     );
+    expect(manifest).toMatch(
+      /^rclone copyto .*\/backup\.json offsite:acf-backups\/20261109T021500Z\/backup\.json$/,
+    );
+    expect(remotePrune).toBe('rclone delete --min-age 14d --rmdirs offsite:acf-backups');
     expect(await local()).toHaveLength(7);
   });
 
   it('a failed copy prints backup_failed, exits non-zero and removes nothing', async () => {
-    await writeFile(path.join(deploy, '.env.production'), 'BACKUP_GCS_BUCKET=acf-backups-test\n');
-    const result = await backupSh(['ship', '20261109T021500Z'], { GCLOUD_FAIL: '1' });
+    await writeFile(path.join(deploy, '.env.production'), 'BACKUP_REMOTE=offsite:acf-backups\n');
+    const result = await backupSh(['ship', '20261109T021500Z'], { RCLONE_FAIL: '1' });
     expect(result.code).not.toBe(0);
     const line = JSON.parse(result.stderr.trim().split('\n').pop() ?? '{}') as Record<
       string,
@@ -121,14 +123,17 @@ describe('backup.sh ship (off-VM copy and pruning)', () => {
     expect(await local()).toHaveLength(9);
   });
 
-  it('refuses an invalid bucket name without calling gcloud', async () => {
-    await writeFile(path.join(deploy, '.env.production'), 'BACKUP_GCS_BUCKET=gs://Bad Bucket\n');
-    const result = await backupSh(['ship', '20261109T021500Z']);
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain('"stage":"offsite-config"');
-    expect(await calls()).toEqual(['']);
-    expect(await local()).toHaveLength(9);
-  });
+  it.each(['offsite:', 'offsite:/', 'no-colon', 'offsite:a b', 'offsite:x;rm'])(
+    'refuses the remote %j without calling rclone',
+    async (value) => {
+      await writeFile(path.join(deploy, '.env.production'), `BACKUP_REMOTE=${value}\n`);
+      const result = await backupSh(['ship', '20261109T021500Z']);
+      expect(result.code).not.toBe(0);
+      expect(result.stderr).toContain('"stage":"offsite-config"');
+      expect(await calls()).toEqual(['']);
+      expect(await local()).toHaveLength(9);
+    },
+  );
 
   it('refuses a name that is not a backup', async () => {
     const result = await backupSh(['ship', '../etc']);
@@ -173,14 +178,14 @@ describe('acf.sh backup-schedule', () => {
     expect(await acf('status')).toMatch(/^not scheduled/);
   });
 
-  it('status reports the bucket and the last failure from the log', async () => {
-    await writeFile(path.join(deploy, '.env.production'), 'BACKUP_GCS_BUCKET=acf-backups-test\n');
+  it('status reports the remote and the last failure from the log', async () => {
+    await writeFile(path.join(deploy, '.env.production'), 'BACKUP_REMOTE=offsite:acf-backups\n');
     await writeFile(
       path.join(deploy, 'backups', 'backup.log'),
       '{"event":"backup_failed","at":"2026-11-19T02:15:09Z","stage":"offsite","backup":"x"}\n',
     );
     const result = await backupSh(['backup-schedule', 'status']);
-    expect(result.stdout).toContain('off-VM copy: gs://acf-backups-test/acf/');
+    expect(result.stdout).toContain('off-server copy: offsite:acf-backups/ (kept 30 days)');
     expect(result.stdout).toContain('latest local backup:');
     expect(result.stdout).toContain('last failure: {"event":"backup_failed"');
   });
