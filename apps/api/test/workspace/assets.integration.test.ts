@@ -1,7 +1,14 @@
 // Asset metadata, lineage, usages and archive rules (design package §4.2, §4.3, §7).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import type { AssetDto, AssetUsageDto, LineageResponse, Page } from '@acf/contracts';
+import type {
+  AssetDto,
+  AssetInputListDto,
+  AssetUsageDto,
+  AssetUsagesDto,
+  LineageResponse,
+  Page,
+} from '@acf/contracts';
 
 import { newAsset } from '../support/workspace.js';
 import { bodyOf, codeOf, workspaceContext, type WorkspaceContext } from './shared.js';
@@ -203,5 +210,39 @@ describe('usages and archive', () => {
       await ctx.as('viewer', 'GET', `/projects/${f.projectId}/assets`),
     );
     expect(list.data.some((a) => a.id === f.spareAssetId)).toBe(false);
+  });
+
+  it('shows what an asset was made from and where it is used in production (P2a A3)', async () => {
+    const f = await ctx.fixture();
+    // As the worker records a generation input (asset_inputs is append-only lineage).
+    await ctx.prisma.assetInput.create({
+      data: {
+        projectId: f.projectId,
+        assetId: f.spareAssetId,
+        inputAssetId: f.assetId,
+        role: 'scene_reference',
+      },
+    });
+    const inputs = bodyOf<AssetInputListDto>(
+      await ctx.as('viewer', 'GET', `/assets/${f.spareAssetId}/inputs`),
+    );
+    expect(inputs.data.map((i) => [i.role, i.asset.id])).toEqual([['scene_reference', f.assetId]]);
+
+    const usages = bodyOf<AssetUsagesDto>(
+      await ctx.as('viewer', 'GET', `/assets/${f.assetId}/usages`),
+    );
+    expect(usages.production).toEqual([
+      expect.objectContaining({
+        kind: 'generation_input',
+        role: 'scene_reference',
+        assetId: f.spareAssetId,
+        renderId: null,
+      }),
+    ]);
+    // An asset nothing was made from: empty lists, not an error.
+    expect(
+      bodyOf<AssetInputListDto>(await ctx.as('viewer', 'GET', `/assets/${f.assetId}/inputs`)).data,
+    ).toEqual([]);
+    expect((await ctx.as('outsider', 'GET', `/assets/${f.assetId}/inputs`)).status).toBe(404);
   });
 });

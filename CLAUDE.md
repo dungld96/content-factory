@@ -137,6 +137,10 @@ Post-MVP: audit `docs/post-mvp/POST_MVP_AUDIT.md` (owner decisions recorded ther
 Worker monitoring & smart recovery:** design package revision 1 approved
 (`docs/design/P3-design-review-package.md`; W1–W6, 2026-11-20); slices P3a–P3c implemented,
 integration/E2E verification pending (package §10).
+**P2a — Asset Library integrity:** design package revision 1 approved
+(`docs/design/P2a-design-review-package.md`; A1–A3, 2026-11-20); slices P2a-1–P2a-3 implemented,
+API integration/E2E verification pending (package §9). P2b (picker, brand UI, references,
+collections) not started.
 
 Open items:
 - Off-server backups wait for the backup destination (rclone remote).

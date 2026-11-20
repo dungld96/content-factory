@@ -549,6 +549,11 @@ const ROWS: Record<string, Row> = {
     path: (f) => `/assets/${f.assetId}/usages`,
     expect: [401, 404, 200, 200, 200],
   },
+  'GET /assets/:assetId/inputs': {
+    method: 'GET',
+    path: (f) => `/assets/${f.assetId}/inputs`,
+    expect: [401, 404, 200, 200, 200],
+  },
   'PATCH /assets/:assetId': {
     method: 'PATCH',
     path: (f) => `/assets/${f.assetId}`,

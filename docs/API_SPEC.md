@@ -441,7 +441,8 @@ Schemas: `packages/contracts/src/assets.ts`.
 | `GET /projects/:projectId/assets` | viewer | paginated; filters `assetType`, `contentItemId`, `includeArchived` |
 | `GET /assets/:assetId` | viewer | |
 | `GET /assets/:assetId/lineage` | viewer | `?direction=ancestors\|descendants&depth=1..50`; descendants are breadth-first and paginated (`limit`, `cursor`) |
-| `GET /assets/:assetId/usages` | viewer | character/environment versions referencing the asset (`primary` or `link`) |
+| `GET /assets/:assetId/usages` | viewer | `data`: character/environment versions referencing the asset (`primary` or `link`); `production`: where it is used — `generation_input` (with `role` and the asset made from it), `keyframe`/`clip`/`voiceover` selections and `scene_reference` (with scene and storyboard version), `render_output`; at most 100 per kind |
+| `GET /assets/:assetId/inputs` | viewer | `{ data: [{ role, asset }] }`: the assets it was generated from (`asset_inputs`; roles `character`, `environment`, `scene_reference`, `keyframe`, `clip`, `voiceover`, `music`) |
 | `PATCH /assets/:assetId` | editor | `label`, `metadata` only; `If-Match`. The platform's metadata keys (`SYSTEM_METADATA_KEYS`: `purpose`, the reuse hashes, probe data, …) are kept and cannot be set: `422 METADATA_KEY_RESERVED` (also on registration) |
 | `POST /assets/:assetId/archive` | editor | `409 ASSET_IN_USE` while an approved version references it |
 

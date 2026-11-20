@@ -4,7 +4,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type SyntheticEvent } from 'react';
 
-import type { AssetDto, AssetUsageDto, GenerationJobDto, LineageResponse } from '@acf/contracts';
+import type {
+  AssetDto,
+  AssetInputListDto,
+  AssetProductionUsageDto,
+  AssetUsagesDto,
+  GenerationJobDto,
+  LineageResponse,
+} from '@acf/contracts';
 
 import { LocalTime } from '@/components/local-time';
 import { ApprovalPill, Pill } from '@/components/status-pill';
@@ -174,8 +181,36 @@ const isImage = (a: AssetDto) => a.mimeType.startsWith('image/');
 
 interface Provenance {
   readonly ancestors: AssetDto[];
-  readonly usages: AssetUsageDto[];
+  readonly usages: AssetUsagesDto['data'];
+  readonly inputs: AssetInputListDto['data'];
+  readonly production: AssetProductionUsageDto[];
   readonly job: GenerationJobDto | null;
+}
+
+const ROLE_LABEL: Readonly<Record<AssetInputListDto['data'][number]['role'], string>> = {
+  character: 'character reference',
+  environment: 'environment reference',
+  scene_reference: 'scene reference',
+  keyframe: 'keyframe',
+  clip: 'clip',
+  voiceover: 'voice-over',
+  music: 'music',
+};
+
+const USE_LABEL: Readonly<Record<AssetProductionUsageDto['kind'], string>> = {
+  generation_input: 'Input',
+  keyframe: 'Keyframe',
+  clip: 'Chosen clip',
+  voiceover: 'Chosen voice-over',
+  scene_reference: 'Scene reference',
+  render_output: 'Render output',
+};
+
+/** One production use, e.g. "Chosen clip · scene 2". */
+function usageText(u: AssetProductionUsageDto): string {
+  const scene = u.sceneNumber === null ? '' : ` · scene ${String(u.sceneNumber)}`;
+  const role = u.kind === 'generation_input' && u.role ? ` (as ${ROLE_LABEL[u.role]})` : '';
+  return `${USE_LABEL[u.kind]}${role}${scene}`;
 }
 
 /** Loads what the API records about where an asset came from and where it is used. */
@@ -186,11 +221,12 @@ function useProvenance(asset: AssetDto | null): Provenance | 'loading' | null {
     let live = true;
     void Promise.all([
       fetchJson<LineageResponse>(`/assets/${asset.id}/lineage?direction=ancestors`),
-      fetchJson<{ data: AssetUsageDto[] }>(`/assets/${asset.id}/usages`),
+      fetchJson<AssetUsagesDto>(`/assets/${asset.id}/usages`),
+      fetchJson<AssetInputListDto>(`/assets/${asset.id}/inputs`),
       asset.generationJobId
         ? fetchJson<GenerationJobDto>(`/generation-jobs/${asset.generationJobId}`)
         : Promise.resolve(null),
-    ]).then(([lineage, usages, job]) => {
+    ]).then(([lineage, usages, inputs, job]) => {
       if (!live) return;
       setState({
         id: asset.id,
@@ -199,6 +235,8 @@ function useProvenance(asset: AssetDto | null): Provenance | 'loading' | null {
             .filter((n) => n.asset.id !== asset.id)
             .map((n) => n.asset),
           usages: usages?.data ?? [],
+          production: usages?.production ?? [],
+          inputs: inputs?.data ?? [],
           job,
         },
       });
@@ -313,13 +351,41 @@ function LineagePanel({ asset }: { readonly asset: AssetRow }) {
                     </dd>
                   </>
                 )}
+                <dt>Made from</dt>
+                <dd>
+                  {provenance.inputs.length === 0
+                    ? 'No generation inputs'
+                    : provenance.inputs.map((i, n) => (
+                        <span key={i.asset.id}>
+                          {n > 0 ? ', ' : ''}
+                          {nameOf(i.asset)} ({ROLE_LABEL[i.role]})
+                        </span>
+                      ))}
+                </dd>
+                <dt>Used in</dt>
+                <dd>
+                  {provenance.production.length === 0
+                    ? 'Not used in production'
+                    : provenance.production.map((u, n) => (
+                        <span
+                          key={`${u.kind}-${u.assetId ?? u.storyboardSceneId ?? u.renderId ?? String(n)}`}
+                        >
+                          {n > 0 ? ', ' : ''}
+                          {u.contentItemId ? (
+                            <Link href={`/content/${u.contentItemId}`}>{usageText(u)}</Link>
+                          ) : (
+                            usageText(u)
+                          )}
+                        </span>
+                      ))}
+                </dd>
                 <dt>Derived from</dt>
                 <dd>
                   {provenance.ancestors.length === 0
                     ? 'Nothing (original asset)'
                     : provenance.ancestors.map(nameOf).join(' ← ')}
                 </dd>
-                <dt>Used by</dt>
+                <dt>Brand versions</dt>
                 <dd>
                   {provenance.usages.length === 0
                     ? 'No character or environment version'

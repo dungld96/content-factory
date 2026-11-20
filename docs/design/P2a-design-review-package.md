@@ -1,6 +1,7 @@
 # P2a Design Review Package — Asset Library Integrity
 
 - Status: **Revision 1, approved by the owner (2026-11-20)**: A1–A3 as proposed.
+  Slices P2a-1–P2a-3 implemented (§9); API integration and E2E verification pending.
 - Date: 2026-11-20
 - Baseline: MVP complete (M0–M8.5); P3 implemented. Input: `docs/post-mvp/POST_MVP_AUDIT.md`
   §A2, §B2, §C2 (steps 1–3 of P2).
@@ -168,3 +169,26 @@ SELECT id, asset_type, source_type, metadata
  WHERE (source_type <> 'generated' AND metadata ?| ARRAY['sceneHash','clipHash','voiceoverHash'])
     OR (asset_type <> 'audio' AND metadata ? 'purpose');
 ```
+
+## 9. Deviations and results found during implementation
+
+### 9.1 Deviations
+
+| Item                           | Planned                                         | Done                                                                                                        | Why                                                                                                                                                                               |
+| ------------------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A2 key list in SQL             | Inline in the trigger                           | A function `acf_system_metadata_keys()` used by the trigger                                                 | One place to read in SQL; a **unit** test parses the latest migration defining it and compares it with `SYSTEM_METADATA_KEYS` (the database package cannot import content-domain) |
+| A2 key list location           | `packages/content-domain/src/assets.ts`         | As planned, exported through `schemas` and the main entry                                                   | —                                                                                                                                                                                 |
+| A2 adding a reserved key later | Not stated                                      | Also refused by the trigger (any change, including absent → present)                                        | The platform writes these keys only at insert                                                                                                                                     |
+| A3 "Used by"                   | Kept                                            | Renamed "Brand versions"; "Made from" and "Used in" added                                                   | Clearer next to production uses                                                                                                                                                   |
+| Tests                          | API tests for keyframe → clip → render chain    | API test covers `inputs` and `generation_input`; selection and render kinds are covered by code review only | Building selections and renders in the asset suite needs the full media fixture; add in P2b with the E2E                                                                          |
+| E2E                            | Library approve → render; lineage panel; viewer | **Not written yet**                                                                                         | Follow-up once the full stack can run                                                                                                                                             |
+
+### 9.2 Verification
+
+| Check                                                             | Result                                                                                                                 |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `pnpm lint`, `pnpm typecheck`, `pnpm format:check`, `pnpm build`  | Pass                                                                                                                   |
+| Unit tests                                                        | Pass, incl. `assets.test.ts` (reserved keys, merge, SQL list equality)                                                 |
+| Database integration (`integration:database`)                     | **Run: 294 passed** on local PostgreSQL 16 (the project pins 17), incl. the new guard tests and the Prisma drift check |
+| API integration (`assets.integration.test.ts`, permission matrix) | Written, **not run** in the implementation session (the API suite needs S3 storage)                                    |
+| E2E                                                               | Not written                                                                                                            |

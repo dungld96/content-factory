@@ -225,3 +225,56 @@ export const assetUsageSchema = z
   })
   .meta({ id: 'AssetUsage' });
 export type AssetUsageDto = z.infer<typeof assetUsageSchema>;
+
+// --- P2a A3: production lineage from asset_inputs and the selection tables ---
+
+/** Roles of a generation input (`asset_inputs.role`). */
+export const assetInputRoleSchema = z.enum([
+  'character',
+  'environment',
+  'scene_reference',
+  'keyframe',
+  'clip',
+  'voiceover',
+  'music',
+]);
+
+/** `GET /assets/:assetId/inputs`: what an asset was made from. */
+export const assetInputListSchema = z
+  .object({ data: z.array(z.object({ role: assetInputRoleSchema, asset: assetSchema })) })
+  .meta({ id: 'AssetInputList' });
+export type AssetInputListDto = z.infer<typeof assetInputListSchema>;
+
+/** Where an asset is used in production (`usages.production`). */
+export const assetProductionUsageSchema = z
+  .object({
+    kind: z.enum([
+      'generation_input',
+      'keyframe',
+      'clip',
+      'voiceover',
+      'scene_reference',
+      'render_output',
+    ]),
+    contentItemId: z.uuid().nullable(),
+    /** generation_input: the role, and the asset made from this one. */
+    role: assetInputRoleSchema.nullable(),
+    assetId: z.uuid().nullable(),
+    /** keyframe / clip / voiceover / scene_reference: the scene. */
+    storyboardSceneId: z.uuid().nullable(),
+    storyboardVersionId: z.uuid().nullable(),
+    sceneNumber: z.number().int().nullable(),
+    /** render_output: the render. */
+    renderId: z.uuid().nullable(),
+  })
+  .meta({ id: 'AssetProductionUsage' });
+export type AssetProductionUsageDto = z.infer<typeof assetProductionUsageSchema>;
+
+/** `GET /assets/:assetId/usages`: brand versions (`data`) and production uses (P2a). */
+export const assetUsagesSchema = z
+  .object({
+    data: z.array(assetUsageSchema),
+    production: z.array(assetProductionUsageSchema),
+  })
+  .meta({ id: 'AssetUsages' });
+export type AssetUsagesDto = z.infer<typeof assetUsagesSchema>;

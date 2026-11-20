@@ -5,9 +5,12 @@ import { z } from 'zod';
 
 import {
   ApiErrorCode,
+  assetInputRoleSchema,
   type AssetDto,
+  type AssetInputListDto,
+  type AssetProductionUsageDto,
   type AssetType,
-  type AssetUsageDto,
+  type AssetUsagesDto,
   type LineageResponse,
   type Page,
   type RegisterAssetRequest,
@@ -536,7 +539,7 @@ export class AssetsService {
   }
 
   /** Versions referencing the asset, as primary or linked asset (design package §4.3). */
-  async usages(actor: Actor, assetId: string): Promise<{ data: AssetUsageDto[] }> {
+  async usages(actor: Actor, assetId: string): Promise<AssetUsagesDto> {
     const asset = await this.load(assetId);
     await this.access.require(actor, asset.projectId, 'viewer');
     const rows = await this.db.$queryRaw<
@@ -573,7 +576,106 @@ export class AssetsService {
         status: r.status,
         reference: r.reference,
       })),
+      production: await this.productionUsages(assetId),
     };
+  }
+
+  /** What an asset was made from (`asset_inputs`, P2a A3), newest input first. */
+  async inputs(actor: Actor, assetId: string): Promise<AssetInputListDto> {
+    const asset = await this.load(assetId);
+    await this.access.require(actor, asset.projectId, 'viewer');
+    const rows = await this.db.assetInput.findMany({
+      where: { assetId },
+      include: { inputAsset: true },
+      orderBy: [{ createdAt: 'desc' }, { inputAssetId: 'asc' }],
+      take: PRODUCTION_USAGE_LIMIT,
+    });
+    return {
+      data: rows.map((r) => ({
+        role: assetInputRoleSchema.parse(r.role),
+        asset: toAssetDto(r.inputAsset),
+      })),
+    };
+  }
+
+  /** Where an asset is used in production (P2a A3): each kind newest first, capped. */
+  private async productionUsages(assetId: string): Promise<AssetProductionUsageDto[]> {
+    const take = PRODUCTION_USAGE_LIMIT;
+    const scene = {
+      select: {
+        id: true,
+        sceneNumber: true,
+        storyboardVersionId: true,
+        storyboardVersion: { select: { contentItemId: true } },
+      },
+    } as const;
+    const [made, keyframes, clips, voiceovers, references, renders] = await Promise.all([
+      this.db.assetInput.findMany({
+        where: { inputAssetId: assetId },
+        include: { asset: { select: { contentItemId: true } } },
+        orderBy: [{ createdAt: 'desc' }, { assetId: 'asc' }],
+        take,
+      }),
+      this.db.sceneKeyframe.findMany({ where: { assetId }, include: { scene }, take }),
+      this.db.sceneClip.findMany({ where: { assetId }, include: { scene }, take }),
+      this.db.sceneVoiceover.findMany({ where: { assetId }, include: { scene }, take }),
+      this.db.storyboardSceneAsset.findMany({ where: { assetId }, include: { scene }, take }),
+      this.db.render.findMany({
+        where: {
+          OR: [
+            { videoAssetId: assetId },
+            { subtitleAssetId: assetId },
+            { thumbnailAssetId: assetId },
+          ],
+        },
+        select: { id: true, contentItemId: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take,
+      }),
+    ]);
+    const none = {
+      role: null,
+      assetId: null,
+      storyboardSceneId: null,
+      storyboardVersionId: null,
+      sceneNumber: null,
+      renderId: null,
+    };
+    const inScene = (
+      kind: 'keyframe' | 'clip' | 'voiceover' | 'scene_reference',
+      s: {
+        id: string;
+        sceneNumber: number;
+        storyboardVersionId: string;
+        storyboardVersion: { contentItemId: string };
+      },
+    ): AssetProductionUsageDto => ({
+      ...none,
+      kind,
+      contentItemId: s.storyboardVersion.contentItemId,
+      storyboardSceneId: s.id,
+      storyboardVersionId: s.storyboardVersionId,
+      sceneNumber: s.sceneNumber,
+    });
+    return [
+      ...made.map((m) => ({
+        ...none,
+        kind: 'generation_input' as const,
+        contentItemId: m.asset.contentItemId,
+        role: assetInputRoleSchema.parse(m.role),
+        assetId: m.assetId,
+      })),
+      ...keyframes.map((k) => inScene('keyframe', k.scene)),
+      ...clips.map((c) => inScene('clip', c.scene)),
+      ...voiceovers.map((v) => inScene('voiceover', v.scene)),
+      ...references.map((r) => inScene('scene_reference', r.scene)),
+      ...renders.map((r) => ({
+        ...none,
+        kind: 'render_output' as const,
+        contentItemId: r.contentItemId,
+        renderId: r.id,
+      })),
+    ];
   }
 
   private async load(assetId: string): Promise<Asset> {
@@ -620,6 +722,9 @@ function mediaError(
 }
 
 /** FFprobe/FFmpeg is not installed (CLAUDE.md §8; M5 design §8). */
+/** Rows per kind in `inputs` and `usages.production` (P2a A3). */
+const PRODUCTION_USAGE_LIMIT = 100;
+
 /** P2a A2: callers may not set the metadata keys the platform writes (`SYSTEM_METADATA_KEYS`). */
 function refuseReservedKeys(metadata: Readonly<Record<string, unknown>> | undefined): void {
   const keys = metadata ? reservedMetadataKeys(metadata) : [];

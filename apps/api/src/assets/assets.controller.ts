@@ -16,11 +16,11 @@ import {
   ApiErrorCode,
   assetIdParamsSchema,
   assetSchema,
-  assetUsageSchema,
+  assetInputListSchema,
+  assetUsagesSchema,
   lineageQuerySchema,
   lineageResponseSchema,
   listAssetsQuerySchema,
-  listSchema,
   pageSchema,
   projectIdParamsSchema,
   STREAMABLE_MEDIA_TYPES,
@@ -30,7 +30,8 @@ import {
   UPLOADABLE_IMAGE_TYPES,
   uploadAssetQuerySchema,
   type AssetDto,
-  type AssetUsageDto,
+  type AssetInputListDto,
+  type AssetUsagesDto,
   type LineageResponse,
   type Page,
   type RegisterAssetRequest,
@@ -197,17 +198,33 @@ export class AssetsController {
 
   @Get('assets/:assetId/usages')
   @Endpoint({
-    summary: 'Character and environment versions that reference the asset',
+    summary:
+      'Where the asset is used: character/environment versions (data) and production (production)',
     tags,
     params: assetIdParamsSchema,
-    responses: { 200: { description: 'Usages', schema: listSchema(assetUsageSchema) } },
+    responses: { 200: { description: 'Usages', schema: assetUsagesSchema } },
     errors: [400, 401, 404],
   })
   usages(
     @CurrentActor() actor: Actor,
     @ValidParams() params: AssetParams,
-  ): Promise<{ data: AssetUsageDto[] }> {
+  ): Promise<AssetUsagesDto> {
     return this.assets.usages(actor, params.assetId);
+  }
+
+  @Get('assets/:assetId/inputs')
+  @Endpoint({
+    summary: 'The assets this asset was generated from, with their role',
+    tags,
+    params: assetIdParamsSchema,
+    responses: { 200: { description: 'Inputs', schema: assetInputListSchema } },
+    errors: [400, 401, 404],
+  })
+  inputs(
+    @CurrentActor() actor: Actor,
+    @ValidParams() params: AssetParams,
+  ): Promise<AssetInputListDto> {
+    return this.assets.inputs(actor, params.assetId);
   }
 
   @Patch('assets/:assetId')
