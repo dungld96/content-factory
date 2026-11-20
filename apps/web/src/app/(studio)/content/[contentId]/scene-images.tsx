@@ -10,11 +10,13 @@ import type {
   StoryboardImagesDto,
 } from '@acf/contracts';
 
+import { CancelActiveRuns } from '@/components/cancel-run';
 import { ModelSelect, type ModelOption } from '@/components/model-select';
 import { ApprovalPill, Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { mutate } from '@/lib/api-client';
 import { assetContentUrl } from '@/lib/asset-url';
+import { jobErrorText } from '@/lib/format';
 import { formatUsd } from '@/lib/money';
 
 /**
@@ -132,6 +134,7 @@ export function SceneImagesPanel(props: {
           >
             <span aria-hidden="true">✧</span> Generate images
           </button>
+          <CancelActiveRuns jobs={images.scenes.map((s) => s.activeJob)} />
         </div>
       )}
       {estimate && (
@@ -187,7 +190,7 @@ export function SceneImagesPanel(props: {
                   <p role="status">
                     Image job {job.status}
                     {job.attempt > 1 ? ` (attempt ${String(job.attempt)})` : ''}
-                    {job.errorCode ? ` — ${job.errorCode}` : ''}
+                    {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}
                   </p>
                 )}
               </div>

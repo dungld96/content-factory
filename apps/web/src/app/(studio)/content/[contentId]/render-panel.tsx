@@ -10,6 +10,7 @@ import type {
   RenderPlanDto,
 } from '@acf/contracts';
 
+import { CancelRunButton } from '@/components/cancel-run';
 import { LocalTime } from '@/components/local-time';
 import { Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
@@ -275,6 +276,9 @@ function RenderCard(props: {
             <p role="status">
               {r.stage ? (STAGE_LABEL[r.stage] ?? r.stage) : 'Waiting for the render worker'}…
             </p>
+          )}
+          {props.canEdit && (r.status === 'queued' || r.status === 'running') && (
+            <CancelRunButton runId={r.job.productionRunId} what="this render" />
           )}
           {r.job.errorCode && (
             <p className="form-error" role="alert">

@@ -26,7 +26,7 @@ import { RelativeTime } from '@/components/local-time';
 import { ContentStatusPill, Pill, VersionPill } from '@/components/status-pill';
 import { assetContentUrl } from '@/lib/asset-url';
 import { isGenerating } from '@/lib/content-status';
-import { FORMAT_LABEL, platformLabel, wordCount } from '@/lib/format';
+import { FORMAT_LABEL, jobErrorText, platformLabel, wordCount } from '@/lib/format';
 import { addUsd, formatUsd, sumJobCosts } from '@/lib/money';
 import { apiGet } from '@/lib/api-server';
 
@@ -161,7 +161,7 @@ function activityOf(
       events.push({
         at: job.completedAt ?? job.startedAt ?? job.queuedAt,
         title: `Scene ${String(scene.sceneNumber)} image job ${job.status}`,
-        detail: `${job.modelKey}${job.errorCode ? ` · ${job.errorCode}` : ''}`,
+        detail: `${job.modelKey}${job.errorCode ? ` · ${jobErrorText(job.errorCode)}` : ''}`,
       });
     }
   }
@@ -172,7 +172,7 @@ function activityOf(
         events.push({
           at: job.completedAt ?? job.startedAt ?? job.queuedAt,
           title: `Scene ${String(scene.sceneNumber)} ${kind} job ${job.status}`,
-          detail: `${job.modelKey}${job.errorCode ? ` · ${job.errorCode}` : ''}`,
+          detail: `${job.modelKey}${job.errorCode ? ` · ${jobErrorText(job.errorCode)}` : ''}`,
         });
       }
     }

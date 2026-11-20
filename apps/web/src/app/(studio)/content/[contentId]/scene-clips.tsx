@@ -11,6 +11,7 @@ import type {
   VideoGenerateResponseDto,
 } from '@acf/contracts';
 
+import { CancelActiveRuns } from '@/components/cancel-run';
 import { ModelSelect, type ModelOption } from '@/components/model-select';
 import { ApprovalPill, Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
@@ -172,6 +173,7 @@ export function SceneClipsPanel(props: {
           >
             <span aria-hidden="true">▶</span> Generate clips
           </button>
+          <CancelActiveRuns jobs={videos.scenes.map((s) => s.activeJob)} video />
         </div>
       )}
       {estimate && (

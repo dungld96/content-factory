@@ -21,7 +21,9 @@ import {
   VIDEO_POLL_LIMIT_MS,
   VIDEO_PROMPT_TEMPLATE_ID,
   videoJobInputSchema,
+  videoFailureCode,
   videoPollDelayMs,
+  type JobErrorCode,
   type VideoJobInput,
 } from '@acf/content-domain';
 import type { GenerationJob, PrismaClient } from '@acf/database';
@@ -49,7 +51,7 @@ export type MediaStepOutcome =
 /** A job that cannot succeed as configured or as received: never retried. */
 export class MediaPermanentError extends Error {
   constructor(
-    readonly code: string,
+    readonly code: JobErrorCode,
     message: string,
   ) {
     super(message);
@@ -79,7 +81,7 @@ export interface MediaJobsDeps {
 export interface MediaOutcomes {
   readonly failFinal: (
     job: GenerationJob,
-    code: string,
+    code: JobErrorCode,
     message: string,
   ) => Promise<MediaStepOutcome>;
 }
@@ -303,7 +305,9 @@ export class MediaJobs {
     const invocationId = job.invocationId;
     if (!videos || !invocationId || !job.providerKey) return { type: 'skipped' };
     if (state.status !== 'completed') {
-      const code = `PROVIDER_${state.status.toUpperCase()}`;
+      const code = videoFailureCode(
+        state.status === 'cancelled' || state.status === 'expired' ? state.status : 'failed',
+      );
       const message = state.error ?? `the provider reported ${state.status}`;
       await this.deps.jobs.recordPoll(job, state, null);
       await videos.fail(invocationId, state, code, message);

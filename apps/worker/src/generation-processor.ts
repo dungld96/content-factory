@@ -54,6 +54,7 @@ import {
   toResponseJsonSchema,
   totalDuration,
   type DeadLetterPayload,
+  type JobErrorCode,
   type RuleIssue,
   type ScriptContent,
   type TextJobKind,
@@ -129,7 +130,7 @@ class DiscardedError extends Error {}
 /** A job that cannot succeed as configured (no storage, missing reference file): never retried. */
 class PermanentJobError extends Error {
   constructor(
-    readonly code: string,
+    readonly code: JobErrorCode,
     message: string,
   ) {
     super(message);
@@ -858,7 +859,7 @@ export class GenerationProcessor {
 
   private async retry(
     job: GenerationJob,
-    errorCode: string,
+    errorCode: JobErrorCode,
     retryAfterMs: number | undefined,
   ): Promise<ProcessOutcome> {
     const delayMs = this.deps.retryDelay
@@ -876,7 +877,7 @@ export class GenerationProcessor {
 
   private async failFinal(
     job: GenerationJob,
-    errorCode: string,
+    errorCode: JobErrorCode,
     message: string,
     detail: Prisma.InputJsonObject = {},
   ): Promise<{ type: 'failed'; errorCode: string } | { type: 'skipped' }> {

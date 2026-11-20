@@ -12,6 +12,8 @@ export interface MutationResult<T> {
   readonly code?: string | null;
   /** Per-field problems of a 400/422 (e.g. which storyboard rule is broken), when the API sent them. */
   readonly details?: readonly { readonly path: string; readonly message: string }[];
+  /** The API's `error.current` (the state the request conflicted with), when it sent one. */
+  readonly current?: unknown;
 }
 
 /** The error to show for a failed request: the message plus each named problem (M8.5 Q6). */
@@ -71,7 +73,9 @@ async function send<T>(
     });
     const json = (await res.json().catch(() => null)) as unknown;
     const error = (
-      json as { error?: { message?: unknown; code?: unknown; details?: unknown } } | null
+      json as {
+        error?: { message?: unknown; code?: unknown; details?: unknown; current?: unknown };
+      } | null
     )?.error;
     const details = detailsOf(error?.details);
     return {
@@ -81,6 +85,7 @@ async function send<T>(
       message: !res.ok && typeof error?.message === 'string' ? error.message : null,
       code: !res.ok && typeof error?.code === 'string' ? error.code : null,
       ...(details.length > 0 ? { details } : {}),
+      ...(!res.ok && error?.current !== undefined ? { current: error.current } : {}),
     };
   } catch {
     return { ok: false, status: 0, data: null, message: 'The server could not be reached.' };

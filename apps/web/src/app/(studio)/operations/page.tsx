@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 
 import type { OpsSummaryDto } from '@acf/contracts';
 
+import { JobErrorLine } from '@/components/job-error';
 import { LocalTime } from '@/components/local-time';
 import { ResumeRunButton } from '@/components/resume-run';
 import { Pill } from '@/components/status-pill';
@@ -149,8 +150,11 @@ export default async function OperationsPage() {
                     </td>
                     <td>{KIND_LABEL[j.kind] ?? j.kind}</td>
                     <td>
-                      <code>{j.errorCode ?? '—'}</code>
-                      {j.errorMessage && <div className="muted small-text">{j.errorMessage}</div>}
+                      {j.errorCode ? (
+                        <JobErrorLine code={j.errorCode} message={j.errorMessage} />
+                      ) : (
+                        '—'
+                      )}
                     </td>
                     <td>
                       <LocalTime iso={j.failedAt} />

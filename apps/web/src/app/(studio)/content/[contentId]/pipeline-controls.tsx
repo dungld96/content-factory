@@ -11,12 +11,14 @@ import type {
   StoryboardSceneDto,
 } from '@acf/contracts';
 
+import { CancelRunButton } from '@/components/cancel-run';
 import { Modal } from '@/components/modal';
 import { ModelSelect, type ModelOption } from '@/components/model-select';
 import { ResumeRunButton } from '@/components/resume-run';
 import { Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { errorText, fetchJson, mutate } from '@/lib/api-client';
+import { jobErrorText } from '@/lib/format';
 
 const TERMINAL = new Set(['succeeded', 'failed', 'canceled']);
 
@@ -151,11 +153,17 @@ export function GenerateButton(props: {
         <span className="job-line" role="status">
           Job {job.status}
           {job.attempt > 1 ? ` (attempt ${String(job.attempt)})` : ''}
-          {job.errorCode ? ` — ${job.errorCode}` : ''}
+          {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}
         </span>
       )}
       {job && (job.status === 'failed' || job.status === 'canceled') && (
         <ResumeRunButton runId={job.productionRunId} />
+      )}
+      {running && (
+        <CancelRunButton
+          runId={job.productionRunId}
+          what={`the ${props.label.toLowerCase()} job`}
+        />
       )}
       <ErrorText error={error} />
     </>

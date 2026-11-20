@@ -12,6 +12,7 @@ import type {
   VoiceProfileDto,
 } from '@acf/contracts';
 
+import { CancelActiveRuns } from '@/components/cancel-run';
 import { ApprovalPill, Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { mutate } from '@/lib/api-client';
@@ -155,6 +156,7 @@ export function SceneVoiceoversPanel(props: {
             </button>
           </>
         )}
+        {canEdit && <CancelActiveRuns jobs={voiceovers.scenes.map((s) => s.activeJob)} />}
       </div>
       {profiles.length === 0 && (
         <p className="muted small-text">
