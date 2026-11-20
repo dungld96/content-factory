@@ -278,4 +278,4 @@ X1–X12 hold. These details changed during implementation:
 
 M6 status: all slices delivered and tested (unit, media with real FFmpeg, database, worker and API
 integration, permission matrix, Playwright E2E rendering the demo item with mock media and real
-FFmpeg). Awaiting owner review.
+FFmpeg). **Approved by the owner (2026-11-20).**
