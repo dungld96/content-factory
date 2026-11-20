@@ -27,7 +27,10 @@ export interface BudgetDefaults {
 export interface BudgetUsageReport {
   /** What counts against the limits (see {@link budgetUsage}). */
   readonly limits: BudgetUsage;
-  /** Ledger cost this month of calls not covered by an open or held reservation. */
+  /**
+   * Ledger cost this month of calls not covered by an open or held reservation, plus charges an
+   * owner confirmed when settling held reservations.
+   */
   readonly spent: UsdAmount;
   readonly reserved: UsdAmount;
   readonly held: UsdAmount;
@@ -103,7 +106,14 @@ export async function budgetUsage(
     WHERE project_id = ${projectId}::uuid AND status IN ('open', 'held')
       AND job_id <> ${exclude}::uuid
     GROUP BY status`;
-  const spent = usd(ledger[0]?.spent) ?? UsdAmount.ZERO;
+  // Charges an owner confirmed when settling a held reservation (the ledger could not price them).
+  const confirmed = await db.$queryRaw<{ amount: Prisma.Decimal | null }[]>`
+    SELECT SUM(settled_charge_usd) AS amount FROM budget_reservations
+    WHERE project_id = ${projectId}::uuid AND status = 'settled' AND settled_charge_usd IS NOT NULL
+      AND created_at >= ${period.start} AND created_at < ${period.end}`;
+  const spent = (usd(ledger[0]?.spent) ?? UsdAmount.ZERO).add(
+    usd(confirmed[0]?.amount) ?? UsdAmount.ZERO,
+  );
   const reserved = usd(reservations.find((r) => r.status === 'open')?.amount) ?? UsdAmount.ZERO;
   const held = usd(reservations.find((r) => r.status === 'held')?.amount) ?? UsdAmount.ZERO;
   let item = UsdAmount.ZERO;
@@ -119,9 +129,10 @@ export async function budgetUsage(
         WHERE i.content_item_id = ${contentItemId}::uuid
           AND (r.id IS NULL OR r.status IN ('settled', 'released'))
       ) + (
-        SELECT COALESCE(SUM(amount_usd), 0) FROM budget_reservations
-        WHERE content_item_id = ${contentItemId}::uuid AND status IN ('open', 'held')
-          AND job_id <> ${exclude}::uuid
+        SELECT COALESCE(SUM(CASE WHEN status = 'settled' THEN settled_charge_usd ELSE amount_usd END), 0)
+        FROM budget_reservations
+        WHERE content_item_id = ${contentItemId}::uuid AND job_id <> ${exclude}::uuid
+          AND (status IN ('open', 'held') OR settled_charge_usd IS NOT NULL)
       ) AS spent`;
     item = usd(rows[0]?.spent) ?? UsdAmount.ZERO;
   }

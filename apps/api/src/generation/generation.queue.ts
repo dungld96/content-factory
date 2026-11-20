@@ -4,6 +4,11 @@ import { Redis } from 'ioredis';
 
 import type { ApiEnv } from '@acf/config';
 import {
+  AUDIO_GENERATION_QUEUE,
+  GENERATION_DLQ,
+  GENERATION_QUEUE,
+  IMAGE_GENERATION_QUEUE,
+  RENDER_QUEUE,
   generationJobOptions,
   queueForKind,
   VIDEO_GENERATION_QUEUE,
@@ -72,6 +77,64 @@ export class GenerationQueue implements OnModuleDestroy {
       await existing.remove();
     }
     await queue.add(VIDEO_POLL_JOB_NAME, { jobId }, options);
+  }
+
+  /**
+   * Waiting, active, delayed and failed counts of every queue (operations page, M7 §8), or null
+   * when Redis does not answer within the enqueue timeout.
+   */
+  async depths(): Promise<
+    { queue: string; waiting: number; active: number; delayed: number; failed: number }[] | null
+  > {
+    const names = [
+      GENERATION_QUEUE,
+      IMAGE_GENERATION_QUEUE,
+      VIDEO_GENERATION_QUEUE,
+      AUDIO_GENERATION_QUEUE,
+      RENDER_QUEUE,
+      GENERATION_DLQ,
+    ];
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        Promise.all(
+          names.map(async (name) => {
+            const c = await this.getQueue(name).getJobCounts(
+              'waiting',
+              'active',
+              'delayed',
+              'failed',
+              'completed',
+            );
+            // Dead-letter entries are stored as completed jobs of the DLQ.
+            const failed =
+              name === GENERATION_DLQ
+                ? (c['completed'] ?? 0) + (c['waiting'] ?? 0)
+                : (c['failed'] ?? 0);
+            return {
+              queue: name,
+              waiting: name === GENERATION_DLQ ? 0 : (c['waiting'] ?? 0),
+              active: c['active'] ?? 0,
+              delayed: c['delayed'] ?? 0,
+              failed,
+            };
+          }),
+        ),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => {
+            resolve(null);
+          }, ENQUEUE_TIMEOUT_MS);
+        }),
+      ]);
+    } catch (error) {
+      this.logger.warn({
+        msg: 'queue_depths_unavailable',
+        error: error instanceof Error ? error.name : 'unknown',
+      });
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private getQueue(name: string): Queue<GenerationJobPayload> {

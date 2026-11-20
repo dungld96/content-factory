@@ -291,8 +291,18 @@ Return overall run status, stage status, progress, and summary.
 ### `POST /production-runs/:runId/cancel`
 Cancel pending work where cancellation is supported.
 
-### `POST /production-runs/:runId/resume`
-Resume eligible failed/waiting stages.
+### `POST /production-runs/:runId/resume` (implemented in M7c)
+Editor. Body `{ acceptPossibleDoubleCharge?, acceptOverBudget?, acceptUnknownCost?,
+confirmedEstimateUsd? }`. Each failed or canceled job of the run is requested again for the same
+scope (text: the same stage of the item; scene jobs: those scenes, with the original count,
+resolution, seed and audio options; render: the same captions and music) through the normal
+endpoint's planning, budget checks and reuse, in **one new run** whose `resumedFromRunId` names
+the old one. Skipped: `superseded` (a later job of the same stage and scope succeeded),
+`in_progress` (one is queued or running), `outcome_unknown` (ended `SUBMIT_OUTCOME_UNKNOWN`;
+resumed only with `acceptPossibleDoubleCharge: true`). `202 { resumedFromRunId, run, skipped }`;
+`409 NOTHING_TO_RESUME` (skips in `error.current`) and every error of the underlying request
+(`402`/`409` budget, `409 ESTIMATE_CHANGED` for clips without `confirmedEstimateUsd`, ...).
+`ProductionRun` now carries `resumedFromRunId`.
 
 ## 5. Script and storyboard
 
@@ -551,6 +561,17 @@ then item, then month; a hard breach always wins over a soft one.
   `acceptOverBudget: true` (recorded as an `override` budget event).
 
 Both carry `error.current = { scope: request|item|month, mode, limitUsd, spentUsd, requestedUsd }`.
+
+### Operations and costs (implemented in M7c)
+
+| Endpoint | Caller | Notes |
+|---|---|---|
+| `GET /ops/summary` | any signed-in user | Queue depths per queue (`null` when Redis does not answer), jobs of the last 24 h by kind and status, the newest 50 finally failed jobs, provider circuits, this month's budget use per project, held reservations (`canResolve` for owners). Project data only for the caller's projects. |
+| `POST /ops/reservations/:reservationId/settle` | owner | `{ note? }`. The provider charged: the reserved amount is kept as `settledChargeUsd` and stays counted as spent. `409 RESERVATION_NOT_HELD`. |
+| `POST /ops/reservations/:reservationId/release` | owner | `{ note? }`. The provider did not charge: it stops counting. |
+| `GET /projects/:projectId/costs?month=YYYY-MM` | viewer | Month total vs the monthly limit; by content item, stage (job kind) and provider/model; `retryCost` (calls that did not produce their job's result); `costPerApprovedVideo` (all-time cost of items whose render was approved that month, per item); six-month `trend`. Every figure is `{ calls, reportedUsd, estimatedUsd, unknownCalls, heldUsd, totalUsd }`; unknown-cost calls are counted, never priced; a held reservation replaces the ledger rows it covers. |
+
+Circuits are changed only by operators: `pnpm ai:registry circuit list|open|close <providerKey>`.
 
 ### Planned
 

@@ -127,4 +127,45 @@ describe('budget reservations', () => {
     await commit(app, move(R3, 'released'));
     expect(await fails(move(R3, 'held'))).toBe('AC011');
   });
+
+  it('record a settled charge only when a held reservation is settled, then freeze it', async () => {
+    // R1 went open → settled: no charge may be added afterwards.
+    expect(
+      await fails(`UPDATE budget_reservations SET settled_charge_usd = 0.25 WHERE id = '${R1}'`),
+    ).toBe('AC011');
+    // R2 is still held (the transitions tried on it above were rolled back).
+    expect(
+      await fails(`UPDATE budget_reservations SET settled_charge_usd = 0.25 WHERE id = '${R2}'`),
+    ).toBe('AC011');
+    await commit(
+      app,
+      `UPDATE budget_reservations SET status = 'settled', resolved_at = now(), settled_charge_usd = 0.25 WHERE id = '${R2}'`,
+    );
+    expect(
+      await fails(`UPDATE budget_reservations SET settled_charge_usd = 0.3 WHERE id = '${R2}'`),
+    ).toBe('AC011');
+  });
+});
+
+describe('production runs (M7c)', () => {
+  it('link the run they resumed once, never themselves', async () => {
+    const RUN2 = '60000000-0000-7000-8000-000000000002';
+    await commit(
+      app,
+      `INSERT INTO production_runs (id, project_id, content_item_id, requested_by_id, updated_at)
+         VALUES ('${RUN2}', '${P}', '${CI}', '${U}', now())`,
+    );
+    expect(
+      await fails(
+        `UPDATE production_runs SET resumed_from_run_id = '${RUN2}' WHERE id = '${RUN2}'`,
+      ),
+    ).toBe('23514');
+    await commit(
+      app,
+      `UPDATE production_runs SET resumed_from_run_id = '${RUN}' WHERE id = '${RUN2}'`,
+    );
+    expect(
+      await fails(`UPDATE production_runs SET resumed_from_run_id = NULL WHERE id = '${RUN2}'`),
+    ).toBe('AC011');
+  });
 });

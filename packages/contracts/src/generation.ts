@@ -125,6 +125,8 @@ export const productionRunSchema = z
     cost: jobCostSchema,
     createdAt: isoDateTimeSchema,
     completedAt: isoDateTimeSchema.nullable(),
+    /** The run this one resumed (M7c), if any. */
+    resumedFromRunId: z.uuid().nullable(),
   })
   .meta({ id: 'ProductionRun' });
 export type ProductionRunDto = z.infer<typeof productionRunSchema>;

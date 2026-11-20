@@ -12,6 +12,7 @@ import { ImagesService } from './images.service.js';
 import { MediaController } from './media.controller.js';
 import { RendersController } from './renders.controller.js';
 import { RendersService } from './renders.service.js';
+import { ResumeService } from './resume.service.js';
 import { VideosService } from './videos.service.js';
 import { VoiceoversService } from './voiceovers.service.js';
 import { VoiceProfilesService } from './voice-profiles.service.js';
@@ -29,6 +30,8 @@ import { VoiceProfilesService } from './voice-profiles.service.js';
     VoiceoversService,
     VoiceProfilesService,
     RendersService,
+    ResumeService,
   ],
+  exports: [GenerationQueue],
 })
 export class GenerationModule {}

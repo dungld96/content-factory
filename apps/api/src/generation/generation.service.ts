@@ -255,6 +255,7 @@ export class GenerationService {
       cost: costSummary(costs),
       createdAt: run.createdAt.toISOString(),
       completedAt: run.completedAt?.toISOString() ?? null,
+      resumedFromRunId: run.resumedFromRunId,
     };
   }
 

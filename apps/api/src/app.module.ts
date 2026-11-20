@@ -13,6 +13,7 @@ import { GenerationModule } from './generation/generation.module.js';
 import { HealthModule } from './health/health.module.js';
 import { InfrastructureModule } from './infrastructure/infrastructure.module.js';
 import { ContentModule } from './content/content.module.js';
+import { OperationsModule } from './operations/operations.module.js';
 import { OpenApiModule } from './openapi/openapi.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
 
@@ -35,6 +36,7 @@ export class AppModule {
         AiModule,
         BudgetsModule,
         GenerationModule,
+        OperationsModule,
       ],
     };
   }

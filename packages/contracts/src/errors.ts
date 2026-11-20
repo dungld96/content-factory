@@ -109,6 +109,8 @@ export const ApiErrorCode = {
   ClipsIncomplete: 'CLIPS_INCOMPLETE',
   BudgetExceeded: 'BUDGET_EXCEEDED',
   BudgetConfirmationRequired: 'BUDGET_CONFIRMATION_REQUIRED',
+  NothingToResume: 'NOTHING_TO_RESUME',
+  ReservationNotHeld: 'RESERVATION_NOT_HELD',
   VoiceoversIncomplete: 'VOICEOVERS_INCOMPLETE',
   VoiceoverExceedsScene: 'VOICEOVER_EXCEEDS_SCENE',
   MusicInvalid: 'MUSIC_INVALID',

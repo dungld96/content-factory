@@ -151,6 +151,15 @@ success, `held` for `SUBMIT_OUTCOME_UNKNOWN` and for canceled video jobs already
 `released` otherwise. Verified by `packages/database/test/circuits.integration.test.ts` and
 `apps/worker/test/reliability.integration.test.ts`.
 
+## 0.9 Implemented schema (M7c: resume and settled charges)
+
+Migrations `m7_resume` and `m7_settled_charge`:
+
+| Column | Purpose |
+|---|---|
+| `production_runs.resumed_from_run_id` | The run a resume came from (composite FK, same project; never itself; set once, `AC011`). |
+| `budget_reservations.settled_charge_usd` | When an owner settles a **held** reservation, its amount is recorded here and counts as spent from then on (the ledger row of a lost call cannot be priced). Set only on held → settled, then frozen (`AC011`); only on settled rows (CHECK). |
+
 ## 1. Entity groups
 
 ### Identity and workspace

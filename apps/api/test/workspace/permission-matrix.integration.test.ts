@@ -378,6 +378,35 @@ const ROWS: Record<string, Row> = {
     body: () => ({ monthly: { limitUsd: '12', mode: 'hard' } }),
     expect: [401, 404, 403, 403, 200],
   },
+  // Resume, operations and costs (M7c). The fixture run succeeded: nothing to resume (409).
+  'POST /production-runs/:runId/resume': {
+    method: 'POST',
+    path: (f) => `/production-runs/${f.runId}/resume`,
+    body: () => ({}),
+    expect: [401, 404, 403, 409, 409],
+  },
+  'GET /ops/summary': {
+    method: 'GET',
+    path: () => '/ops/summary',
+    expect: [401, 200, 200, 200, 200],
+  },
+  'POST /ops/reservations/:reservationId/settle': {
+    method: 'POST',
+    path: () => `/ops/reservations/${randomUUID()}/settle`,
+    body: () => ({}),
+    expect: [401, 404, 404, 404, 404],
+  },
+  'POST /ops/reservations/:reservationId/release': {
+    method: 'POST',
+    path: () => `/ops/reservations/${randomUUID()}/release`,
+    body: () => ({}),
+    expect: [401, 404, 404, 404, 404],
+  },
+  'GET /projects/:projectId/costs': {
+    method: 'GET',
+    path: (f) => `/projects/${f.projectId}/costs`,
+    expect: [401, 404, 200, 200, 200],
+  },
   // Renders (M6c). The fixture has a finished, unreviewed render; its storyboard is pending, so a
   // new render is blocked (409); export needs an approved render (409).
   'GET /content/:contentId/render-plan': {

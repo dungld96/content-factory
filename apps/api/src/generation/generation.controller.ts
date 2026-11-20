@@ -34,6 +34,10 @@ import {
   type ScriptVersionDto,
   type StoryboardVersionDetailDto,
   type StoryboardVersionDto,
+  resumeRunRequestSchema,
+  resumeRunResponseSchema,
+  type ResumeRunRequest,
+  type ResumeRunResponseDto,
 } from '@acf/contracts';
 
 import { CurrentActor, type Actor } from '../auth/actor.js';
@@ -41,6 +45,7 @@ import { ApiError } from '../common/api-error.js';
 import { Endpoint, ValidBody, ValidParams, ValidQuery } from '../common/http/endpoint.js';
 import { ArtifactsService } from './artifacts.service.js';
 import { GenerationService } from './generation.service.js';
+import { ResumeService } from './resume.service.js';
 
 type ContentParams = z.infer<typeof contentIdParamsSchema>;
 type ScriptParams = z.infer<typeof scriptVersionIdParamsSchema>;
@@ -71,6 +76,7 @@ export class GenerationController {
   constructor(
     private readonly generation: GenerationService,
     private readonly artifacts: ArtifactsService,
+    private readonly resume: ResumeService,
   ) {}
 
   @Post('content/:contentId/brief/validate')
@@ -347,6 +353,26 @@ export class GenerationController {
     @ValidParams() params: z.infer<typeof runIdParamsSchema>,
   ): Promise<ProductionRunDto> {
     return this.generation.cancelRun(actor, params.runId);
+  }
+
+  @Post('production-runs/:runId/resume')
+  @HttpCode(202)
+  @Endpoint({
+    summary: 'Request the failed or canceled stages of a run again, in a new linked run (editor)',
+    tags: ['generation'],
+    params: runIdParamsSchema,
+    body: resumeRunRequestSchema,
+    responses: {
+      202: { description: 'The new run and what was skipped', schema: resumeRunResponseSchema },
+    },
+    errors: [400, 401, 402, 403, 404, 409, 422, 503],
+  })
+  resumeRun(
+    @CurrentActor() actor: Actor,
+    @ValidParams() params: z.infer<typeof runIdParamsSchema>,
+    @ValidBody() body: ResumeRunRequest,
+  ): Promise<ResumeRunResponseDto> {
+    return this.resume.resume(actor, params.runId, body);
   }
 
   @Get('generation-jobs/:jobId')

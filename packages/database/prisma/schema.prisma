@@ -942,23 +942,28 @@ enum ArtifactSource {
 
 /// Minimal production run (M3 Q7): one per generate request.
 model ProductionRun {
-  id            String              @id @default(uuid(7)) @db.Uuid
-  projectId     String              @map("project_id") @db.Uuid
-  contentItemId String              @map("content_item_id") @db.Uuid
-  status        GenerationJobStatus @default(queued)
-  requestedById String              @map("requested_by_id") @db.Uuid
-  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  completedAt   DateTime?           @map("completed_at") @db.Timestamptz(3)
+  id               String              @id @default(uuid(7)) @db.Uuid
+  projectId        String              @map("project_id") @db.Uuid
+  contentItemId    String              @map("content_item_id") @db.Uuid
+  status           GenerationJobStatus @default(queued)
+  requestedById    String              @map("requested_by_id") @db.Uuid
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  completedAt      DateTime?           @map("completed_at") @db.Timestamptz(3)
+  /// The run this one resumed (M7c): set once, same project.
+  resumedFromRunId String?             @map("resumed_from_run_id") @db.Uuid
 
   project     Project         @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   contentItem ContentItem     @relation(fields: [projectId, contentItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   requestedBy User            @relation(fields: [requestedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   jobs        GenerationJob[]
+  resumedFrom ProductionRun?  @relation("RunResumedFrom", fields: [projectId, resumedFromRunId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  resumedBy   ProductionRun[] @relation("RunResumedFrom")
 
   @@unique([projectId, id]) // composite-FK target
   @@index([contentItemId, createdAt])
   @@index([requestedById])
+  @@index([resumedFromRunId])
   @@map("production_runs")
 }
 
@@ -1510,16 +1515,18 @@ model BudgetEvent {
 /// The cost a job may still incur (M7 design §4): created with the job intent, then settled,
 /// released or held. One per job.
 model BudgetReservation {
-  id            String            @id @default(uuid(7)) @db.Uuid
-  projectId     String            @map("project_id") @db.Uuid
-  contentItemId String            @map("content_item_id") @db.Uuid
-  jobId         String            @map("job_id") @db.Uuid
-  amountUsd     Decimal           @map("amount_usd") @db.Decimal(14, 6)
-  kind          ReservationKind
-  status        ReservationStatus @default(open)
-  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
-  resolvedAt    DateTime?         @map("resolved_at") @db.Timestamptz(3)
+  id               String            @id @default(uuid(7)) @db.Uuid
+  projectId        String            @map("project_id") @db.Uuid
+  contentItemId    String            @map("content_item_id") @db.Uuid
+  jobId            String            @map("job_id") @db.Uuid
+  amountUsd        Decimal           @map("amount_usd") @db.Decimal(14, 6)
+  kind             ReservationKind
+  status           ReservationStatus @default(open)
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  resolvedAt       DateTime?         @map("resolved_at") @db.Timestamptz(3)
+  /// Charge an owner confirmed when settling a held reservation (the ledger could not price it).
+  settledChargeUsd Decimal?          @map("settled_charge_usd") @db.Decimal(14, 6)
 
   project     Project       @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   contentItem ContentItem   @relation(fields: [projectId, contentItemId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
