@@ -39,6 +39,32 @@ describe('classifyOpenRouterError', () => {
     });
   });
 
+  it('keeps the upstream message of a wrapped provider error (M8 pilot)', () => {
+    const raw = JSON.stringify({
+      error: {
+        code: 400,
+        message: 'The specified schema produces a constraint that has too many states',
+        status: 'INVALID_ARGUMENT',
+      },
+    });
+    const c = classifyOpenRouterError(400, {
+      code: 400,
+      message: 'Provider returned error',
+      metadata: { raw, provider_name: 'Google AI Studio' },
+    });
+    expect(c.code).toBe('INVALID_REQUEST');
+    expect(c.message).toBe(
+      'Provider returned error (Google AI Studio: The specified schema produces a constraint that has too many states)',
+    );
+    expect(
+      classifyOpenRouterError(502, {
+        code: 502,
+        message: 'Provider returned error',
+        metadata: { raw: 'upstream timeout' },
+      }).message,
+    ).toBe('Provider returned error (upstream timeout)');
+  });
+
   it('classifies by status without a body', () => {
     expect(classifyOpenRouterError(401, undefined).code).toBe('AUTHENTICATION');
     expect(classifyOpenRouterError(599, undefined).code).toBe('PROVIDER_ERROR');

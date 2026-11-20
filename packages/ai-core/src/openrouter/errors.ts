@@ -107,8 +107,29 @@ export function classifyOpenRouterError(
   const message =
     code === ProviderErrorCode.CONTENT_POLICY
       ? `content policy (${errorType ?? 'moderation'})`
-      : (error?.message ?? `OpenRouter HTTP ${String(status)}`);
+      : withUpstreamDetail(error?.message ?? `OpenRouter HTTP ${String(status)}`, metadata);
   return { code, providerErrorType: errorType, providerCode, message };
+}
+
+/**
+ * OpenRouter wraps upstream failures as "Provider returned error" and puts the upstream body in
+ * `metadata.raw` (M8 pilot: Gemini's "schema produces a constraint that has too many states" was
+ * invisible). Appends the upstream message (its `error.message` when the body is JSON) and the
+ * provider name. The caller's ProviderError sanitizes and bounds the result; content-policy errors
+ * never come here (their metadata may echo the input).
+ */
+function withUpstreamDetail(message: string, metadata: Record<string, unknown>): string {
+  const raw = str(metadata['raw']);
+  if (raw === undefined) return message;
+  let upstream = raw;
+  try {
+    const parsed = JSON.parse(raw) as { error?: { message?: unknown } } | null;
+    if (typeof parsed?.error?.message === 'string') upstream = parsed.error.message;
+  } catch {
+    // not JSON: keep the raw text
+  }
+  const provider = str(metadata['provider_name']);
+  return `${message} (${provider ? `${provider}: ` : ''}${upstream.slice(0, 300)})`;
 }
 
 /** `Retry-After` as delta-seconds or an HTTP date, in milliseconds; undefined when absent/invalid. */

@@ -311,9 +311,15 @@ export function SceneEditor({ scene }: { readonly scene: StoryboardSceneDto }) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setBusy(true);
+    const duration = Number(field(form, 'durationSeconds'));
     const r = await mutate('PATCH', `/scenes/${scene.id}`, {
       imagePrompt: field(form, 'imagePrompt'),
       voiceOverSegment: field(form, 'voiceOverSegment'),
+      // Only when changed: clip models offer fixed lengths (e.g. 4, 6, 8 s), so scenes are
+      // retimed to match them (M8 pilot finding).
+      ...(Number.isFinite(duration) && duration !== scene.durationSeconds
+        ? { durationSeconds: duration }
+        : {}),
     });
     setBusy(false);
     if (!r.ok) {
@@ -354,6 +360,18 @@ export function SceneEditor({ scene }: { readonly scene: StoryboardSceneDto }) {
           <label className="field">
             Voice-over segment
             <textarea name="voiceOverSegment" defaultValue={scene.voiceOverSegment} rows={3} />
+          </label>
+          <label className="field">
+            Duration (seconds)
+            <input
+              name="durationSeconds"
+              type="number"
+              min={1}
+              max={120}
+              step={0.5}
+              defaultValue={scene.durationSeconds}
+              required
+            />
           </label>
           {error && (
             <p className="form-error" role="alert">
