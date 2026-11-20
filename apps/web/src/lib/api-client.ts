@@ -10,6 +10,15 @@ export interface MutationResult<T> {
   readonly message: string | null;
   /** The API's error code (`BUDGET_EXCEEDED`, …), when the request failed. */
   readonly code?: string | null;
+  /** Per-field problems of a 400/422 (e.g. which storyboard rule is broken), when the API sent them. */
+  readonly details?: readonly { readonly path: string; readonly message: string }[];
+}
+
+/** The error to show for a failed request: the message plus each named problem (M8.5 Q6). */
+export function errorText(r: MutationResult<unknown>): string {
+  const base = r.message ?? `Request failed (HTTP ${String(r.status)})`;
+  const details = (r.details ?? []).map((d) => d.message).filter((m) => m.length > 0);
+  return details.length > 0 ? `${base} ${details.join('; ')}.` : base;
 }
 
 /** Asks before spending above a soft budget (M7 §3), with the browser's confirmation dialog. */
@@ -61,13 +70,17 @@ async function send<T>(
       body: JSON.stringify(body ?? {}),
     });
     const json = (await res.json().catch(() => null)) as unknown;
-    const error = (json as { error?: { message?: unknown; code?: unknown } } | null)?.error;
+    const error = (
+      json as { error?: { message?: unknown; code?: unknown; details?: unknown } } | null
+    )?.error;
+    const details = detailsOf(error?.details);
     return {
       ok: res.ok,
       status: res.status,
       data: res.ok ? (json as T) : null,
       message: !res.ok && typeof error?.message === 'string' ? error.message : null,
       code: !res.ok && typeof error?.code === 'string' ? error.code : null,
+      ...(details.length > 0 ? { details } : {}),
     };
   } catch {
     return { ok: false, status: 0, data: null, message: 'The server could not be reached.' };
@@ -122,4 +135,16 @@ export async function uploadImage<T>(
   } catch {
     return { ok: false, status: 0, data: null, message: 'The server could not be reached.' };
   }
+}
+
+/** `error.details` of an API error envelope: `{ path, message }` items only. */
+function detailsOf(value: unknown): { path: string; message: string }[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((d: unknown) => {
+    if (typeof d !== 'object' || d === null) return [];
+    const { path, message } = d as { path?: unknown; message?: unknown };
+    return typeof message === 'string'
+      ? [{ path: typeof path === 'string' ? path : '', message }]
+      : [];
+  });
 }

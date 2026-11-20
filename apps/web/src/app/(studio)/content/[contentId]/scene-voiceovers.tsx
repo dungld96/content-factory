@@ -310,6 +310,14 @@ function AudioCandidate(props: {
         <ApprovalPill status={asset.approvalStatus} />
         {props.selected && <Pill tone="green">✓ Voice-over</Pill>}
       </span>
+      {tooLong && asset.durationMs !== null && (
+        <p className="form-error small-text" role="alert">
+          {formatSeconds(asset.durationMs)} of narration for a {String(props.sceneSeconds)} s scene:{' '}
+          {formatSeconds(asset.durationMs - props.sceneSeconds * 1000)} too long. The render will
+          refuse it: shorten this scene&rsquo;s text (Storyboard → Edit scene) or use a faster voice
+          profile.
+        </p>
+      )}
       {props.canEdit && (
         <span className="audio-actions">
           {asset.approvalStatus !== 'approved' && (

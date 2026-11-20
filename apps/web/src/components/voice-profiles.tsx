@@ -13,6 +13,19 @@ export interface TtsModelOption {
   readonly modelKey: string;
   readonly label: string;
   readonly enabled: boolean;
+  /** The provider's voice ids (empty: the catalog lists none; any id is sent as typed). */
+  readonly voices: readonly string[];
+}
+
+/**
+ * Voices of `model` that match the typed language (`vi` matches `vi-VN-…`), all voices when none
+ * match. Provider ids such as `vi-VN-Harper:MAI-Voice-2.1` start with the locale.
+ */
+export function voicesFor(model: TtsModelOption | undefined, language: string): string[] {
+  if (!model) return [];
+  const lang = language.trim().toLowerCase();
+  const matching = lang ? model.voices.filter((v) => v.toLowerCase().startsWith(lang)) : [];
+  return [...(matching.length > 0 ? matching : model.voices)];
 }
 
 /**
@@ -28,6 +41,14 @@ export function VoiceProfilesCard(props: {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Only enabled models can synthesize (M8.5 Q5); the first one is preselected.
+  const usable = props.models.filter((m) => m.enabled);
+  const [modelKey, setModelKey] = useState(usable[0]?.modelKey ?? '');
+  const [language, setLanguage] = useState('vi');
+  const voiceOptions = voicesFor(
+    usable.find((m) => m.modelKey === modelKey),
+    language,
+  );
 
   async function call(method: 'POST' | 'PATCH', path: string, body?: unknown): Promise<boolean> {
     setBusy(true);
@@ -103,9 +124,9 @@ export function VoiceProfilesCard(props: {
         </ul>
       )}
       {props.canEdit &&
-        (props.models.length === 0 ? (
+        (usable.length === 0 ? (
           <p className="muted small-text">
-            No text-to-speech model is registered. An operator imports one first.
+            No text-to-speech model is enabled. An operator imports and enables one first.
           </p>
         ) : (
           <form
@@ -120,18 +141,20 @@ export function VoiceProfilesCard(props: {
             </label>
             <label className="field">
               Model
-              <select name="modelKey" required>
-                {props.models.map((m) => (
+              <select
+                name="modelKey"
+                required
+                value={modelKey}
+                onChange={(e) => {
+                  setModelKey(e.target.value);
+                }}
+              >
+                {usable.map((m) => (
                   <option key={m.modelKey} value={m.modelKey}>
                     {m.label}
-                    {m.enabled ? '' : ' (disabled)'}
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="field">
-              Voice <small>(the provider’s voice id)</small>
-              <input name="voice" required maxLength={200} />
             </label>
             <label className="field">
               Language <small>(e.g. vi or vi-VN)</small>
@@ -140,8 +163,33 @@ export function VoiceProfilesCard(props: {
                 required
                 maxLength={35}
                 pattern="[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*"
-                defaultValue="vi"
+                value={language}
+                onChange={(e) => {
+                  setLanguage(e.target.value);
+                }}
               />
+            </label>
+            <label className="field">
+              Voice{' '}
+              <small>
+                {voiceOptions.length > 0
+                  ? `(${String(voiceOptions.length)} voices for this language; type to search)`
+                  : '(the provider’s voice id)'}
+              </small>
+              <input
+                name="voice"
+                required
+                maxLength={200}
+                list={voiceOptions.length > 0 ? 'voice-options' : undefined}
+                autoComplete="off"
+              />
+              {voiceOptions.length > 0 && (
+                <datalist id="voice-options">
+                  {voiceOptions.map((v) => (
+                    <option key={v} value={v} />
+                  ))}
+                </datalist>
+              )}
             </label>
             <label className="field">
               Speed <small>(optional, 0.5–2)</small>

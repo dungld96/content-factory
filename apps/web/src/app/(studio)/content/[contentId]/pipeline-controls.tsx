@@ -12,10 +12,11 @@ import type {
 } from '@acf/contracts';
 
 import { Modal } from '@/components/modal';
+import { ModelSelect, type ModelOption } from '@/components/model-select';
 import { ResumeRunButton } from '@/components/resume-run';
 import { Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
-import { fetchJson, mutate } from '@/lib/api-client';
+import { errorText, fetchJson, mutate } from '@/lib/api-client';
 
 const TERMINAL = new Set(['succeeded', 'failed', 'canceled']);
 
@@ -90,8 +91,11 @@ export function GenerateButton(props: {
   readonly label: string;
   readonly again?: boolean;
   readonly primary?: boolean;
+  /** Enabled text models (M8.5 Q3); empty → the task route only. */
+  readonly models?: readonly ModelOption[];
 }) {
   const router = useRouter();
+  const [modelKey, setModelKey] = useState('');
   const [job, setJob] = useState<GenerationJobDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -113,14 +117,13 @@ export function GenerateButton(props: {
   async function start() {
     setBusy(true);
     setError(null);
-    const r = await mutate<GenerateResponseDto>(
-      'POST',
-      props.path,
-      props.again ? { regenerate: true } : {},
-    );
+    const r = await mutate<GenerateResponseDto>('POST', props.path, {
+      ...(props.again ? { regenerate: true } : {}),
+      ...(modelKey ? { modelKey } : {}),
+    });
     setBusy(false);
     if (!r.ok || !r.data) {
-      setError(r.message ?? `Request failed (HTTP ${String(r.status)})`);
+      setError(errorText(r));
       return;
     }
     setJob(r.data.job);
@@ -130,6 +133,12 @@ export function GenerateButton(props: {
   const running = job !== null && !TERMINAL.has(job.status);
   return (
     <>
+      <ModelSelect
+        models={props.models ?? []}
+        value={modelKey}
+        disabled={busy || running}
+        onChange={setModelKey}
+      />
       <button
         type="button"
         className={props.primary ? 'btn primary' : 'btn ghost'}
@@ -167,7 +176,7 @@ export function ReviewButtons(props: {
     const r = await mutate('POST', `/${props.kind}/${props.id}/${action}`, {});
     setBusy(false);
     if (!r.ok) {
-      setError(r.message ?? `Request failed (HTTP ${String(r.status)})`);
+      setError(errorText(r));
       return;
     }
     toast(
@@ -237,7 +246,7 @@ export function ScriptEditor({ script }: { readonly script: ScriptVersionDto }) 
     });
     setBusy(false);
     if (!r.ok) {
-      setError(r.message ?? `Request failed (HTTP ${String(r.status)})`);
+      setError(errorText(r));
       return;
     }
     close();
@@ -323,7 +332,7 @@ export function SceneEditor({ scene }: { readonly scene: StoryboardSceneDto }) {
     });
     setBusy(false);
     if (!r.ok) {
-      setError(r.message ?? `Request failed (HTTP ${String(r.status)})`);
+      setError(errorText(r));
       return;
     }
     close();

@@ -2330,3 +2330,21 @@ input.filter {
 .stack > * {
   min-width: 0;
 }
+
+/* --- Earlier versions (M8.5 Q4) ----------------------------------------------------------- */
+.earlier-versions {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.earlier-versions summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.earlier-versions li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-soft);
+}

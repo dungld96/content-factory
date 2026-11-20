@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { activePrices, type LlmProvider } from '@acf/ai-core';
+import { activePrices, ttsConstraintsSchema, type LlmProvider } from '@acf/ai-core';
 import { toPriceComponents, usdFromDecimal } from '@acf/ai-runtime';
 import type {
   AiModelDetailDto,
@@ -129,6 +129,10 @@ export class RegistryService {
       lastTestedAt: row.lastTestedAt?.toISOString() ?? null,
       expiresAt: row.expiresAt?.toISOString() ?? null,
       activePrices: row.prices.filter((p) => activeIds.has(p.id)).map(toPriceDto),
+      voices: (() => {
+        const tts = ttsConstraintsSchema.safeParse(row.mediaConstraints);
+        return tts.success && tts.data.voices.length > 0 ? tts.data.voices : null;
+      })(),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

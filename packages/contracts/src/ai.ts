@@ -113,6 +113,8 @@ export const aiModelSchema = z
     expiresAt: isoDateTimeSchema.nullable(),
     /** Prices in force now. A metric without a row has unknown cost (never zero). */
     activePrices: z.array(aiPriceSchema),
+    /** Provider voice ids of a text-to-speech model (M8.5 Q5); null when not a TTS model or unlisted. */
+    voices: z.array(z.string()).nullable(),
     createdAt: isoDateTimeSchema,
     updatedAt: isoDateTimeSchema,
   })

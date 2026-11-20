@@ -43,6 +43,7 @@ export default async function SettingsPage(props: {
           modelKey: m.modelKey,
           label: `${m.displayName} (${m.modelKey})`,
           enabled: m.status === 'enabled',
+          voices: m.voices ?? [],
         }))
       : [];
 

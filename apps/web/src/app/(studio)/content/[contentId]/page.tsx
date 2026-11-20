@@ -192,6 +192,12 @@ const jobsOf = (scenes: readonly SceneJobs[] | undefined): GenerationJobDto[] =>
     return job ? [job] : [];
   });
 
+const STATUS_TEXT: Readonly<Record<'pending_review' | 'approved' | 'rejected', string>> = {
+  pending_review: 'Pending review',
+  approved: 'Approved',
+  rejected: 'Rejected',
+};
+
 export default async function ContentPage({
   params,
 }: {
@@ -223,6 +229,7 @@ export default async function ContentPage({
     videoModels,
     renderPlan,
     renderList,
+    textModels,
   ] = await Promise.all([
     apiGet<ProjectDto>(`/projects/${content.projectId}`),
     apiGet<Page<ScriptVersionDto>>(`/content/${contentId}/scripts?limit=20`),
@@ -242,6 +249,7 @@ export default async function ContentPage({
     apiGet<Page<AiModelDto>>('/ai/models?capability=video_generation&status=enabled&limit=100'),
     apiGet<RenderPlanDto>(`/content/${contentId}/render-plan`),
     apiGet<RenderListDto>(`/content/${contentId}/renders`),
+    apiGet<Page<AiModelDto>>('/ai/models?capability=llm&status=enabled&limit=100'),
   ]);
   const plan = renderPlan.kind === 'ok' ? renderPlan.data : null;
   const renders = renderList.kind === 'ok' ? renderList.data.items : [];
@@ -490,11 +498,73 @@ export default async function ContentPage({
             label={latestScript ? 'Regenerate script' : 'Generate script'}
             again={latestScript !== undefined}
             primary={!latestScript}
+            models={optionsOf(textModels)}
           />
         </div>
       )}
+
+      {scriptList.length > 1 && (
+        <details className="earlier-versions">
+          <summary>Earlier versions ({scriptList.length - 1})</summary>
+          <ul className="plain-list" aria-label="Earlier script versions">
+            {scriptList.slice(1).map((v) => (
+              <li key={v.id} aria-label={`Script version ${String(v.version)}`}>
+                <p className="small-text">
+                  <b>Version {v.version}</b> · {v.source === 'edited' ? 'Edited' : 'Generated'} ·{' '}
+                  {v.isApproved ? 'Approved, in use' : STATUS_TEXT[v.status]} ·{' '}
+                  {v.content.voiceOver.trim().split(/\s+/).length} words
+                </p>
+                <p className="small-text">
+                  <b>Hook:</b> “{v.content.hook}”
+                </p>
+                <p className="small-text muted">“{v.content.voiceOver}”</p>
+                {canEdit && v.status === 'pending_review' && (
+                  <div className="review-actions">
+                    <ReviewButtons
+                      kind="scripts"
+                      id={v.id}
+                      label={`script v${String(v.version)}`}
+                    />
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </article>
   );
+
+  const earlierStoryboards =
+    storyboardList.length > 1 ? (
+      <details className="earlier-versions">
+        <summary>Earlier storyboard versions ({storyboardList.length - 1})</summary>
+        <ul className="plain-list" aria-label="Earlier storyboard versions">
+          {storyboardList.slice(1).map((v) => (
+            <li key={v.id} aria-label={`Storyboard version ${String(v.version)}`}>
+              <p className="small-text">
+                <b>Version {v.version}</b> · {v.source === 'edited' ? 'Edited' : 'Generated'} ·{' '}
+                {v.totalDurationSeconds} s ·{' '}
+                {v.isApproved
+                  ? 'Approved, in use'
+                  : v.stale
+                    ? 'Stale (older script)'
+                    : STATUS_TEXT[v.status]}
+              </p>
+              {canEdit && v.status === 'pending_review' && !v.stale && (
+                <div className="review-actions">
+                  <ReviewButtons
+                    kind="storyboards"
+                    id={v.id}
+                    label={`storyboard v${String(v.version)}`}
+                  />
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      </details>
+    ) : null;
 
   const generateStoryboard =
     canEdit && approvedScript ? (
@@ -503,6 +573,7 @@ export default async function ContentPage({
         label={storyboardList.length > 0 ? 'Regenerate storyboard' : 'Generate storyboard'}
         again={storyboardList.length > 0}
         primary={storyboardList.length === 0}
+        models={optionsOf(textModels)}
       />
     ) : null;
 
@@ -584,6 +655,7 @@ export default async function ContentPage({
           {generateStoryboard}
         </div>
       )}
+      {earlierStoryboards}
     </article>
   ) : (
     <section className="card work-card">

@@ -537,7 +537,7 @@ returned; money is a decimal string in USD (`unitPriceUsd`), never a JSON number
 | Endpoint | Response |
 |---|---|
 | `GET /ai/providers` | `{ data: AiProvider[] }`: `key`, `name`, `kind` (gateway/direct/mock), `status`, `configured` (credentials present in this deployment), terms and data-policy links |
-| `GET /ai/models` | Paginated `AiModel[]`. Filters `capability`, `status`, `qualityTier`, `providerKey`. Each model lists its capabilities, supported parameters, modalities, limits, quality tier, status, free-variant flag and `activePrices` (one per metric and prompt-size tier; a metric with no price has unknown cost, never zero) |
+| `GET /ai/models` | Paginated `AiModel[]`. Filters `capability`, `status`, `qualityTier`, `providerKey`. Each model lists its capabilities, supported parameters, modalities, limits, quality tier, status, free-variant flag and `activePrices` (one per metric and prompt-size tier; a metric with no price has unknown cost, never zero), and `voices` (TTS models: the provider's voice ids, used by the voice-profile picker; `null` otherwise, M8.5) |
 | `GET /ai/models/:modelId` | `AiModel` plus `priceHistory` (append-only price rows with source, URL, effective and captured times) |
 
 No endpoint calls a model in M2 (decision P7): the first caller is the M3 script job, through
