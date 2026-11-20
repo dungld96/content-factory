@@ -1,7 +1,7 @@
 # M8 Design Review Package — Pilot and Hardening
 
 - Status: **Revision 1, approved by the owner (2026-11-20)**: P1–P10 as proposed (default pilot
-  brief, USD 3 cap). Implemented in slices M8a–M8d (§10).
+  brief, USD 3 cap). Implemented in slices M8a–M8d (§10); deviations in §11. Awaiting review.
 - Date: 2026-11-20
 - Baseline: M7 approved (`f8ce93e`); ADR-0014 (single-VM staging), ADR-0017 (async provider
   jobs), ADR-0018 (rendering), ADR-0019 (budgets, circuits)
@@ -180,3 +180,12 @@ the pilot) and fix blockers; you run it when convenient and send results, which 
 | M8b   | Hardening drills suite, dependency audit, production config review; fixes                                                |
 | M8c   | Pilot: text mini-benchmark, routing, pilot run through the UI with real providers, pilot report (needs your go on P2–P5) |
 | M8d   | UAT script (run by me first), DEPLOYMENT.md completion, KNOWN_LIMITATIONS.md, status                                     |
+
+## 11. Deviations and clarifications found during implementation
+
+| Slice | Item                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| M8a   | The database half of a restore cannot be drilled through `acf.sh restore` here (the deployment image cannot be built in this environment): `scripts/backup-drill.sh` runs the same commands on the local stack; `acf.sh restore` on a VM is UAT scenario 14. Objects are exported through a new `backup` tool service (caller's uid) rather than the api container.                                                                                          |
+| M8b   | Drills that already existed (lost jobs, video restarts) were not duplicated; three were added (circuit through real BullMQ, Redis wipe, render worker death). The circuit policy became overridable per breaker so drills run in seconds. One dependency override (`effect`) instead of waiting for Prisma.                                                                                                                                                  |
+| M8c   | The text mini-benchmark ran through the API with a `modelKey` override (the script UI has no model choice). Storyboards are routed to Claude Haiku 5.5, not the mini-benchmark's winner, because Gemini rejects the storyboard schema (pilot F1). Two fixes made during the pilot (upstream error detail; scene duration in the editor); other findings are follow-ups. The session's worker restarted twice during the pilot; state survived in PostgreSQL. |
+| M8d   | UAT run 1 is by Claude (pilot + automated tests); run 2 is the owner's.                                                                                                                                                                                                                                                                                                                                                                                      |

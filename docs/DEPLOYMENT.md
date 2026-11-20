@@ -124,8 +124,14 @@ Create the asset bucket in SeaweedFS (M4a; idempotent):
 ./acf.sh run --rm storage-setup
 ```
 
-Optional demo workspace (Demo Studio, three demo users; passwords are printed once — the web UI
-cannot yet create projects or content items, so this is the easiest way to try it):
+Create your own account (the password is read from the terminal). Projects, content and voice
+profiles are then created in the web UI:
+
+```bash
+./acf.sh run --rm -it -w /app/apps/api migrate node dist/cli/user-cli.js create --email you@example.com --name "Your Name"
+```
+
+Optional demo workspace instead (Demo Studio, three demo users; passwords are printed once):
 
 ```bash
 ./acf.sh run --rm -w /app/apps/api -e NODE_ENV=development migrate node dist/cli/seed.js
@@ -159,8 +165,17 @@ set `OPENROUTER_API_KEY=` in `infra/deploy/.env.production` (on the VM only), th
 ./acf.sh up -d api worker
 ```
 
+Routes measured in the M8 pilot (`docs/design/m8/pilot-report.md`): scripts Gemini 3.5 Flash
+Lite, storyboards **Claude Haiku 5.5** (Gemini rejects the storyboard's JSON schema), keyframes
+Seedream 5.0 Flash, clips Veo 3.1 Lite; narration is chosen per voice profile (MAI-Voice 2.1 has
+native Vietnamese voices, e.g. `vi-VN-Harper:MAI-Voice-2.1`).
+
 ```bash
 ./acf.sh exec api node dist/cli/ai-registry-cli.js model set-status google/gemini-3.5-flash-lite enabled
+```
+
+```bash
+./acf.sh exec api node dist/cli/ai-registry-cli.js model set-status anthropic/claude-haiku-5.5 enabled
 ```
 
 ```bash
@@ -168,8 +183,14 @@ set `OPENROUTER_API_KEY=` in `infra/deploy/.env.production` (on the VM only), th
 ```
 
 ```bash
-./acf.sh exec api node dist/cli/ai-registry-cli.js route set storyboard_generation google/gemini-3.5-flash-lite
+./acf.sh exec api node dist/cli/ai-registry-cli.js route set storyboard_generation anthropic/claude-haiku-5.5
 ```
+
+Image, video and TTS models are imported disabled (`model import-openrouter-images|videos|tts`,
+see LOCAL_DEVELOPMENT.md); enable and route the ones above the same way
+(`route set image_generation bytedance-seed/seedream-5-0-flash`,
+`route set video_generation google/veo-3.1-lite`). A 30 s video costs about USD 1.05 with these
+routes; the default project budget (USD 10 per month) allows about nine.
 
 If the provider was seeded as `disabled` (no key at seed time), enable it too:
 `./acf.sh exec api node dist/cli/ai-registry-cli.js provider set-status openrouter enabled` (see
@@ -184,11 +205,33 @@ Users (passwords are read from the terminal, never from arguments):
 ./acf.sh exec api node dist/cli/user-cli.js set-password --email editor@demo.acf.test
 ```
 
-Update to a newer commit:
+Update to a newer commit (take a backup first; migrations run in `migrate` and are forward-only):
+
+```bash
+./acf.sh backup
+```
 
 ```bash
 git pull && ./acf.sh build migrate && ./acf.sh run --rm migrate && ./acf.sh up -d
 ```
+
+Upgrade notes by milestone (all migrations are applied by `migrate`; nothing else is needed unless
+listed): M4a needs storage keys (below); M6 needs `media:selftest` after the first build; M7 adds
+budgets for every existing project (USD 10/3/2, change them on the Costs page) and optional
+`DEFAULT_*_BUDGET_USD` variables; M8 adds the `backup` tool service and security headers in Caddy.
+
+Rollback: there are no down-migrations. To return to an earlier version, restore the backup taken
+before the update onto fresh volumes with the earlier commit checked out (`git checkout <commit>`,
+`./acf.sh build migrate`, then the restore steps in "Backup and restore").
+
+After every deploy (a few minutes, no cost):
+
+1. `./acf.sh ps`: every service `running`/`healthy`.
+2. `https://<site address>/status`: database and Redis `ok`.
+3. Media self-test: `./acf.sh run --rm -w /app worker node packages/media/dist/selftest-cli.js`.
+4. Sign in, open **Operations**: queues reachable, no failed jobs you do not expect, circuits closed.
+5. Response headers include `Strict-Transport-Security` and `X-Frame-Options`
+   (`curl -sI https://<site address>/login`).
 
 Upgrading a deployment created before M4a: `.env.production` has no storage keys yet. Append them
 once (then run `./acf.sh up -d seaweedfs` and `./acf.sh run --rm storage-setup` before the full
