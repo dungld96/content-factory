@@ -1,18 +1,165 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState, type SyntheticEvent } from 'react';
 
 import type { AssetDto, AssetUsageDto, GenerationJobDto, LineageResponse } from '@acf/contracts';
 
 import { LocalTime } from '@/components/local-time';
 import { ApprovalPill, Pill } from '@/components/status-pill';
-import { fetchJson } from '@/lib/api-client';
+import { toast } from '@/components/toast';
+import { errorText, fetchJson, mutate } from '@/lib/api-client';
 import { assetContentUrl } from '@/lib/asset-url';
 import { formatBytes, formatSeconds } from '@/lib/format';
 import { addUsd, formatUsd } from '@/lib/money';
 
-export type AssetRow = AssetDto & { readonly projectName: string };
+export type AssetRow = AssetDto & {
+  readonly projectName: string;
+  /** The viewer may review, relabel and archive (editor or owner of an active project). */
+  readonly canEdit: boolean;
+};
+
+/** Asset types that are reviewed (ImagesService.review). */
+const REVIEWABLE = new Set<AssetDto['assetType']>(['reference', 'image', 'video', 'audio']);
+
+const IN_USE_CODES = new Set(['KEYFRAME_INVALID', 'SCENE_SELECTION_INVALID']);
+
+/** Review, label and archive from the Library (P2a A1); same endpoints as the scene tabs. */
+function AssetActions({ asset }: { readonly asset: AssetRow }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+
+  async function act(
+    method: 'POST' | 'PATCH',
+    path: string,
+    body: unknown,
+    done: string,
+  ): Promise<void> {
+    setBusy(true);
+    setError(null);
+    const r = await mutate(method, path, body);
+    setBusy(false);
+    if (!r.ok) {
+      setError(
+        r.code && IN_USE_CODES.has(r.code)
+          ? 'In use in a scene: choose another asset for that scene first.'
+          : errorText(r),
+      );
+      return;
+    }
+    toast(done);
+    setEditing(false);
+    setConfirmArchive(false);
+    router.refresh();
+  }
+
+  function saveLabel(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
+    event.preventDefault();
+    const value = new FormData(event.currentTarget).get('label');
+    const label = typeof value === 'string' ? value : '';
+    void act('PATCH', `/assets/${asset.id}`, { label }, 'Label saved.');
+  }
+
+  if (asset.archivedAt !== null) {
+    return <p className="muted small-text">Archived: read-only.</p>;
+  }
+  return (
+    <div className="image-toolbar" aria-label="Asset actions">
+      {REVIEWABLE.has(asset.assetType) && (
+        <>
+          <button
+            type="button"
+            className="btn primary"
+            disabled={busy || asset.approvalStatus === 'approved'}
+            onClick={() => void act('POST', `/assets/${asset.id}/approve`, {}, 'Asset approved.')}
+          >
+            <span aria-hidden="true">✓</span> Approve
+          </button>
+          <button
+            type="button"
+            className="btn danger"
+            disabled={busy || asset.approvalStatus === 'rejected'}
+            onClick={() => void act('POST', `/assets/${asset.id}/reject`, {}, 'Asset rejected.')}
+          >
+            <span aria-hidden="true">↺</span> Reject
+          </button>
+        </>
+      )}
+      {editing ? (
+        <form className="image-toolbar" onSubmit={saveLabel}>
+          <label className="field">
+            Label
+            <input name="label" defaultValue={asset.label ?? ''} maxLength={200} />
+          </label>
+          <button type="submit" className="btn primary" disabled={busy}>
+            Save
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              setEditing(false);
+            }}
+          >
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <button
+          type="button"
+          className="btn"
+          disabled={busy}
+          onClick={() => {
+            setEditing(true);
+          }}
+        >
+          Edit label
+        </button>
+      )}
+      {confirmArchive ? (
+        <>
+          <button
+            type="button"
+            className="btn danger"
+            disabled={busy}
+            onClick={() => void act('POST', `/assets/${asset.id}/archive`, {}, 'Asset archived.')}
+          >
+            Confirm archive
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              setConfirmArchive(false);
+            }}
+          >
+            Keep
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          className="btn ghost"
+          disabled={busy}
+          onClick={() => {
+            setConfirmArchive(true);
+          }}
+        >
+          Archive
+        </button>
+      )}
+      {error && (
+        <span className="form-error" role="alert">
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
 
 const SOURCE_LABEL: Readonly<Record<AssetDto['sourceType'], string>> = {
   upload: 'Uploaded',
@@ -103,6 +250,7 @@ function LineagePanel({ asset }: { readonly asset: AssetRow }) {
         <ApprovalPill status={asset.approvalStatus} />
       </div>
       <MediaPreview asset={asset} />
+      {asset.canEdit && <AssetActions key={asset.id} asset={asset} />}
       <div className="brief-box">
         <span className="box-label">Selected asset · {nameOf(asset)}</span>
         <dl className="lineage">

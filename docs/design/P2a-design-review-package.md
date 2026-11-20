@@ -1,6 +1,6 @@
 # P2a Design Review Package — Asset Library Integrity
 
-- Status: **Revision 1, proposed** (awaiting owner review)
+- Status: **Revision 1, approved by the owner (2026-11-20)**: A1–A3 as proposed.
 - Date: 2026-11-20
 - Baseline: MVP complete (M0–M8.5); P3 implemented. Input: `docs/post-mvp/POST_MVP_AUDIT.md`
   §A2, §B2, §C2 (steps 1–3 of P2).

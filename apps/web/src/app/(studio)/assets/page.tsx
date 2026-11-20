@@ -38,6 +38,7 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
   const projectId = param(query, 'project');
   const type = TYPES.find((t) => t.value === param(query, 'type'))?.value;
   const q = param(query, 'q')?.toLocaleLowerCase();
+  const review = param(query, 'review') === 'pending';
   const scope = projects.data.items.filter((p) => !projectId || p.id === projectId);
   const lists = await Promise.all(
     scope.map((p) =>
@@ -48,7 +49,11 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
   const assets: AssetRow[] = lists
     .flatMap((list, i) =>
       list.kind === 'ok'
-        ? list.data.items.map((a) => ({ ...a, projectName: scope[i]?.name ?? '' }))
+        ? list.data.items.map((a) => ({
+            ...a,
+            projectName: scope[i]?.name ?? '',
+            canEdit: scope[i]?.role !== 'viewer' && scope[i]?.archivedAt === null,
+          }))
         : [],
     )
     .filter(
@@ -57,6 +62,7 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
         (a.originalFilename ?? '').toLocaleLowerCase().includes(q) ||
         (a.label ?? '').toLocaleLowerCase().includes(q),
     )
+    .filter((a) => !review || (a.approvalStatus === 'pending' && a.archivedAt === null))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const writable = writableProjects(projects.data.items);
 
@@ -80,6 +86,12 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
         search={{ name: 'q', placeholder: 'Search assets…' }}
         selects={[
           { name: 'type', label: 'Asset type', allLabel: 'All asset types', options: TYPES },
+          {
+            name: 'review',
+            label: 'Review',
+            allLabel: 'Any review state',
+            options: [{ value: 'pending', label: 'Needs review' }],
+          },
           {
             name: 'project',
             label: 'Project',
