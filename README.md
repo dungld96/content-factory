@@ -83,7 +83,7 @@ pnpm test:integration
 | M4.5 — UI/UX refinement | Done and approved (`docs/design/M4.5-ui-refinement.md`) |
 | M5 — Video and audio generation | Done and approved (2026-11-19); benchmark run, real models routed |
 | M6 — Rendering and export | Slices M6a–M6d delivered (`docs/design/M6-design-review-package.md` §16, ADR-0018); done and approved (2026-11-20) |
-| M7 — Reliability and cost controls | Design package proposed (`docs/design/M7-design-review-package.md`), waiting for review |
+| M7 — Reliability and cost controls | Design approved (`docs/design/M7-design-review-package.md`); slices M7a–M7d in progress |
 | M8 | Not started |
 
 ## Decisions fixed for MVP
