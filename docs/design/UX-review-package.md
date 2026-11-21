@@ -8,6 +8,8 @@
   phone layouts were measured for overflow and tap-target size; colour tokens were checked for
   WCAG 2.2 contrast. Owner input: the post-MVP review (Issues #01–#04) and the decisions of
   2026-11-21 (P3d → P3e → P4d → P2c → P1d).
+- Visual prototype (private canvas, three artboards: workspace scenes board, phone, render):
+  https://claude.ai/artifact/THPgAYv6MrEo6PJLZD3LBs
 - Goal (owner): _better, modern, professional, smart and easy to use_. This package turns that into
   checkable changes and slices that fit the existing design system (`globals.css`, M4.5) instead
   of replacing it.
