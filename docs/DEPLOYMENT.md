@@ -153,8 +153,10 @@ Open `https://<site address>/login`. Caddy obtains the certificate on the first 
 seconds). Logs: `./acf.sh logs -f api worker web caddy`.
 
 Check that the image's FFmpeg (Debian 5.1, not the 6.1 used in development) renders correctly:
-it renders a short synthetic video with captions, music and loudness normalisation,
-runs the automated QC and prints the result (exit code 0 = passed; no network, no cost):
+it renders two short synthetic videos (the standard mix with captions, music and loudness
+normalisation, and one with audio layers: voice offset, clip audio, music fades and mute, a sound
+effect), runs the automated QC on both and prints the result (exit code 0 = both passed; no
+network, no cost):
 
 ```bash
 ./acf.sh run --rm -w /app worker node packages/media/dist/selftest-cli.js

@@ -116,7 +116,7 @@ export async function uploadImage<T>(
     label?: string;
     contentItemId?: string;
     /** Audio only (M5 §7.3): voice-over narration or licensed music. */
-    purpose?: 'voiceover' | 'music';
+    purpose?: 'voiceover' | 'music' | 'sfx';
     licenseNote?: string;
   },
 ): Promise<MutationResult<T>> {

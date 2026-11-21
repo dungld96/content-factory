@@ -2,7 +2,8 @@
 
 - Status: **Revision 1, approved by the owner (2026-11-21)** by standing instruction ("follow your
   recommendations until all packages are complete"): S1–S7 as proposed; clip audio as a render
-  layer (owner decision, 2026-11-20).
+  layer (owner decision, 2026-11-20). Slices P4a–P4c implemented (§9); API integration and E2E
+  verification pending.
 - Date: 2026-11-21
 - Baseline: P2a/P2b implemented (Library approval, immutable `purpose`, picker). Input:
   `docs/post-mvp/POST_MVP_AUDIT.md` §A4, §B4, §C4.
@@ -108,3 +109,20 @@ The music track itself stays in `music: { assetId, volumeDb }` (unchanged).
 - **Loudness with many layers**: normalisation runs on the final mix, so the target holds; QC
   checks it.
 - **Captions with voice off**: none, by design (captions come from the voice-over text).
+
+## 9. Deviations and results found during implementation
+
+| Item                           | Planned                     | Done                                                                                                | Why                                                                                              |
+| ------------------------------ | --------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `clipHasAudio` in the manifest | Always                      | Only in `render.v2` manifests                                                                       | Adding it to every manifest would change the execution key of plain renders and stop their reuse |
+| Voice offset                   | Manifest scene field        | `manifest.audio.scenes[].voiceOffsetMs`                                                             | Keeps M6 scene records unchanged                                                                 |
+| Render panel blockers          | From the plan               | The panel hides voice-over blockers when the voice layer is off; the API re-checks with the request | The plan endpoint has no request                                                                 |
+| Render job template ID         | `RENDERER_VERSION` constant | The renderer actually used (`render.v1` / `render.v2`)                                              | Traceability                                                                                     |
+| Self-test                      | One render                  | Two renders: the M6 mix and a layered `render.v2` mix                                               | Checks the new filters on the deploy image's FFmpeg                                              |
+| E2E                            | Render panel audio          | **Not written**                                                                                     | Follow-up with the full stack                                                                    |
+
+Verification: lint, typecheck, format, build and unit tests pass, including the media tests that
+render with the real FFmpeg (layered mix within −14 ± 1 LUFS, voice offset in captions) and the
+self-test with a layered render; database integration **run** (302 passed, `sfx` role); API
+integration tests (audio layers, SFX validation, voice off) written, **not run** (the API suite
+needs S3 storage in the implementation session).

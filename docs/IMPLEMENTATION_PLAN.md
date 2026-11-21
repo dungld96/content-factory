@@ -30,6 +30,20 @@ Open items:
 - Paid image benchmark G2 waits for an OpenRouter API key.
 - Owner UAT run on staging (`docs/UAT.md`, run 2).
 
+### Post-MVP packages
+
+Audited in `docs/post-mvp/POST_MVP_AUDIT.md`; each package has its own design package and was
+implemented in slices. API integration and E2E runs are pending for all of them (see each package's
+last section).
+
+| Package | Delivered | Design |
+|---|---|---|
+| P3 Monitoring & recovery | Resume confirmations, cancel, error catalogue, job history, hold-and-ask for unconfirmed text/speech calls | `P3-design-review-package.md` |
+| P2a Asset Library integrity | Review in the Library, immutable system metadata, production lineage | `P2a-design-review-package.md` |
+| P1 OpenRouter Settings | Operator allowlist, routes and status in Settings, free key check, registry audit | `P1-design-review-package.md` |
+| P2b Asset Library features | Server-side filters, asset picker, characters and environments pages, scene references, collections | `P2b-design-review-package.md` |
+| P4 Audio | Audio layers (voice, clip audio, music fades/ducking/mute, sound effects, voice offsets) | `P4-design-review-package.md` |
+
 Not in the MVP: direct social publishing, multi-tenant billing, fine-tuning, livestream avatars,
 large-scale analytics, formats other than short vertical video.
 

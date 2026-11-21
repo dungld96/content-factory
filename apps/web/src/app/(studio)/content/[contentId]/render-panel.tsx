@@ -18,6 +18,9 @@ import { mutate } from '@/lib/api-client';
 import { assetContentUrl } from '@/lib/asset-url';
 import { formatSeconds, jobErrorText } from '@/lib/format';
 import { formatUsd } from '@/lib/money';
+import { audioRequest, DEFAULT_AUDIO, VOICE_BLOCKERS, type AudioState } from '@/lib/render-audio';
+
+import { RenderAudioSection } from './render-audio';
 
 const BLOCKER_TAB: Readonly<Record<RenderPlanDto['blockers'][number]['code'], string>> = {
   STORYBOARD_NOT_APPROVED: 'storyboard',
@@ -63,9 +66,14 @@ export function RenderPanel(props: {
   const [burnIn, setBurnIn] = useState(true);
   const [musicId, setMusicId] = useState('');
   const [volume, setVolume] = useState(-18);
+  const [audio, setAudio] = useState<AudioState>(DEFAULT_AUDIO);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const ready = plan.blockers.length === 0 && !plan.renderInProgress;
+  // P4 S5: with the voice layer off, the voice-over blockers do not apply (the API re-checks).
+  const blockers = audio.voiceEnabled
+    ? plan.blockers
+    : plan.blockers.filter((b) => !VOICE_BLOCKERS.has(b.code));
+  const ready = blockers.length === 0 && !plan.renderInProgress;
 
   async function run<T>(path: string, body?: unknown): Promise<T | null> {
     setBusy(true);
@@ -83,6 +91,7 @@ export function RenderPanel(props: {
     const result = await run<CreateRenderResponseDto>(`/content/${props.contentId}/renders`, {
       captions: { burnIn },
       ...(musicId ? { music: { assetId: musicId, volumeDb: volume } } : {}),
+      ...(audioRequest(audio) ? { audio: audioRequest(audio) } : {}),
       ...(regenerate ? { regenerate: true } : {}),
     });
     if (result) {
@@ -112,13 +121,13 @@ export function RenderPanel(props: {
             ? 'Rendering…'
             : ready
               ? `Ready: ${String(plan.scenes.length)} scenes, ${String(plan.totalSeconds)} s`
-              : `${String(plan.blockers.length)} item(s) to fix`}
+              : `${String(blockers.length)} item(s) to fix`}
         </span>
       </div>
 
-      {plan.blockers.length > 0 && (
+      {blockers.length > 0 && (
         <ul className="plain-list" aria-label="Render blockers">
-          {plan.blockers.map((b) => (
+          {blockers.map((b) => (
             <li key={`${b.code}-${String(b.sceneNumber)}`} className="form-error">
               {b.message}{' '}
               <a href={`#${BLOCKER_TAB[b.code]}`} className="small-text">
@@ -187,6 +196,14 @@ export function RenderPanel(props: {
             <span aria-hidden="true">▣</span> Render video
           </button>
         </div>
+      )}
+      {canEdit && plan.scenes.length > 0 && (
+        <RenderAudioSection
+          plan={plan}
+          state={audio}
+          hasMusic={musicId !== ''}
+          onChange={setAudio}
+        />
       )}
       {canEdit && plan.musicOptions.length === 0 && (
         <p className="muted small-text">

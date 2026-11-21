@@ -14,7 +14,9 @@ workflow gaps it found (`docs/design/M8.5-design-review-package.md`).
 - **Captions come from the voice-over text** (no speech recognition): cue timing is proportional
   to text length within each scene, not aligned to the spoken words. Line breaks follow punctuation
   and balanced lengths; without a dictionary they can still split a multi-word term.
-- **Music** must be uploaded by the user with a licence note; there is no music library.
+- **Music and sound effects** must be uploaded by the user with a licence note; there is no audio
+  library. Sound effects are placed by hand (scene and offset).
+- **Captions come from voice-overs**: a render with the voice layer off has no captions.
 - **No automatic visual quality scoring**: automated QC checks the technical output (format, size,
   frame rate, duration, loudness, black/frozen/silent stretches); whether the content is good,
   correct and on-brand is the human reviewer's decision at each gate. Video models can invent small

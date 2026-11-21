@@ -100,7 +100,12 @@ of every scene:
 - loudness normalized to −14 LUFS;
 - thumbnail from scene 1's keyframe.
 
-The render's inputs and settings are frozen in its manifest.
+Optional audio layers (P4, renderer `render.v2`): voice-over on/off and level, a voice offset per
+scene, the clips' own audio, music fades, ducking on/off and mute per scene, and sound effects
+(approved Library uploads with a licence note) placed in a scene. Without them the render is the
+mix above, and an identical earlier render is reused.
+
+The render's inputs, audio layers and settings are frozen in its manifest.
 
 ### 3.7 Quality control
 

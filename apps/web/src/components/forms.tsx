@@ -745,7 +745,7 @@ export function NewVariantButton(props: { readonly masterId: string; readonly la
 
 // --- Assets --------------------------------------------------------------------------------
 
-type UploadKind = 'reference' | 'voiceover' | 'music';
+type UploadKind = 'reference' | 'voiceover' | 'music' | 'sfx';
 
 const UPLOAD_KINDS: Readonly<Record<UploadKind, { label: string; accept: string; hint: string }>> =
   {
@@ -763,6 +763,11 @@ const UPLOAD_KINDS: Readonly<Record<UploadKind, { label: string; accept: string;
       label: 'Music audio',
       accept: 'audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/aac,.mp3,.wav,.m4a',
       hint: 'MP3, WAV or M4A, up to 25 MB; needs a license note',
+    },
+    sfx: {
+      label: 'Sound effect',
+      accept: 'audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/aac,.mp3,.wav,.m4a',
+      hint: 'MP3, WAV or M4A, up to 25 MB; needs a license note; placed in scenes at render',
     },
   };
 
@@ -788,7 +793,7 @@ function UploadForm(props: {
         assetType: kind === 'reference' ? 'reference' : 'audio',
         ...(kind === 'reference' ? {} : { purpose: kind }),
         ...(label ? { label } : {}),
-        ...(kind === 'music' && licenseNote ? { licenseNote } : {}),
+        ...((kind === 'music' || kind === 'sfx') && licenseNote ? { licenseNote } : {}),
       }),
     );
     if (asset) {
@@ -827,7 +832,7 @@ function UploadForm(props: {
         Label <small>(optional)</small>
         <input name="label" maxLength={200} />
       </label>
-      {kind === 'music' && (
+      {(kind === 'music' || kind === 'sfx') && (
         <label className="field">
           License note <small>(source and terms of use)</small>
           <textarea name="licenseNote" minLength={3} maxLength={1000} required rows={3} />

@@ -146,6 +146,9 @@ P2b-1–P2b-4 implemented, API integration/E2E verification pending (package §1
 **P1 — OpenRouter Settings UI:** design package revision 1 approved
 (`docs/design/P1-design-review-package.md`; O1–O7); slices P1a–P1c implemented, API
 integration/E2E verification pending (package §10). Operators: `OPERATOR_EMAILS`.
+**P4 — Audio configuration:** design package revision 1 approved
+(`docs/design/P4-design-review-package.md`; S1–S7); slices P4a–P4c implemented, API
+integration/E2E verification pending (package §9). Renders without `audio` stay `render.v1`.
 
 Open items:
 - Off-server backups wait for the backup destination (rclone remote).
