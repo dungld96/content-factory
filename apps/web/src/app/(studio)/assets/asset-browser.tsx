@@ -284,12 +284,14 @@ interface Provenance {
 
 const ROLE_LABEL: Readonly<Record<AssetInputListDto['data'][number]['role'], string>> = {
   character: 'character reference',
+  product: 'product reference',
   environment: 'environment reference',
   scene_reference: 'scene reference',
   keyframe: 'keyframe',
   clip: 'clip',
   voiceover: 'voice-over',
   music: 'music',
+  sfx: 'sound effect',
 };
 
 const USE_LABEL: Readonly<Record<AssetProductionUsageDto['kind'], string>> = {

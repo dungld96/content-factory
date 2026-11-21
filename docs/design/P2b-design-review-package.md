@@ -160,3 +160,32 @@ asset, bound to production only by its ID (L4 unchanged). No API change.
 Also (UX review U6): clips in the Library show a frame of the clip as their poster, file types
 read "Subtitles (SRT)" instead of `application/x-subrip`, and the project filter adds the slug when
 two projects share a name.
+
+## 12. Revision 3 — product photos in the brief (2026-11-21)
+
+Defect reported by the owner: a review video of one keyboard model got a different, random
+keyboard in each keyframe, and the clips inherited them. Cause: keyframes only received
+character, environment and per-scene references; a product had no place in the brief, so unless
+every scene was given a reference by hand, the image model saw only text.
+
+Decision (by recommendation, owner rule of 2026-11-21):
+
+- The brief gets `productAssetIds` (1–4 Library `reference`/`image` assets of the project). The
+  content item page and the master page show **Product photos** with the asset picker (upload
+  included, P2c); a master change reaches variants by resync as every brief change.
+- Image planning reads the item's current brief and sends the photos with **every** scene,
+  after the character master and before the environment (role `product`, recorded in
+  `asset_inputs`; migration `20261121160000_product_references`). They are part of the scene hash
+  and execution key, so keyframes made without them are never reused for scenes that now have
+  them; existing keyframes stay until the editor regenerates the scene.
+- Prompt `image.v2`: with product references it asks for exactly the referenced product (model,
+  shape, colours, layout, markings; the reference wins over the text) and keeps the product's own
+  logo instead of forbidding logos. Without product references the text equals `image.v1`; the
+  worker records each job's own template id.
+- Checks: the brief check reports an unusable photo (`brief.productAssetIds.N`, blocks script
+  generation); image estimate/generate refuse it with `422 REFERENCE_INVALID`, and a photo without
+  stored bytes with `422 REFERENCE_FILE_MISSING`, before any paid call.
+- `AssetInputRole` (contracts) now also lists `sfx`, which render lineage already wrote.
+
+Not changed: storyboard prompts (the LLM is not told about the photos; the image prompt line
+makes the reference win), clip generation (clips start from the keyframe).

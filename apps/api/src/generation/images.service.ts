@@ -4,6 +4,7 @@ import { activePrices, estimateImageCost, UsdAmount, type ImageResolution } from
 import { ImageConstraintError, ImageService, RoutingError } from '@acf/ai-runtime';
 import {
   ApiErrorCode,
+  contentBriefSchema,
   type AssetDto,
   type GenerationJobDto,
   type ImageEstimateDto,
@@ -19,6 +20,7 @@ import {
   IMAGE_PROMPT_TEMPLATE_ID,
   missingGates,
   nextContentStatus,
+  referenceAssetProblem,
   sceneContentHash,
   type ContentStatus,
   type GateKey,
@@ -89,16 +91,30 @@ const imageScene = (s: SceneRow): ImageScene => ({
   environmentVersionId: s.environmentVersionId,
 });
 
-/** Character master first, then environment, then the scene's own references (deduplicated). */
-function referencesOf(s: SceneRow): { assetId: string; role: ReferenceRole }[] {
+/**
+ * Character master first, then the brief's product photos, then environment, then the scene's
+ * own references (deduplicated). Products apply to every scene: they keep the reviewed product
+ * the same across keyframes.
+ */
+function referencesOf(
+  s: SceneRow,
+  productAssetIds: readonly string[],
+): { assetId: string; role: ReferenceRole }[] {
   const out: { assetId: string; role: ReferenceRole }[] = [];
   const add = (assetId: string | null | undefined, role: ReferenceRole) => {
     if (assetId && !out.some((r) => r.assetId === assetId)) out.push({ assetId, role });
   };
   add(s.characterVersion?.primaryAssetId, 'character');
+  for (const id of productAssetIds) add(id, 'product');
   add(s.environmentVersion?.primaryAssetId, 'environment');
   for (const link of s.referenceAssets) add(link.assetId, 'scene_reference');
   return out;
+}
+
+/** The brief's product reference ids (an unparsable brief has none; brief checks report it). */
+function productIdsOf(brief: unknown): string[] {
+  const parsed = contentBriefSchema.safeParse(brief);
+  return parsed.success ? [...new Set(parsed.data.productAssetIds ?? [])] : [];
 }
 
 const error = (status: number, code: string, message: string, current?: unknown) =>
@@ -276,8 +292,9 @@ export class ImagesService {
     await this.access.require(actor, storyboard.projectId, 'viewer');
     const item = await this.prisma.client.contentItem.findUniqueOrThrow({
       where: { id: storyboard.contentItemId },
-      select: { approvedStoryboardVersionId: true, aspectRatio: true },
+      select: { approvedStoryboardVersionId: true, aspectRatio: true, brief: true },
     });
+    const products = productIdsOf(item.brief);
     const sceneIds = storyboard.scenes.map((s) => s.id);
     const [keyframes, generated, jobs] = await Promise.all([
       this.prisma.client.sceneKeyframe.findMany({
@@ -306,7 +323,7 @@ export class ImagesService {
       const hash = sceneContentHash({
         scene: imageScene(scene),
         aspectRatio: ratio,
-        referenceAssetIds: referencesOf(scene).map((r) => r.assetId),
+        referenceAssetIds: referencesOf(scene, products).map((r) => r.assetId),
       });
       const candidates = generated.filter(
         (a) => a.storyboardSceneId === scene.id || sceneHashOf(a) === hash,
@@ -434,9 +451,12 @@ export class ImagesService {
         archivedAt: true,
         approvedScriptVersionId: true,
         approvedStoryboardVersionId: true,
+        brief: true,
       },
     });
     if (item.archivedAt) throw archived('content item');
+    const products = productIdsOf(item.brief);
+    await this.assertProducts(item.projectId, products);
     const gates = new Set<GateKey>();
     if (item.approvedScriptVersionId) gates.add('script_approved');
     if (item.approvedStoryboardVersionId === storyboard.id) gates.add('storyboard_approved');
@@ -470,7 +490,7 @@ export class ImagesService {
           return s;
         })
       : storyboard.scenes;
-    const maxRefs = Math.max(...selected.map((s) => referencesOf(s).length), 0);
+    const maxRefs = Math.max(...selected.map((s) => referencesOf(s, products).length), 0);
 
     // Route once with the largest reference count; the resolution defaults to 2K when supported.
     let row: Awaited<ReturnType<ImageService['route']>>['row'];
@@ -525,7 +545,7 @@ export class ImagesService {
     ]);
     const scenes: ScenePlan[] = [];
     for (const scene of selected) {
-      const references = referencesOf(scene);
+      const references = referencesOf(scene, products);
       const sceneHash = sceneContentHash({
         scene: imageScene(scene),
         aspectRatio,
@@ -602,6 +622,28 @@ export class ImagesService {
         AND a.archived_at IS NULL AND a.metadata ->> 'sceneHash' = ${sceneHash}
       ORDER BY k.selected_at DESC LIMIT 1`;
     return rows[0]?.asset_id;
+  }
+
+  /** Brief product photos must still be usable Library images (archived/rejected since). */
+  private async assertProducts(projectId: string, assetIds: readonly string[]): Promise<void> {
+    if (assetIds.length === 0) return;
+    const rows = await this.prisma.client.asset.findMany({
+      where: { id: { in: [...assetIds] }, projectId },
+      select: { id: true, assetType: true, archivedAt: true, approvalStatus: true },
+    });
+    const problems = assetIds.flatMap((id, i) => {
+      const why = referenceAssetProblem(rows.find((r) => r.id === id));
+      return why ? [{ path: `brief.productAssetIds.${String(i)}`, message: `${id} ${why}` }] : [];
+    });
+    if (problems.length > 0) {
+      throw new ApiError({
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        code: ApiErrorCode.ReferenceInvalid,
+        message:
+          'Product references in the brief must be active reference images or images of this project.',
+        details: problems,
+      });
+    }
   }
 
   /** Every reference must have its file in storage before paid work is queued. */

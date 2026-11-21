@@ -37,7 +37,7 @@ milestone packages in `docs/design/` and ADR-0010, ADR-0011, ADR-0012.
 | `characters`, `character_versions`, `character_version_assets` | Characters and their versions with linked reference assets |
 | `environments`, `environment_versions`, `environment_version_assets` | Same for environments |
 | `assets` | Every file: type (`reference`, `image`, `video`, `audio`, `subtitle`, `render`), source (`upload`, `import`, `generated`, `derived`), storage key, MIME, size, checksum, dimensions, duration, review status, links to its generating job and scene |
-| `asset_inputs` | Append-only lineage: inputs of a generated asset (role `character`, `environment`, `scene_reference`, `keyframe`, `clip`, `voiceover`, `music`) |
+| `asset_inputs` | Append-only lineage: inputs of a generated asset (role `character`, `product`, `environment`, `scene_reference`, `keyframe`, `clip`, `voiceover`, `music`, `sfx`) |
 | `asset_collections`, `asset_collection_items` | Named groups of Library assets per project (archived, never deleted) and their members (same project through composite FKs). Organisational only: never read by production |
 
 Rules: approved versions and their links are immutable (`AC001`, `AC002`); the master pointer

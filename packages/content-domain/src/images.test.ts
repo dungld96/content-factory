@@ -5,6 +5,7 @@ import {
   imageJobInputSchema,
   missingGates,
   nextContentStatus,
+  referenceAssetProblem,
   sceneContentHash,
   type ImageScene,
 } from './index.js';
@@ -59,6 +60,46 @@ describe('buildImagePrompt (image.v1)', () => {
   });
 });
 
+describe('buildImagePrompt with product references (image.v2)', () => {
+  const args = {
+    scene,
+    characterName: null,
+    environmentName: 'Home office',
+    aspectRatio: '9:16',
+    hasReferences: true,
+  };
+
+  it('is the image.v1 text when there are no product references', () => {
+    expect(buildImagePrompt({ ...args, hasProductReferences: false })).toBe(buildImagePrompt(args));
+  });
+
+  it('asks for the exact product and keeps its own markings', () => {
+    const lines = buildImagePrompt({ ...args, hasProductReferences: true }).split('\n');
+    expect(lines).toContain(
+      'The product shown must be exactly the product in the product reference image(s): same model, shape, proportions, colours, materials, layout and printed markings. Where the text and the reference differ, follow the reference.',
+    );
+    expect(lines).toContain(
+      "No added text, captions or watermarks; keep the product's own logo and markings as in the reference.",
+    );
+    expect(lines).not.toContain('No text, captions, logos or watermarks in the image.');
+    expect(lines).not.toContain('Stay consistent with the reference image(s).');
+  });
+});
+
+describe('referenceAssetProblem', () => {
+  const ok = { assetType: 'reference', archivedAt: null, approvalStatus: 'pending' };
+  it.each([
+    [undefined, 'is not an asset of this project'],
+    [{ ...ok, archivedAt: new Date() }, 'is archived'],
+    [{ ...ok, assetType: 'video' }, 'is not a reference image or image'],
+    [{ ...ok, approvalStatus: 'rejected' }, 'was rejected'],
+    [ok, null],
+    [{ ...ok, assetType: 'image', approvalStatus: 'approved' }, null],
+  ])('%o → %s', (asset, problem) => {
+    expect(referenceAssetProblem(asset)).toBe(problem);
+  });
+});
+
 describe('image job input', () => {
   it('caps candidates at 4 and requires a scene hash', () => {
     const input = {
@@ -79,6 +120,8 @@ describe('image job input', () => {
     expect(imageJobInputSchema.safeParse(input).success).toBe(true);
     expect(imageJobInputSchema.safeParse({ ...input, count: 5 }).success).toBe(false);
     expect(imageJobInputSchema.safeParse({ ...input, sceneHash: 'x' }).success).toBe(false);
+    const product = { assetId: '65000000-0000-7000-8000-000000000001', role: 'product' };
+    expect(imageJobInputSchema.safeParse({ ...input, references: [product] }).success).toBe(true);
   });
 });
 

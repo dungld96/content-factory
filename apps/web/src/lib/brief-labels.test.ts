@@ -11,6 +11,7 @@ describe('brief issue labels (UX review D2)', () => {
       'Topic is required.',
     );
     expect(briefFieldLabel('brief.callToAction')).toBe('Call to action');
+    expect(briefFieldLabel('brief.productAssetIds.1')).toBe('Product photos');
   });
 
   it('falls back to a readable last segment', () => {

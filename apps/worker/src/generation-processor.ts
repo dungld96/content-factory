@@ -51,7 +51,6 @@ import {
   basicJsonSchema,
   buildImagePrompt,
   imageJobInputSchema,
-  IMAGE_PROMPT_TEMPLATE_ID,
   toResponseJsonSchema,
   totalDuration,
   type DeadLetterPayload,
@@ -582,8 +581,10 @@ export class GenerationProcessor {
       environmentName: input.environmentName,
       aspectRatio: input.aspectRatio,
       hasReferences: input.references.length > 0,
+      hasProductReferences: input.references.some((r) => r.role === 'product'),
     });
-    await jobs.recordPrompt(job.id, `### ${IMAGE_PROMPT_TEMPLATE_ID}\n${prompt}`);
+    // The job's own template id: jobs queued before image.v2 are labelled image.v1.
+    await jobs.recordPrompt(job.id, `### ${job.promptTemplateId}\n${prompt}`);
 
     const rows = await prisma.asset.findMany({
       where: { projectId: job.projectId, id: { in: input.references.map((r) => r.assetId) } },

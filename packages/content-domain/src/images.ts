@@ -8,7 +8,11 @@ import { canonicalJson } from './execution-key.js';
  * Image generation for storyboard scenes (M4 design §5). Pure: no I/O.
  */
 
-export const IMAGE_PROMPT_TEMPLATE_ID = 'image.v1';
+/**
+ * `image.v2` adds the product lines (brief product references). Without product references its
+ * text equals `image.v1`, so v1 jobs replay unchanged; the worker records each job's own id.
+ */
+export const IMAGE_PROMPT_TEMPLATE_ID = 'image.v2';
 /** Candidates per scene per request (decision G5: default 1, at most 4). */
 export const IMAGE_CANDIDATES = { default: 1, max: 4 } as const;
 /** Default output tier: a 9:16 2K image is the closest tier to 1080×1920 without upscaling. */
@@ -29,7 +33,12 @@ export const imageSceneSchema = z.strictObject({
 });
 export type ImageScene = z.infer<typeof imageSceneSchema>;
 
-export const referenceRoleSchema = z.enum(['character', 'environment', 'scene_reference']);
+export const referenceRoleSchema = z.enum([
+  'character',
+  'product',
+  'environment',
+  'scene_reference',
+]);
 export type ReferenceRole = z.infer<typeof referenceRoleSchema>;
 
 /** `generation_jobs.input` for image generation: everything the worker needs, fixed at creation. */
@@ -49,7 +58,7 @@ export const imageJobInputSchema = z.strictObject({
     .min(0)
     .max(2 ** 31 - 1)
     .nullable(),
-  /** In sending order: character master first, then environment, then scene references. */
+  /** In sending order: character master, brief products, environment, scene references. */
   references: z.array(z.strictObject({ assetId: z.uuid(), role: referenceRoleSchema })).max(16),
   /** Content hash of the scene (`sceneContentHash`): identical scenes reuse results. */
   sceneHash: z.string().regex(/^[0-9a-f]{64}$/),
@@ -92,8 +101,11 @@ export function buildImagePrompt(input: {
   readonly environmentName: string | null;
   readonly aspectRatio: string;
   readonly hasReferences: boolean;
+  /** Brief product references are among the references (`image.v2`). */
+  readonly hasProductReferences?: boolean;
 }): string {
   const s = input.scene;
+  const product = input.hasProductReferences === true;
   const lines = [
     s.imagePrompt.trim(),
     s.visualDescription.trim() ? `Scene: ${s.visualDescription.trim()}` : '',
@@ -104,11 +116,39 @@ export function buildImagePrompt(input: {
     input.environmentName
       ? `Setting: "${input.environmentName}", consistent with the reference image(s).`
       : '',
-    input.hasReferences && !input.characterName && !input.environmentName
+    product
+      ? 'The product shown must be exactly the product in the product reference image(s): same model, shape, proportions, colours, materials, layout and printed markings. Where the text and the reference differ, follow the reference.'
+      : '',
+    input.hasReferences && !input.characterName && !input.environmentName && !product
       ? 'Stay consistent with the reference image(s).'
       : '',
-    'No text, captions, logos or watermarks in the image.',
+    product
+      ? "No added text, captions or watermarks; keep the product's own logo and markings as in the reference."
+      : 'No text, captions, logos or watermarks in the image.',
     s.negativePrompt.trim() ? `Avoid: ${s.negativePrompt.trim()}` : '',
   ];
   return lines.filter((l) => l.length > 0).join('\n');
+}
+
+/**
+ * Why an asset cannot be bound to production as a reference image (P2b L2), or null: it must be
+ * an asset of the project, active, a reference or image, and not rejected.
+ */
+export function referenceAssetProblem(
+  asset:
+    | {
+        readonly assetType: string;
+        readonly archivedAt: Date | null;
+        readonly approvalStatus: string;
+      }
+    | null
+    | undefined,
+): string | null {
+  if (!asset) return 'is not an asset of this project';
+  if (asset.archivedAt) return 'is archived';
+  if (asset.assetType !== 'reference' && asset.assetType !== 'image') {
+    return 'is not a reference image or image';
+  }
+  if (asset.approvalStatus === 'rejected') return 'was rejected';
+  return null;
 }

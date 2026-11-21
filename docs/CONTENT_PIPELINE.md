@@ -72,8 +72,10 @@ Rules:
 ### 3.4 Keyframes
 
 One `image_generation` job per scene, 1–4 candidates. The prompt is built from the scene without
-an LLM call (template `image.v1`). References sent: the character master's primary asset, the
-environment master's primary asset, then the scene's reference assets. Each image is validated
+an LLM call (template `image.v2`; without product photos its text equals `image.v1`). References
+sent: the character master's primary asset, the brief's product photos (`productAssetIds`, every
+scene), the environment master's primary asset, then the scene's reference assets. With product
+photos the prompt asks for exactly that product and keeps its own logo and markings. Each image is validated
 (magic bytes, type, dimensions), stored, and linked to its job, scene and inputs. The user
 approves candidates and picks one keyframe per scene. Unchanged scenes of a newer storyboard
 version reuse their keyframe.

@@ -18,6 +18,9 @@ export interface BriefInput {
   /** Referenced character/environment and whether it has an approved master version. */
   readonly character?: { readonly id: string; readonly hasApprovedMaster: boolean } | undefined;
   readonly environment?: { readonly id: string; readonly hasApprovedMaster: boolean } | undefined;
+  /** Brief product references, in brief order, and why each cannot be used (null: usable). */
+  readonly products?:
+    readonly { readonly id: string; readonly problem: string | null }[] | undefined;
   /** The variant's effective target platform (R0); adds advisory warnings only. */
   readonly platform?: ChannelPlatform | null | undefined;
 }
@@ -128,6 +131,15 @@ export function validateBrief(input: BriefInput): BriefValidation {
       message: 'the environment has no approved master version',
     });
   }
+
+  (input.products ?? []).forEach((p, i) => {
+    if (p.problem !== null) {
+      errors.push({
+        path: `brief.productAssetIds.${String(i)}`,
+        message: `product reference ${p.id} ${p.problem}`,
+      });
+    }
+  });
 
   const warnings: RuleIssue[] = [];
   for (const field of ['audience', 'objective', 'tone', 'callToAction'] as const) {

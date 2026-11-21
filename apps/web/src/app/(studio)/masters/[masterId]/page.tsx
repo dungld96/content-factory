@@ -5,6 +5,7 @@ import { notFound, redirect } from 'next/navigation';
 import type { ContentMasterDetailDto, ProjectDto } from '@acf/contracts';
 
 import { EditMasterButton, NewVariantButton } from '@/components/forms';
+import { ProductPhotos } from '@/components/product-photos';
 import { ContentStatusPill, Pill } from '@/components/status-pill';
 import { apiGet } from '@/lib/api-server';
 import { isFinished } from '@/lib/content-status';
@@ -72,6 +73,13 @@ export default async function MasterPage({
             <span className="tag">{approved} approved</span>
             <span className="tag">Brief revision {m.briefRevision}</span>
           </div>
+          <ProductPhotos
+            projectId={m.projectId}
+            brief={m.brief}
+            endpoint={`/content-masters/${m.id}`}
+            canEdit={canEdit && m.archivedAt === null}
+            savedText="Product photos saved in the master brief. Resync variants to use them."
+          />
         </div>
       </section>
 

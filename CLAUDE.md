@@ -156,7 +156,8 @@ check before paying, delivered output stored before validation, finish without a
 UX review U1–U8 (`docs/design/UX-review-package.md`; Scenes board, Next step, phone shell,
 foundations, `lucide-react` icons); P4d — voice-over on/off per content item (P4 package §11);
 P2c — picker uploads into the Library (P2b package §11); P1d — model import and prices in
-Settings (P1 package §11). All implemented; unit, integration and E2E suites pass except the
+Settings (P1 package §11); product photos in the brief, sent with every keyframe (P2b package
+§12). All implemented; unit, integration and E2E suites pass except the
 backup drill, which fails on the local SeaweedFS running out of volumes (environment).
 
 Open items:

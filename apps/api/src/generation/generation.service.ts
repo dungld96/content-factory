@@ -26,6 +26,7 @@ import {
   type TextJobKind,
   estimateTextJob,
   narrationWordsPerSecond,
+  referenceAssetProblem,
 } from '@acf/content-domain';
 import {
   ApiErrorCode,
@@ -629,6 +630,18 @@ export class GenerationService {
     };
     const character = await master('character', brief.characterId);
     const environment = await master('environment', brief.environmentId);
+    const productIds = brief.productAssetIds ?? [];
+    const productRows =
+      productIds.length === 0
+        ? []
+        : await this.prisma.client.asset.findMany({
+            where: { id: { in: [...productIds] }, projectId: item.projectId },
+            select: { id: true, assetType: true, archivedAt: true, approvalStatus: true },
+          });
+    const products = productIds.map((id) => ({
+      id,
+      problem: referenceAssetProblem(productRows.find((r) => r.id === id)),
+    }));
     // R0: the effective target platform adds advisory warnings only (never errors, never part
     // of the normalized brief or the execution key).
     const platform = item.channelId
@@ -646,6 +659,7 @@ export class GenerationService {
       targetDurationSeconds: item.targetDurationSeconds,
       language: item.language,
       aspectRatio: RATIO[item.aspectRatio] ?? '9:16',
+      products,
       ...(character
         ? { character: { id: character.id, hasApprovedMaster: character.masterVersionId !== null } }
         : {}),

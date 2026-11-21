@@ -224,7 +224,11 @@ Request:
 ```
 
 The brief accepts `topic` (required), `audience`, `objective`, `tone`, `callToAction`, `notes` and
-up to 20 `sourceUrls` (http/https); unknown keys are rejected. `channelId` (optional) must be an
+up to 20 `sourceUrls` (http/https), `characterId`, `environmentId` and up to 4
+`productAssetIds` (Library `reference`/`image` assets of the project: product photos sent as
+references with every keyframe; an archived, rejected or foreign asset is a brief error
+`brief.productAssetIds.N`, and image estimate/generate answer `422 REFERENCE_INVALID`); unknown
+keys are rejected. `channelId` (optional) must be an
 active channel of the same project (`422 REFERENCE_NOT_FOUND`, `409 ARCHIVED`). Optional
 `targetPlatform` (`tiktok`, `instagram_reels`, `youtube_shorts`, `other`): with a channel it must
 equal the channel's platform (`422 PLATFORM_CHANNEL_MISMATCH`); a format the platform does not

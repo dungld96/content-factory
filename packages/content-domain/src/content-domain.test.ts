@@ -69,6 +69,19 @@ describe('validateBrief (stage 1)', () => {
     expect(validateBrief({ ...base, ...overrides }).errors.map((e) => e.path)).toEqual([path]);
   });
 
+  it('errors on each unusable product reference, by position', () => {
+    const r = validateBrief({
+      ...base,
+      products: [
+        { id: 'p1', problem: null },
+        { id: 'p2', problem: 'is archived' },
+      ],
+    });
+    expect(r.errors).toEqual([
+      { path: 'brief.productAssetIds.1', message: 'product reference p2 is archived' },
+    ]);
+  });
+
   it('accepts references with approved masters', () => {
     const r = validateBrief({
       ...base,

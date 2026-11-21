@@ -220,6 +220,27 @@ describe('image jobs', () => {
     expect(mock.calls).toHaveLength(1);
   });
 
+  it('sends a brief product photo with the product prompt and records it as a product input', async () => {
+    const sceneId = iw.sceneIds[0] ?? '';
+    const [jobId] = await createImageJobs(prisma, world, iw, [
+      await imageInput(prisma, iw, sceneId, {
+        references: [{ assetId: iw.referenceAssetId, role: 'product' }],
+      }),
+    ]);
+    expect((await build().process(jobId ?? '')).type).toBe('succeeded');
+    expect(mock.calls[0]?.request.references).toHaveLength(1);
+    expect(mock.calls[0]?.request.prompt).toContain(
+      'The product shown must be exactly the product in the product reference image(s)',
+    );
+    const asset = await prisma.asset.findFirstOrThrow({
+      where: { generationJobId: jobId ?? '' },
+      include: { inputs: true },
+    });
+    expect(asset.inputs.map((i) => [i.inputAssetId, i.role])).toEqual([
+      [iw.referenceAssetId, 'product'],
+    ]);
+  });
+
   it('fails permanently without storage or with a reference whose file is missing', async () => {
     const [noStore] = await createImageJobs(prisma, world, iw, [
       await imageInput(prisma, iw, iw.sceneIds[0] ?? ''),

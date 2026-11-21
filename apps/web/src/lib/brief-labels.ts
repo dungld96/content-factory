@@ -9,12 +9,13 @@ const LABELS: Readonly<Record<string, string>> = {
   'brief.sourceUrls': 'Sources',
   'brief.characterId': 'Character',
   'brief.environmentId': 'Environment',
+  'brief.productAssetIds': 'Product photos',
   targetDurationSeconds: 'Duration',
 };
 
 /** "Audience" for `brief.audience`; unknown paths keep their last segment, capitalised. */
 export function briefFieldLabel(path: string): string {
-  const known = LABELS[path];
+  const known = LABELS[path] ?? LABELS[path.replace(/\.\d+$/, '')];
   if (known) return known;
   const last = path.split('.').pop() ?? path;
   const words = last.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();

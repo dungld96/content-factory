@@ -169,7 +169,7 @@ describe('estimate and generate', () => {
     expect(job).toMatchObject({
       storyboardSceneId: w.sceneId,
       previousContentStatus: 'storyboard_review',
-      promptTemplateId: 'image.v1',
+      promptTemplateId: 'image.v2',
     });
     expect(job.input).toMatchObject({ count: 2, seed: 3, resolution: '2K', aspectRatio: '9:16' });
     expect(
@@ -248,6 +248,33 @@ describe('estimate and generate', () => {
       body: {},
     });
     expect([missing.status, codeOf(missing)]).toEqual([422, 'REFERENCE_FILE_MISSING']);
+  });
+
+  it('sends the brief product photos with every scene, and checks them before paid work', async () => {
+    const w = await approvedWorld();
+    const patched = await as('editor', 'PATCH', `/content/${w.contentId}`, {
+      body: { brief: { topic: 'Desk gadgets', productAssetIds: [w.spareAssetId] } },
+    });
+    expect(patched.status).toBe(200);
+    const estimate = await as('viewer', 'POST', `/storyboards/${w.storyboardId}/images/estimate`, {
+      body: {},
+    });
+    expect(bodyOf<ImageEstimateDto>(estimate).scenes.map((s) => s.references)).toEqual([1]);
+    // The fixture asset has no stored bytes: refused before any job is queued.
+    const missing = await as('editor', 'POST', `/storyboards/${w.storyboardId}/images/generate`, {
+      body: {},
+    });
+    expect([missing.status, codeOf(missing)]).toEqual([422, 'REFERENCE_FILE_MISSING']);
+
+    await db.query(`UPDATE assets SET archived_at = now() WHERE id = '${w.spareAssetId}'`);
+    const archived = await as('viewer', 'POST', `/storyboards/${w.storyboardId}/images/estimate`, {
+      body: {},
+    });
+    expect([archived.status, codeOf(archived)]).toEqual([422, 'REFERENCE_INVALID']);
+    const check = await as('viewer', 'POST', `/content/${w.contentId}/brief/validate`);
+    expect((check.json as { errors: { path: string }[] }).errors.map((e) => e.path)).toEqual([
+      'brief.productAssetIds.0',
+    ]);
   });
 
   it('returns the item to storyboard_review when its image run is canceled', async () => {

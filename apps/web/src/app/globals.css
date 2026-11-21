@@ -3266,6 +3266,44 @@ img.board-thumb {
   flex-direction: column;
 }
 
+/* Brief product photos: references for every keyframe. */
+.product-photos {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.product-photos-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.product-photos-head span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.product-photos-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.product-photos-thumbs img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
 /* UX review U6: clip posters and readable file types in the Library. */
 .asset-visual {
   position: relative;

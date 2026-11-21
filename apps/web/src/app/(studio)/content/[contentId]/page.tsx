@@ -24,6 +24,7 @@ import type {
 } from '@acf/contracts';
 
 import { Icon } from '@/components/icon';
+import { ProductPhotos } from '@/components/product-photos';
 import { buildSceneRows, nextStep } from '@/lib/scene-board';
 import { RelativeTime } from '@/components/local-time';
 import { ContentStatusPill, Pill, VersionPill } from '@/components/status-pill';
@@ -460,6 +461,13 @@ export default async function ContentPage({
             <ResyncBriefButton contentId={content.id} />
           </div>
         )}
+        <ProductPhotos
+          projectId={content.projectId}
+          brief={content.brief}
+          endpoint={`/content/${content.id}`}
+          canEdit={canEdit}
+          savedText="Product photos saved. Generate or regenerate keyframes to use them."
+        />
         <BriefCheck contentId={content.id} />
         <AudioPlan contentId={content.id} voiceEnabled={content.voiceEnabled} canEdit={canEdit} />
       </div>

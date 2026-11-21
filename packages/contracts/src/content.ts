@@ -30,6 +30,9 @@ export const contentFormatSchema = z.enum(['short_video']).meta({ id: 'ContentFo
 export const aspectRatioSchema = z.enum(['9:16', '16:9', '1:1']).meta({ id: 'AspectRatio' });
 export type AspectRatio = z.infer<typeof aspectRatioSchema>;
 
+/** Product reference images per brief (each keyframe also takes character/environment/scene refs). */
+export const PRODUCT_REFERENCES_MAX = 4;
+
 const text = (max: number) => z.string().trim().min(1).max(max);
 
 /** Content brief (docs/CONTENT_PIPELINE.md stage 1). */
@@ -49,6 +52,11 @@ export const contentBriefSchema = z
     characterId: z.uuid().optional(),
     /** Fixed environment of the same project; its approved master is used (M3). */
     environmentId: z.uuid().optional(),
+    /**
+     * Product (subject) photos from the project's Library: sent as reference images with every
+     * keyframe, so the product looks the same in every scene (e.g. the reviewed device).
+     */
+    productAssetIds: z.array(z.uuid()).min(1).max(PRODUCT_REFERENCES_MAX).optional(),
   })
   .meta({ id: 'ContentBrief' });
 export type ContentBrief = z.infer<typeof contentBriefSchema>;

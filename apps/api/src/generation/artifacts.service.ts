@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 
 import {
   SCRIPT_SCHEMA_VERSION,
+  referenceAssetProblem,
   scriptContentSchema,
   scriptRuleIssues,
   STORYBOARD_SCHEMA_VERSION,
@@ -171,16 +172,7 @@ export class ArtifactsService {
       select: { id: true, assetType: true, archivedAt: true, approvalStatus: true },
     });
     const problems = assetIds.flatMap((id, i) => {
-      const a = rows.find((r) => r.id === id);
-      const why = !a
-        ? 'is not an asset of this project'
-        : a.archivedAt
-          ? 'is archived'
-          : a.assetType !== 'reference' && a.assetType !== 'image'
-            ? 'is not a reference image or image'
-            : a.approvalStatus === 'rejected'
-              ? 'was rejected'
-              : null;
+      const why = referenceAssetProblem(rows.find((r) => r.id === id));
       return why
         ? [{ path: `body.requiredReferenceAssetIds.${String(i)}`, message: `${id} ${why}` }]
         : [];

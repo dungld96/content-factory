@@ -246,6 +246,8 @@ export const assetInputRoleSchema = z.enum([
   'clip',
   'voiceover',
   'music',
+  'sfx',
+  'product',
 ]);
 
 /** `GET /assets/:assetId/inputs`: what an asset was made from. */
