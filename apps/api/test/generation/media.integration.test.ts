@@ -17,6 +17,7 @@ import {
 import { storageSettings } from '@acf/config';
 import type {
   ImageGenerateResponseDto,
+  ResumeRunResponseDto,
   StoryboardVideosDto,
   StoryboardVoiceoversDto,
   VideoEstimateDto,
@@ -646,3 +647,169 @@ describe('per-request budget (decisions V10, B5)', () => {
     ).toBe(0);
   });
 });
+
+describe('delivered output (P3d R3, R7)', () => {
+  /** A clip job that was delivered and stored, then failed because FFprobe was missing. */
+  async function deliveredClipJob(
+    w: World,
+  ): Promise<{ jobId: string; runId: string; bytes: Uint8Array; assetId: string }> {
+    const model = await prisma.aiModel.findFirstOrThrow({
+      where: { mediaConstraints: { path: ['kind'], equals: 'video' }, provider: { key: 'mock' } },
+    });
+    const run = await prisma.productionRun.create({
+      data: {
+        projectId: w.projectId,
+        contentItemId: w.contentId,
+        requestedById: ids['editor'] ?? '',
+      },
+    });
+    const job = await prisma.generationJob.create({
+      data: {
+        projectId: w.projectId,
+        contentItemId: w.contentId,
+        productionRunId: run.id,
+        kind: 'video_generation',
+        storyboardSceneId: w.sceneId,
+        activeKey: `${w.sceneId}:video_generation`,
+        idempotencyKey: `p3d-${run.id}`,
+        executionKey: 'f'.repeat(64),
+        input: { sceneId: w.sceneId },
+        previousContentStatus: 'asset_review',
+        promptTemplateId: 'video.v1',
+        modelId: model.id,
+        requestedById: ids['editor'] ?? '',
+      },
+    });
+    const bytes = new Uint8Array([
+      0,
+      0,
+      0,
+      24,
+      ...new TextEncoder().encode('ftypisom'),
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+    ]);
+    const assetId = randomUUID();
+    const digest = sha256Hex(bytes);
+    const key = assetObjectKey({
+      projectId: job.projectId,
+      assetId,
+      sha256Hex: digest,
+      mimeType: 'video/mp4',
+    });
+    await store.putIfAbsent(key, bytes, { contentType: 'video/mp4', sha256Hex: digest });
+    await db.query(`BEGIN;
+      UPDATE generation_jobs SET status = 'running', attempt = 1, started_at = now() WHERE id = '${job.id}';
+      UPDATE generation_jobs SET delivered_at = now(), staged_asset_id = '${assetId}',
+        staged_object_key = '${key}', staged_sha256 = '${digest}', staged_mime_type = 'video/mp4'
+        WHERE id = '${job.id}';
+      UPDATE generation_jobs SET status = 'failed', active_key = NULL, completed_at = now(),
+        error_code = 'MEDIA_TOOLS_MISSING', error_message = 'x' WHERE id = '${job.id}';
+      UPDATE production_runs SET status = 'failed', completed_at = now() WHERE id = '${job.productionRunId}';
+      UPDATE content_items SET status = 'asset_review' WHERE id = '${w.contentId}';
+      COMMIT;`);
+    return { jobId: job.id, runId: job.productionRunId, bytes, assetId };
+  }
+
+  it('previews the delivered file and finishes it without a new charge, once', async () => {
+    const w = await approvedWorld();
+    const d = await deliveredClipJob(w);
+
+    const detail = await as('viewer', 'GET', `/generation-jobs/${d.jobId}`);
+    expect(detail.json).toMatchObject({
+      hasDeliveredOutput: true,
+      finishable: true,
+      recoverFromJobId: null,
+    });
+
+    const preview = await as('viewer', 'GET', `/generation-jobs/${d.jobId}/delivered-output`);
+    expect(preview.status).toBe(200);
+    expect(preview.headers.get('content-type')).toBe('video/mp4');
+    expect(preview.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(Buffer.from(preview.bytes).equals(Buffer.from(d.bytes))).toBe(true);
+    const part = await as('viewer', 'GET', `/generation-jobs/${d.jobId}/delivered-output`, {
+      headers: { range: 'bytes=0-3' },
+    });
+    expect(part.status).toBe(206);
+    expect(part.bytes.byteLength).toBe(4);
+    expect(
+      (await as('outsider', 'GET', `/generation-jobs/${d.jobId}/delivered-output`)).status,
+    ).toBe(404);
+
+    const res = await as('editor', 'POST', `/production-runs/${d.runId}/resume`, { body: {} });
+    expect(res.status).toBe(202);
+    const resumed = bodyOf<ResumeRunResponseDto>(res);
+    expect(resumed.skipped).toEqual([
+      { jobId: d.jobId, sceneId: w.sceneId, reason: 'finished_without_charge' },
+    ]);
+    const finish = resumed.run?.jobs[0];
+    expect(finish).toMatchObject({
+      kind: 'video_generation',
+      status: 'queued',
+      recoverFromJobId: d.jobId,
+    });
+    // It never calls a provider: nothing is reserved.
+    expect(await prisma.budgetReservation.count({ where: { jobId: finish?.id ?? '' } })).toBe(0);
+
+    const again = await as('editor', 'POST', `/production-runs/${d.runId}/resume`, { body: {} });
+    expect([again.status, codeOf(again)]).toEqual([409, 'NOTHING_TO_RESUME']);
+
+    // Once finished into an asset, the delivered file is the asset.
+    await simulateSuccessWithId(finish?.id ?? '', d.assetId);
+    const gone = await as('viewer', 'GET', `/generation-jobs/${d.jobId}/delivered-output`);
+    expect([gone.status, codeOf(gone)]).toEqual([410, 'ALREADY_FINISHED']);
+  });
+
+  it('answers 404 for a job without a delivered file', async () => {
+    const w = await approvedWorld();
+    const res = await as('viewer', 'GET', `/generation-jobs/${w.jobId}/delivered-output`);
+    expect(res.status).toBe(404);
+  });
+});
+
+/** Creates the asset a finish job would (with the reserved id) and ends the job. */
+async function simulateSuccessWithId(jobId: string, assetId: string): Promise<void> {
+  const job = await prisma.generationJob.findUniqueOrThrow({ where: { id: jobId } });
+  const paid = await prisma.generationJob.findUniqueOrThrow({
+    where: { id: job.recoverFromJobId ?? '' },
+  });
+  await prisma.$transaction(async (tx) => {
+    await tx.generationJob.update({
+      where: { id: jobId },
+      data: { status: 'running', attempt: 1, startedAt: new Date() },
+    });
+    await tx.asset.create({
+      data: {
+        id: assetId,
+        projectId: job.projectId,
+        contentItemId: job.contentItemId,
+        assetType: 'video',
+        sourceType: 'generated',
+        generationJobId: paid.id,
+        storyboardSceneId: job.storyboardSceneId,
+        storageKey: paid.stagedObjectKey ?? '',
+        mimeType: 'video/mp4',
+        sizeBytes: 24n,
+        checksumSha256: paid.stagedSha256 ?? '',
+        width: 360,
+        height: 640,
+        durationMs: 4000,
+        createdById: job.requestedById,
+      },
+    });
+    await tx.generationJob.update({
+      where: { id: jobId },
+      data: { status: 'succeeded', activeKey: null, completedAt: new Date() },
+    });
+  });
+}

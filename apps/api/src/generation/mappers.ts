@@ -1,6 +1,6 @@
 import { UsdAmount } from '@acf/ai-core';
 import { usdFromDecimal } from '@acf/ai-runtime';
-import type { ScriptContent } from '@acf/content-domain';
+import { isFinishable, type ScriptContent } from '@acf/content-domain';
 import type {
   GenerationJobDto,
   JobCostDto,
@@ -61,6 +61,10 @@ export function toJobDto(job: GenerationJob, modelKey: string, cost: JobCostDto)
     queuedAt: job.queuedAt.toISOString(),
     startedAt: job.startedAt?.toISOString() ?? null,
     completedAt: job.completedAt?.toISOString() ?? null,
+    deliveredAt: job.deliveredAt?.toISOString() ?? null,
+    hasDeliveredOutput: job.stagedObjectKey !== null,
+    finishable: isFinishable(job),
+    recoverFromJobId: job.recoverFromJobId,
   };
 }
 

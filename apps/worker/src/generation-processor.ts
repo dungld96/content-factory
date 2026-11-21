@@ -238,6 +238,10 @@ export class GenerationProcessor {
       if (breach) {
         return await this.failFinal(job, 'BUDGET_EXCEEDED', breach.message, breach.detail);
       }
+      if (job.kind === 'video_generation' && job.recoverFromJobId) {
+        // P3d R3: finishes a delivered clip; no provider call, no circuit change.
+        return stepOutcome(await this.media.finishVideoJob(job));
+      }
       if (job.kind === 'video_generation') {
         const step = stepOutcome(await this.media.submitVideo(job));
         await this.circuitSuccess(job);

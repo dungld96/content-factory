@@ -99,6 +99,14 @@ export const generationJobSchema = z
     queuedAt: isoDateTimeSchema,
     startedAt: isoDateTimeSchema.nullable(),
     completedAt: isoDateTimeSchema.nullable(),
+    /** P3d: when the provider delivered the paid output (clips, voice-overs); null otherwise. */
+    deliveredAt: isoDateTimeSchema.nullable(),
+    /** P3d: the delivered file is stored and can be previewed (`GET …/delivered-output`). */
+    hasDeliveredOutput: z.boolean(),
+    /** P3d: Resume finishes this failed job from its delivered file (no new charge). */
+    finishable: z.boolean(),
+    /** P3d: on a finish job, the failed job whose delivered output it completes. */
+    recoverFromJobId: z.uuid().nullable(),
   })
   .meta({ id: 'GenerationJob' });
 export type GenerationJobDto = z.infer<typeof generationJobSchema>;

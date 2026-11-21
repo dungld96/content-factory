@@ -553,3 +553,89 @@ describe('delivered output is kept when a later step fails (P3d R1, R2, R5)', ()
     expect(mock.submissions).toHaveLength(1);
   });
 });
+
+describe('finish jobs (P3d R3, R4)', () => {
+  /** A finish job for a failed, delivered job (what Resume creates). */
+  async function finishJobFor(failedId: string): Promise<string> {
+    const failed = await prisma.generationJob.findUniqueOrThrow({ where: { id: failedId } });
+    const row = await prisma.generationJob.create({
+      data: {
+        projectId: failed.projectId,
+        contentItemId: failed.contentItemId,
+        productionRunId: failed.productionRunId,
+        kind: failed.kind,
+        storyboardSceneId: failed.storyboardSceneId,
+        activeKey: `${failed.storyboardSceneId ?? ''}:${failed.kind}`,
+        idempotencyKey: `finish:${failed.id}`,
+        executionKey: failed.executionKey,
+        input: failed.input ?? {},
+        previousContentStatus: failed.previousContentStatus,
+        promptTemplateId: failed.promptTemplateId,
+        modelId: failed.modelId,
+        requestedById: failed.requestedById,
+        recoverFromJobId: failed.id,
+      },
+    });
+    return row.id;
+  }
+
+  it('finishes a delivered clip after FFprobe is installed: one submission in total', async () => {
+    const mock = videoMock();
+    const jobId = await newVideoJob();
+    const broken = build({ video: mock, tools: NO_PROBE });
+    await broken.process(jobId);
+    await drainPolls(broken, jobId);
+    const failed = await job(jobId);
+    expect(failed.errorCode).toBe('MEDIA_TOOLS_MISSING');
+
+    const finishId = await finishJobFor(jobId);
+    expect(await build({ video: mock }).process(finishId)).toMatchObject({ type: 'succeeded' });
+    expect(mock.submissions).toHaveLength(1);
+    const finished = await job(finishId);
+    expect(finished).toMatchObject({ status: 'succeeded' });
+    expect(finished.invocations).toHaveLength(0);
+    const [clip] = await prisma.asset.findMany({
+      where: { storyboardSceneId: iw.sceneIds[0] ?? '', assetType: 'video' },
+    });
+    expect(clip).toMatchObject({
+      id: failed.stagedAssetId,
+      storageKey: failed.stagedObjectKey,
+      generationJobId: jobId,
+      checksumSha256: failed.stagedSha256,
+    });
+  });
+
+  it('finishes a delivered voice-over without synthesizing again', async () => {
+    const mock = new MockTtsProvider({ providerKey: 'mock', renderAudio: audioRenderer() });
+    const [jobId] = await createMediaJobs(prisma, world, 'tts_generation', mw.ttsModelId, [
+      await ttsInput(prisma, iw, mw, iw.sceneIds[0] ?? ''),
+    ]);
+    await build({ tts: mock, tools: NO_PROBE }).process(jobId ?? '');
+    const finishId = await finishJobFor(jobId ?? '');
+    expect(await build({ tts: mock }).process(finishId)).toMatchObject({ type: 'succeeded' });
+    expect(mock.calls).toHaveLength(1);
+    const failed = await job(jobId ?? '');
+    expect(
+      await prisma.asset.findUnique({ where: { id: failed.stagedAssetId ?? '' } }),
+    ).toMatchObject({
+      assetType: 'audio',
+      generationJobId: jobId,
+    });
+  });
+
+  it('downloads a delivered clip again from the provider when it was never stored (free)', async () => {
+    const mock = videoMock();
+    const jobId = await newVideoJob();
+    const down = build({ video: mock, store: downStore() });
+    await down.process(jobId);
+    await drainPolls(down, jobId);
+    expect((await job(jobId)).errorCode).toBe('STORAGE_UNAVAILABLE');
+
+    const finishId = await finishJobFor(jobId);
+    expect(await build({ video: mock }).process(finishId)).toMatchObject({ type: 'succeeded' });
+    expect(mock.submissions).toHaveLength(1);
+    const finished = await job(finishId);
+    expect(finished.stagedObjectKey).not.toBeNull();
+    expect(await prisma.asset.count({ where: { id: finished.stagedAssetId ?? '' } })).toBe(1);
+  });
+});

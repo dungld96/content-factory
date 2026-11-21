@@ -268,6 +268,7 @@ Update `title`, `channelId` (or `null`), `targetPlatform`, `targetDurationSecond
 | `GET /content/:contentId/jobs` | The item's jobs, newest first (`queuedAt`, then id), without events; filters `kind`, `status`; paged (`limit`, `cursor`). Viewer |
 | `GET /generation-jobs/:jobId` | Status, attempts, events, sanitized error, cost (`reportedUsd`, `estimatedUsd`, `unknownCalls`) |
 | `POST /generation-jobs/:jobId/recheck` | Immediate, free status read of a running video job |
+| `GET /generation-jobs/:jobId/delivered-output` | Viewer (P3d). The paid clip or voice-over the job received, as stored **before** validation, for preview: the stored type, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`, single byte ranges. `404` when nothing was stored, `410 ALREADY_FINISHED` (`current.assetId`) once it became an asset |
 
 Runs are created by the generate endpoints below; every generate endpoint returns `202` with job
 IDs and never waits for the work. Clients poll the run or job.
@@ -280,7 +281,13 @@ resolution, seed and audio options; render: the same captions and music) through
 endpoint's planning, budget checks and reuse, in **one new run** whose `resumedFromRunId` names
 the old one. Skipped: `superseded` (a later job of the same stage and scope succeeded),
 `in_progress` (one is queued or running), `outcome_unknown` (ended `SUBMIT_OUTCOME_UNKNOWN` or
-`CALL_OUTCOME_UNKNOWN`; resumed only with `acceptPossibleDoubleCharge: true`). `202 { resumedFromRunId, run, skipped }`;
+`CALL_OUTCOME_UNKNOWN`, or `OUTPUT_NOT_STORED`: paid and lost; resumed only with
+`acceptPossibleDoubleCharge: true`), `finished_without_charge` (P3d: a clip or voice-over job that
+failed **after** its output was delivered, with `MEDIA_TOOLS_MISSING`, `STORAGE_UNAVAILABLE`,
+`WORKER_LOST` or `INTERNAL_ERROR`, gets a *finish* job in its own run: it validates and stores the
+delivered file, never calls the provider, reserves nothing and needs no confirmation; a second
+Resume is `409`). When only finish jobs were created, `run` is their run. Job DTOs carry
+`deliveredAt`, `hasDeliveredOutput`, `finishable` and `recoverFromJobId`. `202 { resumedFromRunId, run, skipped }`;
 `409 NOTHING_TO_RESUME` (skips in `error.current`) and every error of the underlying request
 (`402`/`409` budget, `409 ESTIMATE_CHANGED` for clips without `confirmedEstimateUsd`, ...).
 

@@ -46,6 +46,8 @@ import {
   type StoryboardScene,
 } from '@acf/database';
 
+import type { ByteRange, ObjectBody } from '@acf/storage';
+
 import type { Actor } from '../auth/actor.js';
 import { BudgetsService } from '../budgets/budgets.service.js';
 import { ApiError } from '../common/api-error.js';
@@ -675,6 +677,62 @@ export class VideosService {
         estimate,
       );
     }
+  }
+
+  /**
+   * P3d R7: the paid output a clip or voice-over job received, as stored before validation, for
+   * preview (viewer). 410 once it was finished into an asset.
+   */
+  async deliveredOutput(
+    actor: Actor,
+    jobId: string,
+    range: (sizeBytes: number) => ByteRange | undefined,
+  ): Promise<{
+    readonly mimeType: string;
+    readonly sha256Hex: string;
+    readonly sizeBytes: number;
+    readonly body: ObjectBody;
+    readonly range?: ByteRange;
+  }> {
+    const job = await this.prisma.client.generationJob.findUnique({ where: { id: jobId } });
+    if (!job) throw notFound('generation job');
+    await this.access.require(actor, job.projectId, 'viewer');
+    if (!job.stagedObjectKey || !job.stagedMimeType || !job.stagedAssetId || !job.stagedSha256) {
+      throw notFound('delivered output');
+    }
+    const finished = await this.prisma.client.asset.findUnique({
+      where: { id: job.stagedAssetId },
+      select: { id: true },
+    });
+    if (finished) {
+      throw new ApiError({
+        status: HttpStatus.GONE,
+        code: ApiErrorCode.AlreadyFinished,
+        message: 'This output was finished; open the asset instead.',
+        current: { assetId: finished.id },
+      });
+    }
+    const store = this.storage.require();
+    let head;
+    let body: ObjectBody | null = null;
+    let wanted: ByteRange | undefined;
+    try {
+      head = await store.head(job.stagedObjectKey);
+      if (head) {
+        wanted = range(head.sizeBytes);
+        body = await store.get(job.stagedObjectKey, wanted);
+      }
+    } catch (e) {
+      storageFailure(e);
+    }
+    if (!head || !body) throw notFound('delivered output');
+    return {
+      mimeType: job.stagedMimeType,
+      sha256Hex: job.stagedSha256,
+      sizeBytes: head.sizeBytes,
+      body,
+      ...(wanted ? { range: wanted } : {}),
+    };
   }
 
   /** Every keyframe must have its file in storage before paid work is queued. */

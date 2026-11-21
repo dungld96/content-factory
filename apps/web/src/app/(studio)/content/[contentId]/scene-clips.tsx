@@ -17,6 +17,7 @@ import { ApprovalPill, Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { mutate } from '@/lib/api-client';
 import { assetContentUrl } from '@/lib/asset-url';
+import { DeliveredOutputActions } from '@/components/delivered-output';
 import { formatSeconds, jobErrorText } from '@/lib/format';
 import { formatUsd } from '@/lib/money';
 
@@ -328,7 +329,8 @@ function JobLine(props: {
           ? ` · provider: ${progress.providerStatus} · ${String(progress.pollCount)} check(s)`
           : ' · submitting'
         : ''}
-      {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}
+      {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}{' '}
+      <DeliveredOutputActions job={job} canEdit={props.canEdit} />
       {props.canEdit && running && (
         <>
           {' '}

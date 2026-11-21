@@ -38,6 +38,11 @@ export const resumeSkipReasonSchema = z
     'superseded',
     /** A later job of the same stage and scope is queued or running. */
     'in_progress',
+    /**
+     * P3d: the job's paid output was delivered; it is finished from that file in its own run
+     * (no provider call, no cost, no confirmation).
+     */
+    'finished_without_charge',
   ])
   .meta({ id: 'ResumeSkipReason' });
 

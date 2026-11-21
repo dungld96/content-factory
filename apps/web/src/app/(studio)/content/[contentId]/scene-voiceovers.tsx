@@ -17,6 +17,7 @@ import { ApprovalPill, Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { mutate } from '@/lib/api-client';
 import { assetContentUrl } from '@/lib/asset-url';
+import { DeliveredOutputActions } from '@/components/delivered-output';
 import { formatSeconds, jobErrorText } from '@/lib/format';
 import { formatUsd } from '@/lib/money';
 
@@ -235,7 +236,8 @@ export function SceneVoiceoversPanel(props: {
                   <p role="status">
                     Voice-over job {job.status}
                     {job.attempt > 1 ? ` (attempt ${String(job.attempt)})` : ''}
-                    {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}
+                    {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}{' '}
+                    <DeliveredOutputActions job={job} canEdit={canEdit} />
                   </p>
                 )}
               </div>

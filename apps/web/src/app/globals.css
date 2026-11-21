@@ -2748,3 +2748,12 @@ input.filter {
   margin: 6px 0 0;
   padding-left: 18px;
 }
+
+/* P3d: preview / finish a delivered clip or voice-over. */
+.delivered-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+}

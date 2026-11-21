@@ -30,6 +30,7 @@ import {
 import type { GenerationJob, PrismaClient } from '@acf/database';
 import {
   DEFAULT_MEDIA_TOOLS,
+  AUDIO_LIMITS,
   inspectAudio,
   inspectVideoFile,
   MediaToolsMissingError,
@@ -556,6 +557,97 @@ export class MediaJobs {
     return { type: 'succeeded', versionId: id };
   }
 
+  // ------------------------------------------------------------------- finish jobs (P3d R3, R4)
+
+  /** The failed job whose delivered output a finish job completes. */
+  private async paidJobOf(job: GenerationJob): Promise<GenerationJob> {
+    const paid = job.recoverFromJobId
+      ? await this.deps.prisma.generationJob.findUnique({ where: { id: job.recoverFromJobId } })
+      : null;
+    if (!paid?.deliveredAt || paid.kind !== job.kind) {
+      throw new MediaPermanentError('INVALID_JOB_INPUT', 'the job to finish has no delivered output');
+    }
+    return paid;
+  }
+
+  /**
+   * Finishes a clip from its delivered file, or (when it was never stored) from the provider's
+   * copy: a download is a free read of a job already paid for (R4). Never submits.
+   */
+  async finishVideoJob(job: GenerationJob): Promise<MediaStepOutcome> {
+    const paid = await this.paidJobOf(job);
+    const input = videoJobInputSchema.parse(job.input);
+    if (stagedOf(paid)) return this.finishVideo(job, paid, input, null);
+    const videos = this.deps.videos;
+    if (!videos || !paid.providerKey || !paid.providerJobId) {
+      throw new MediaPermanentError(
+        'OUTPUT_NOT_STORED',
+        'the delivered clip was not stored and cannot be downloaded again; regenerate it',
+      );
+    }
+    if (paid.providerExpiresAt && paid.providerExpiresAt.getTime() <= this.now().getTime()) {
+      throw new MediaPermanentError(
+        'OUTPUT_EXPIRED',
+        'the provider no longer keeps the clip; regenerate it',
+      );
+    }
+    let bytes: Uint8Array;
+    try {
+      const download = await videos.download(
+        paid.providerKey,
+        paid.providerJobId,
+        0,
+        this.context(job, input.qualityTier),
+      );
+      bytes = await readStream(download.body, MAX_CLIP_BYTES);
+    } catch (error) {
+      if (isProviderError(error) && !error.retryable) {
+        throw new MediaPermanentError(
+          'OUTPUT_EXPIRED',
+          'the provider no longer keeps the clip; regenerate it',
+        );
+      }
+      throw error;
+    }
+    const staged = await this.stage(job, bytes, 'video');
+    if (staged === 'unsupported') {
+      return this.outcomes.failFinal(job, 'OUTPUT_INVALID', 'the clip failed validation: not an MP4, MOV or WebM video');
+    }
+    if (staged === 'not_stored') {
+      throw new MediaPermanentError(
+        'STORAGE_UNAVAILABLE',
+        'storage is still unavailable; finish again later (no new charge)',
+      );
+    }
+    const dir = await mkdtemp(path.join(tmpdir(), 'acf-clip-'));
+    try {
+      const file = path.join(dir, 'clip.bin');
+      await writeFile(file, bytes, { mode: 0o600 });
+      return await this.validateAndStoreVideo(job, paid, input, file, null, staged, null);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  /** Finishes a voice-over from its delivered file (never synthesizes). */
+  async finishTts(job: GenerationJob): Promise<string> {
+    const store = this.deps.store;
+    if (!store)
+      throw new MediaPermanentError('STORAGE_NOT_CONFIGURED', 'object storage is not configured');
+    const paid = await this.paidJobOf(job);
+    const staged = stagedOf(paid);
+    if (!staged) {
+      throw new MediaPermanentError(
+        'OUTPUT_NOT_STORED',
+        'the delivered voice-over was not stored; regenerate it',
+      );
+    }
+    const input = ttsJobInputSchema.parse(job.input);
+    const bytes = await readStaged(store, staged, AUDIO_LIMITS.maxBytes);
+    // The character count is on the paid job's invocation (ledger); not repeated here.
+    return this.validateAndStoreAudio(job, paid, input, bytes, staged, null);
+  }
+
   // ------------------------------------------------------------------- delivery (P3d)
 
   /**
@@ -619,6 +711,7 @@ export class MediaJobs {
     const store = this.deps.store;
     if (!store)
       throw new MediaPermanentError('STORAGE_NOT_CONFIGURED', 'object storage is not configured');
+    if (job.recoverFromJobId) return this.afterDelivery(() => this.finishTts(job));
     const input = ttsJobInputSchema.parse(job.input);
     await this.assertToolsBeforePaying();
     const model = await this.deps.prisma.aiModel.findUniqueOrThrow({
@@ -789,6 +882,18 @@ export function stagedOf(job: GenerationJob): StagedOutput | null {
     sha256Hex: job.stagedSha256,
     mimeType: job.stagedMimeType,
   };
+}
+
+/** Collects a download into memory, bounded like the clip download. */
+async function readStream(body: AsyncIterable<Uint8Array>, maxBytes: number): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for await (const chunk of body) {
+    total += chunk.byteLength;
+    if (total > maxBytes) throw new MediaPermanentError('OUTPUT_INVALID', 'clip larger than 200 MB');
+    chunks.push(chunk);
+  }
+  return new Uint8Array(Buffer.concat(chunks));
 }
 
 /** Reads a stored delivery and checks its checksum. */

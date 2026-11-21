@@ -352,6 +352,12 @@ const ROWS: Record<string, Row> = {
     body: (f) => ({ assetId: f.spareAssetId }),
     expect: [401, 404, 403, 409, 409],
   },
+  // P3d: the fixture's job has no delivered file (404 for members; outsiders cannot see the job).
+  'GET /generation-jobs/:jobId/delivered-output': {
+    method: 'GET',
+    path: (f) => `/generation-jobs/${f.jobId}/delivered-output`,
+    expect: [401, 404, 404, 404, 404],
+  },
   'POST /generation-jobs/:jobId/recheck': {
     method: 'POST',
     path: (f) => `/generation-jobs/${f.jobId}/recheck`,

@@ -1,8 +1,22 @@
-import { Controller, Get, HttpCode, Patch, Post, Put } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Patch,
+  Post,
+  Put,
+  Req,
+  Res,
+  StreamableFile,
+} from '@nestjs/common';
+import type { Request, Response } from 'express';
 import type { z } from 'zod';
 
 import {
+  ApiErrorCode,
   createVoiceProfileRequestSchema,
+  STREAMABLE_MEDIA_TYPES,
   generationJobSchema,
   jobIdParamsSchema,
   listVoiceProfilesQuerySchema,
@@ -39,6 +53,8 @@ import {
 } from '@acf/contracts';
 
 import { CurrentActor, type Actor } from '../auth/actor.js';
+import { ApiError } from '../common/api-error.js';
+import { parseRange, type RangeRequest } from '../common/http/range.js';
 import { Endpoint, ValidBody, ValidParams, ValidQuery } from '../common/http/endpoint.js';
 import { VideosService } from './videos.service.js';
 import { VoiceoversService } from './voiceovers.service.js';
@@ -144,6 +160,57 @@ export class MediaController {
     @ValidParams() params: JobParams,
   ): Promise<GenerationJobDto> {
     return this.videos.recheck(actor, params.jobId);
+  }
+
+  @Get('generation-jobs/:jobId/delivered-output')
+  @Endpoint({
+    summary:
+      'Stream the paid output a clip or voice-over job received, before validation (viewer; P3d)',
+    tags: ['videos'],
+    params: jobIdParamsSchema,
+    responses: {
+      200: { description: 'The file (206 for a byte range)', binary: STREAMABLE_MEDIA_TYPES },
+    },
+    errors: [400, 401, 404, 410, 416, 503],
+  })
+  async deliveredOutput(
+    @CurrentActor() actor: Actor,
+    @ValidParams() params: JobParams,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    const requested: { parsed: RangeRequest } = { parsed: { kind: 'none' } };
+    const out = await this.videos.deliveredOutput(actor, params.jobId, (size) => {
+      requested.parsed = parseRange(request.headers.range, size);
+      const p = requested.parsed;
+      return p.kind === 'range' ? { start: p.start, end: p.end } : undefined;
+    });
+    response.setHeader('Cache-Control', 'private, no-store');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.setHeader('Accept-Ranges', 'bytes');
+    if (requested.parsed.kind === 'unsatisfiable') {
+      out.body.stream.destroy();
+      response.setHeader('Content-Range', `bytes */${String(out.sizeBytes)}`);
+      throw new ApiError({
+        status: HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE,
+        code: ApiErrorCode.RangeNotSatisfiable,
+        message: 'The requested byte range is outside the file.',
+      });
+    }
+    response.setHeader('Content-Type', out.mimeType);
+    response.setHeader('Content-Disposition', 'inline');
+    if (out.range) {
+      const end = out.range.end ?? out.sizeBytes - 1;
+      response.status(206);
+      response.setHeader(
+        'Content-Range',
+        `bytes ${String(out.range.start)}-${String(end)}/${String(out.sizeBytes)}`,
+      );
+      response.setHeader('Content-Length', String(end - out.range.start + 1));
+    } else {
+      response.setHeader('Content-Length', String(out.sizeBytes));
+    }
+    return new StreamableFile(out.body.stream);
   }
 
   // ------------------------------------------------------------------- voice-overs

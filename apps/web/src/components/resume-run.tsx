@@ -14,6 +14,7 @@ const SKIP_TEXT: Readonly<Record<ResumeRunResponseDto['skipped'][number]['reason
   outcome_unknown: 'possibly charged already',
   superseded: 'already redone',
   in_progress: 'running again',
+  finished_without_charge: 'finished from the delivered file, no new charge',
 };
 
 interface Question {
@@ -28,7 +29,11 @@ interface Question {
  * (the clip estimate, unknown cost, a possible double charge) the dialog shows what it is and
  * the request is sent again with it.
  */
-export function ResumeRunButton(props: { readonly runId: string; readonly label?: string }) {
+export function ResumeRunButton(props: {
+  readonly runId: string;
+  readonly label?: string;
+  readonly className?: string;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +97,12 @@ export function ResumeRunButton(props: { readonly runId: string; readonly label?
 
   return (
     <>
-      <button type="button" className="btn ghost" disabled={busy} onClick={() => void resume()}>
+      <button
+        type="button"
+        className={props.className ?? 'btn ghost'}
+        disabled={busy}
+        onClick={() => void resume()}
+      >
         <span aria-hidden="true">↻</span> {props.label ?? 'Resume'}
       </button>
       {error && (

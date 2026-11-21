@@ -138,6 +138,9 @@ export const ApiErrorCode = {
   // --- P2b: bindings to Library assets ---
   /** A scene reference is not an active, non-rejected reference or image of the project. */
   ReferenceInvalid: 'REFERENCE_INVALID',
+  // --- P3d: delivered output ---
+  /** The delivered file was already finished into an asset (`current.assetId`). */
+  AlreadyFinished: 'ALREADY_FINISHED',
   /** An active collection of the project already has this name. */
   NameTaken: 'NAME_TAKEN',
 

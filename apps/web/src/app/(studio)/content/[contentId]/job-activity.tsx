@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { GenerationJobDetailDto, GenerationJobDto, Page } from '@acf/contracts';
 
 import { CancelRunButton } from '@/components/cancel-run';
+import { DeliveredOutputActions } from '@/components/delivered-output';
 import { JobErrorLine } from '@/components/job-error';
 import { LocalTime, RelativeTime } from '@/components/local-time';
 import { ResumeRunButton } from '@/components/resume-run';
@@ -204,9 +205,12 @@ function JobRow(props: {
           </ol>
         )}
       </details>
-      {props.canEdit && (job.status === 'failed' || job.status === 'canceled') && (
-        <ResumeRunButton runId={job.productionRunId} />
-      )}
+      <DeliveredOutputActions job={job} canEdit={props.canEdit} />
+      {props.canEdit &&
+        !job.finishable &&
+        (job.status === 'failed' || job.status === 'canceled') && (
+          <ResumeRunButton runId={job.productionRunId} />
+        )}
       {props.canEdit && ACTIVE.has(job.status) && (
         <CancelRunButton
           runId={job.productionRunId}
