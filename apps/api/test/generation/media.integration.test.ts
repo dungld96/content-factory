@@ -813,3 +813,44 @@ async function simulateSuccessWithId(jobId: string, assetId: string): Promise<vo
     });
   });
 }
+
+describe('image listing shows image jobs only (UX review D1)', () => {
+  it('ignores the clip and voice-over jobs of the same scene', async () => {
+    const w = await approvedWorld();
+    await withKeyframe(w);
+    const model = await prisma.aiModel.findFirstOrThrow({
+      where: { mediaConstraints: { path: ['kind'], equals: 'video' }, provider: { key: 'mock' } },
+    });
+    const run = await prisma.productionRun.create({
+      data: {
+        projectId: w.projectId,
+        contentItemId: w.contentId,
+        requestedById: ids['editor'] ?? '',
+      },
+    });
+    await prisma.generationJob.create({
+      data: {
+        projectId: w.projectId,
+        contentItemId: w.contentId,
+        productionRunId: run.id,
+        kind: 'video_generation',
+        storyboardSceneId: w.sceneId,
+        activeKey: `${w.sceneId}:video_generation`,
+        idempotencyKey: `d1-${run.id}`,
+        executionKey: 'd'.repeat(64),
+        input: { sceneId: w.sceneId },
+        previousContentStatus: 'asset_review',
+        promptTemplateId: 'video.v1',
+        modelId: model.id,
+        requestedById: ids['editor'] ?? '',
+      },
+    });
+    const res = await as('viewer', 'GET', `/storyboards/${w.storyboardId}/images`);
+    expect(res.status).toBe(200);
+    const scenes = (
+      res.json as { scenes: { lastJob: { kind: string } | null; activeJob: unknown }[] }
+    ).scenes;
+    expect(scenes[0]?.lastJob?.kind).toBe('image_generation');
+    expect(scenes[0]?.activeJob).toBeNull();
+  });
+});

@@ -294,7 +294,8 @@ export class ImagesService {
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       }),
       this.prisma.client.generationJob.findMany({
-        where: { storyboardSceneId: { in: sceneIds } },
+        // Only image jobs: a scene also has clip and voice-over jobs (UX review D1).
+        where: { storyboardSceneId: { in: sceneIds }, kind: 'image_generation' },
         include: { model: { select: { modelKey: true } } },
         orderBy: [{ queuedAt: 'desc' }, { id: 'desc' }],
       }),

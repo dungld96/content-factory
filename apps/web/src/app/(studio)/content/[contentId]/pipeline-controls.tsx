@@ -20,6 +20,7 @@ import { Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { errorText, fetchJson, mutate } from '@/lib/api-client';
 import { jobErrorText } from '@/lib/format';
+import { briefIssueText } from '@/lib/brief-labels';
 
 const TERMINAL = new Set(['succeeded', 'failed', 'canceled']);
 
@@ -69,7 +70,7 @@ export function BriefCheck({ contentId }: { readonly contentId: string }) {
         <ul role="alert">
           {result.errors.map((e) => (
             <li key={e.path}>
-              <Pill tone="red">Error</Pill> {e.path}: {e.message}
+              <Pill tone="red">Error</Pill> {briefIssueText(e)}
             </li>
           ))}
         </ul>
@@ -77,9 +78,7 @@ export function BriefCheck({ contentId }: { readonly contentId: string }) {
       {result.warnings.length > 0 && (
         <ul>
           {result.warnings.map((w) => (
-            <li key={w.path}>
-              {w.path}: {w.message}
-            </li>
+            <li key={w.path}>{briefIssueText(w)}</li>
           ))}
         </ul>
       )}
