@@ -189,6 +189,11 @@ export const listAssetsQuerySchema = z.strictObject({
   includeArchived: includeArchivedSchema,
   assetType: assetTypeSchema.optional(),
   contentItemId: z.uuid().optional(),
+  /** P2b L1: upload purpose (`metadata.purpose`). */
+  purpose: z.enum(['voiceover', 'music']).optional(),
+  approvalStatus: approvalStatusSchema.optional(),
+  /** Case-insensitive substring of the file name or label. */
+  q: z.string().trim().min(1).max(100).optional(),
 });
 
 export const LINEAGE_MAX_DEPTH = 50;

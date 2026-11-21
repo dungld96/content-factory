@@ -405,6 +405,9 @@ export class AssetsService {
       includeArchived: boolean;
       assetType?: AssetType | undefined;
       contentItemId?: string | undefined;
+      purpose?: 'voiceover' | 'music' | undefined;
+      approvalStatus?: AssetDto['approvalStatus'] | undefined;
+      q?: string | undefined;
     },
   ): Promise<Page<AssetDto>> {
     await this.access.require(actor, projectId, 'viewer');
@@ -414,6 +417,20 @@ export class AssetsService {
         ...(query.includeArchived ? {} : { archivedAt: null }),
         ...(query.assetType ? { assetType: query.assetType } : {}),
         ...(query.contentItemId ? { contentItemId: query.contentItemId } : {}),
+        ...(query.purpose ? { metadata: { path: ['purpose'], equals: query.purpose } } : {}),
+        ...(query.approvalStatus ? { approvalStatus: query.approvalStatus } : {}),
+        ...(query.q
+          ? {
+              AND: [
+                {
+                  OR: [
+                    { originalFilename: { contains: query.q, mode: 'insensitive' as const } },
+                    { label: { contains: query.q, mode: 'insensitive' as const } },
+                  ],
+                },
+              ],
+            }
+          : {}),
         ...keysetAfter(query.cursor),
       },
       orderBy: NEWEST_FIRST,

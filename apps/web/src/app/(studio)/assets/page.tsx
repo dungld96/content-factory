@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
-import type { AssetDto, ProjectDto } from '@acf/contracts';
+import type { AssetDto, Page, ProjectDto } from '@acf/contracts';
 
 import { UploadAssetButton } from '@/components/forms';
 import { QueryFilters } from '@/components/query-filters';
+import { apiGet } from '@/lib/api-server';
 import { param, type SearchParams } from '@/lib/content-filters';
 import { writableProjects } from '@/lib/project-options';
 import { apiGetAll } from '@/lib/workspace';
@@ -13,6 +14,8 @@ import { AssetBrowser, type AssetRow } from './asset-browser';
 
 export const metadata: Metadata = { title: 'Asset library · Content Studio' };
 export const dynamic = 'force-dynamic';
+
+const PAGE_SIZE = 60;
 
 const TYPES = [
   { value: 'reference', label: 'Reference images' },
@@ -37,32 +40,30 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
   }
   const projectId = param(query, 'project');
   const type = TYPES.find((t) => t.value === param(query, 'type'))?.value;
-  const q = param(query, 'q')?.toLocaleLowerCase();
+  const q = param(query, 'q')?.trim().slice(0, 100);
   const review = param(query, 'review') === 'pending';
   const scope = projects.data.items.filter((p) => !projectId || p.id === projectId);
+  // P2b L1: the API filters and pages; one page per project.
+  const filters = new URLSearchParams({ limit: String(PAGE_SIZE) });
+  if (type) filters.set('assetType', type);
+  if (review) filters.set('approvalStatus', 'pending');
+  if (q) filters.set('q', q);
   const lists = await Promise.all(
-    scope.map((p) =>
-      apiGetAll<AssetDto>(`/projects/${p.id}/assets${type ? `?assetType=${type}` : ''}`),
-    ),
+    scope.map((p) => apiGet<Page<AssetDto>>(`/projects/${p.id}/assets?${filters.toString()}`)),
   );
   const failed = lists.some((l) => l.kind !== 'ok');
+  const truncated = lists.some((l) => l.kind === 'ok' && l.data.page.nextCursor !== null);
   const assets: AssetRow[] = lists
     .flatMap((list, i) =>
       list.kind === 'ok'
-        ? list.data.items.map((a) => ({
+        ? list.data.data.map((a) => ({
             ...a,
             projectName: scope[i]?.name ?? '',
             canEdit: scope[i]?.role !== 'viewer' && scope[i]?.archivedAt === null,
           }))
         : [],
     )
-    .filter(
-      (a) =>
-        !q ||
-        (a.originalFilename ?? '').toLocaleLowerCase().includes(q) ||
-        (a.label ?? '').toLocaleLowerCase().includes(q),
-    )
-    .filter((a) => !review || (a.approvalStatus === 'pending' && a.archivedAt === null))
+
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const writable = writableProjects(projects.data.items);
 
@@ -102,6 +103,11 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
         count={`${String(assets.length)} asset${assets.length === 1 ? '' : 's'}`}
       />
 
+      {truncated && (
+        <p className="muted small-text" role="status">
+          Showing the newest {PAGE_SIZE} assets per project. Search or filter to find older ones.
+        </p>
+      )}
       {failed && (
         <p className="notice error" role="alert">
           Some projects’ assets could not be loaded.

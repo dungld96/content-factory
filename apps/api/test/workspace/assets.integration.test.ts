@@ -126,6 +126,39 @@ describe('registration', () => {
     });
   });
 
+  it('filters by purpose, review state and text on the server (P2b L1)', async () => {
+    const f = await ctx.fixture();
+    const mk = (
+      name: string,
+      metadata: Record<string, string>,
+      approvalStatus: 'pending' | 'approved',
+    ) =>
+      ctx.prisma.asset.create({
+        data: {
+          projectId: f.projectId,
+          assetType: 'audio',
+          sourceType: 'upload',
+          storageKey: `projects/${f.projectId}/assets/p2b/${name}`,
+          mimeType: 'audio/mpeg',
+          sizeBytes: 10n,
+          checksumSha256: 'b'.repeat(64),
+          originalFilename: name,
+          metadata,
+          approvalStatus,
+          createdById: ctx.ids['editor'] ?? '',
+        },
+      });
+    const music = await mk('Calm Piano.mp3', { purpose: 'music' }, 'approved');
+    const voice = await mk('narration-1.mp3', { purpose: 'voiceover' }, 'pending');
+    const list = async (query: string) =>
+      bodyOf<Page<AssetDto>>(
+        await ctx.as('viewer', 'GET', `/projects/${f.projectId}/assets?${query}`),
+      ).data.map((a) => a.id);
+    expect(await list('purpose=music')).toEqual([music.id]);
+    expect(await list('assetType=audio&approvalStatus=pending')).toEqual([voice.id]);
+    expect(await list('q=piano')).toEqual([music.id]);
+  });
+
   it('filters by asset type and paginates', async () => {
     const f = await ctx.fixture();
     await register(f.projectId, {
