@@ -67,6 +67,7 @@ import { ZodError, type z } from 'zod';
 
 import type { JobStore } from './job-store.js';
 import type { Logger } from './logger.js';
+import type { MediaToolsGate } from './media-tools-gate.js';
 import {
   MediaDiscardedError,
   MediaJobs,
@@ -106,6 +107,8 @@ export interface ProcessorDeps {
   readonly schedulePoll?: (jobId: string, pollCount: number, delayMs: number) => Promise<void>;
   /** FFprobe/FFmpeg locations (M5a). */
   readonly mediaTools?: MediaTools;
+  /** FFmpeg/FFprobe check before paid media calls (P3d R6); the worker always passes one. */
+  readonly mediaToolsGate?: MediaToolsGate;
   /** Ceiling per FFmpeg step of a render (M6, `RENDER_TIMEOUT_MS`). */
   readonly renderStepTimeoutMs?: number;
   /** Factor applied to the video poll schedule (tests and E2E). */
@@ -177,6 +180,7 @@ export class GenerationProcessor {
         tts: deps.tts,
         schedulePoll: deps.schedulePoll,
         tools: deps.mediaTools,
+        toolsGate: deps.mediaToolsGate,
         pollScale: deps.videoPollScale,
         logger: deps.logger,
       },

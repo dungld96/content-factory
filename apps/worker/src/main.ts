@@ -50,6 +50,7 @@ import {
   scheduleVideoPoll,
   startGenerationWorker,
 } from './queues.js';
+import { MediaToolsGate } from './media-tools-gate.js';
 import { Reconciler } from './reconciler.js';
 
 const LEVELS: Readonly<Record<string, LogLevel>> = {
@@ -146,6 +147,18 @@ export async function startWorker(
     });
   }
 
+  // P3d R6: say clearly at start when FFmpeg/FFprobe is missing; paid media jobs are refused
+  // (before the provider is called) until it is installed.
+  const toolsGate = new MediaToolsGate(mediaTools(env));
+  const toolStatus = await toolsGate.status();
+  if (toolStatus.ffmpeg === null || toolStatus.ffprobe === null) {
+    logger.log('error', 'media_tools_missing', {
+      ffmpeg: toolStatus.ffmpeg ?? 'missing',
+      ffprobe: toolStatus.ffprobe ?? 'missing',
+      help: 'Install FFmpeg (docs/LOCAL_DEVELOPMENT.md) or set FFMPEG_PATH / FFPROBE_PATH. Clip, voice-over and render jobs fail until then; nothing is charged.',
+    });
+  }
+
   const circuits = new CircuitBreaker(prisma, {
     onTransition: (t) => {
       const msg =
@@ -174,6 +187,7 @@ export async function startWorker(
     schedulePoll: (jobId, pollCount, delayMs) =>
       scheduleVideoPoll(queues, jobId, pollCount, delayMs),
     mediaTools: mediaTools(env),
+    mediaToolsGate: toolsGate,
     videoPollScale: env.WORKER_VIDEO_POLL_SCALE,
     renderStepTimeoutMs: env.RENDER_TIMEOUT_MS,
     store,
@@ -245,6 +259,8 @@ export async function startWorker(
     videoProviders: [...videoProviders.keys()].join(',') || '(none configured)',
     ttsProviders: [...ttsProviders.keys()].join(',') || '(none configured)',
     storage: store ? 'configured' : 'not configured',
+    ffmpeg: toolStatus.ffmpeg ?? 'missing',
+    ffprobe: toolStatus.ffprobe ?? 'missing',
   });
 
   return {

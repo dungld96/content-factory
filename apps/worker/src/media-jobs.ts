@@ -39,6 +39,7 @@ import { assetObjectKey, uuidv7, type ObjectStore } from '@acf/storage';
 
 import type { JobStore } from './job-store.js';
 import type { Logger } from './logger.js';
+import type { MediaToolsGate } from './media-tools-gate.js';
 
 /** Outcomes of media steps that are not plain success (the processor maps them to BullMQ). */
 export type MediaStepOutcome =
@@ -71,6 +72,8 @@ export interface MediaJobsDeps {
   readonly schedulePoll?:
     ((jobId: string, pollCount: number, delayMs: number) => Promise<void>) | undefined;
   readonly tools?: MediaTools | undefined;
+  /** Checked before every paid clip or TTS call (P3d R6); absent in tests that stub the tools. */
+  readonly toolsGate?: MediaToolsGate | undefined;
   readonly logger: Logger;
   readonly now?: (() => Date) | undefined;
   /** Factor applied to the poll schedule (`WORKER_VIDEO_POLL_SCALE`; tests and E2E only). */
@@ -102,6 +105,17 @@ export class MediaJobs {
 
   private pollDelay(pollCount: number): number {
     return Math.round(videoPollDelayMs(pollCount) * (this.deps.pollScale ?? 1));
+  }
+
+  /** Refuses the job before its paid call while FFmpeg or FFprobe is missing (P3d R6). */
+  private async assertToolsBeforePaying(): Promise<void> {
+    const missing = await this.deps.toolsGate?.missing();
+    if (missing) {
+      throw new MediaPermanentError(
+        'MEDIA_TOOLS_MISSING',
+        `${missing} is not installed on the worker; nothing was sent to the provider`,
+      );
+    }
   }
 
   private now(): Date {
@@ -164,6 +178,7 @@ export class MediaJobs {
     if (!videos)
       throw new MediaPermanentError('NO_ELIGIBLE_MODEL', 'no video providers are configured');
     const input = videoJobInputSchema.parse(job.input);
+    await this.assertToolsBeforePaying();
     const request = await this.request(job, input);
     await this.deps.jobs.recordPrompt(job.id, `### ${VIDEO_PROMPT_TEMPLATE_ID}\n${request.prompt}`);
     let submission;
@@ -484,6 +499,7 @@ export class MediaJobs {
     if (!store)
       throw new MediaPermanentError('STORAGE_NOT_CONFIGURED', 'object storage is not configured');
     const input = ttsJobInputSchema.parse(job.input);
+    await this.assertToolsBeforePaying();
     const model = await this.deps.prisma.aiModel.findUniqueOrThrow({
       where: { id: job.modelId },
       select: { modelKey: true },

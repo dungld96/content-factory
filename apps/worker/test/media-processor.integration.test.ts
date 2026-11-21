@@ -14,7 +14,7 @@ import { MockTtsProvider, MockVideoProvider } from '@acf/ai-core/testing';
 import { ImageService, LlmService, ModelCatalog, TtsService, VideoService } from '@acf/ai-runtime';
 import { VIDEO_POLL_JOB_NAME, type DeadLetterPayload } from '@acf/content-domain';
 import type { PrismaClient } from '@acf/database';
-import { probeFile } from '@acf/media';
+import { DEFAULT_MEDIA_TOOLS, probeFile } from '@acf/media';
 import { readAll, sha256Hex, type ObjectStore } from '@acf/storage';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -22,6 +22,7 @@ import path from 'node:path';
 
 import { GenerationProcessor } from '../src/generation-processor.js';
 import { JobStore } from '../src/job-store.js';
+import { MediaToolsGate } from '../src/media-tools-gate.js';
 import { silentLogger } from '../src/logger.js';
 import { audioRenderer, clipRenderer } from '../src/mock-media.js';
 import { appPrisma, createWorld, migratorPrisma, reset, type World } from './support/fixtures.js';
@@ -43,7 +44,9 @@ let mw: MediaWorld;
 let deadLetters: DeadLetterPayload[];
 let polls: { jobId: string; pollCount: number; delayMs: number }[];
 
-function build(options: { video?: VideoProvider; tts?: TtsProvider } = {}) {
+function build(
+  options: { video?: VideoProvider; tts?: TtsProvider; toolsGate?: MediaToolsGate } = {},
+) {
   const videos = new Map<string, VideoProvider>(options.video ? [['mock', options.video]] : []);
   const ttsProviders = new Map<string, TtsProvider>(options.tts ? [['mock', options.tts]] : []);
   const catalog = new ModelCatalog(prisma, new Map(), new Map(), videos, ttsProviders);
@@ -65,8 +68,15 @@ function build(options: { video?: VideoProvider; tts?: TtsProvider } = {}) {
     },
     logger: silentLogger,
     retryDelay: () => 0,
+    ...(options.toolsGate ? { mediaToolsGate: options.toolsGate } : {}),
   });
 }
+
+/** A tools check that reports FFprobe missing (P3d R6). */
+const noProbeGate = () =>
+  new MediaToolsGate(DEFAULT_MEDIA_TOOLS, () =>
+    Promise.resolve({ ffmpeg: 'ffmpeg version 7', ffprobe: null }),
+  );
 
 const videoMock = (options: ConstructorParameters<typeof MockVideoProvider>[0] = {}) =>
   new MockVideoProvider({ providerKey: 'mock', renderClip: clipRenderer(), ...options });
@@ -406,5 +416,45 @@ describe('TTS jobs', () => {
     const row = await job(jobId ?? '');
     expect(row).toMatchObject({ status: 'failed', attempt: 1, errorCode: 'CALL_OUTCOME_UNKNOWN' });
     expect(row.invocations.map((i) => i.status)).toEqual(['outcome_unknown']);
+  });
+});
+
+describe('missing FFmpeg/FFprobe (P3d R6)', () => {
+  it('refuses a clip before submitting it: no provider call, nothing charged', async () => {
+    const mock = videoMock();
+    const jobId = await newVideoJob();
+    expect(await build({ video: mock, toolsGate: noProbeGate() }).process(jobId)).toEqual({
+      type: 'failed',
+      errorCode: 'MEDIA_TOOLS_MISSING',
+    });
+    expect(mock.submissions).toHaveLength(0);
+    const row = await job(jobId);
+    expect(row).toMatchObject({ status: 'failed', errorCode: 'MEDIA_TOOLS_MISSING' });
+    expect(row.errorMessage).toContain('nothing was sent to the provider');
+    expect(row.invocations).toHaveLength(0);
+  });
+
+  it('refuses a voice-over before synthesizing it', async () => {
+    const mock = new MockTtsProvider({ providerKey: 'mock', renderAudio: audioRenderer() });
+    const [jobId] = await createMediaJobs(prisma, world, 'tts_generation', mw.ttsModelId, [
+      await ttsInput(prisma, iw, mw, iw.sceneIds[0] ?? ''),
+    ]);
+    expect(await build({ tts: mock, toolsGate: noProbeGate() }).process(jobId ?? '')).toEqual({
+      type: 'failed',
+      errorCode: 'MEDIA_TOOLS_MISSING',
+    });
+    expect(mock.calls).toHaveLength(0);
+    expect((await job(jobId ?? '')).invocations).toHaveLength(0);
+  });
+
+  it('lets the job through once the tools are there', async () => {
+    const mock = new MockTtsProvider({ providerKey: 'mock', renderAudio: audioRenderer() });
+    const [jobId] = await createMediaJobs(prisma, world, 'tts_generation', mw.ttsModelId, [
+      await ttsInput(prisma, iw, mw, iw.sceneIds[0] ?? ''),
+    ]);
+    const gate = new MediaToolsGate(DEFAULT_MEDIA_TOOLS);
+    expect(await build({ tts: mock, toolsGate: gate }).process(jobId ?? '')).toMatchObject({
+      type: 'succeeded',
+    });
   });
 });

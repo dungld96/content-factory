@@ -181,6 +181,31 @@ export async function mediaToolsAvailable(
   }
 }
 
+/** Version lines of FFmpeg and FFprobe; null for a tool that cannot be executed (P3d R6). */
+export interface MediaToolsStatus {
+  readonly ffmpeg: string | null;
+  readonly ffprobe: string | null;
+}
+
+/** Runs `-version` on both tools. Never throws: a missing or failing tool reads as null. */
+export async function checkMediaTools(
+  tools: MediaTools = DEFAULT_MEDIA_TOOLS,
+): Promise<MediaToolsStatus> {
+  const version = async (binary: string): Promise<string | null> => {
+    try {
+      const { stdout } = await runTool(binary, ['-version'], Math.min(tools.timeoutMs, 10_000));
+      return stdout.split('\n')[0]?.trim() || 'unknown version';
+    } catch {
+      return null;
+    }
+  };
+  const [ffmpeg, ffprobe] = await Promise.all([
+    version(tools.ffmpegPath),
+    version(tools.ffprobePath),
+  ]);
+  return { ffmpeg, ffprobe };
+}
+
 /** Writes bytes to a private temporary file, runs `fn` on it, and always removes it. */
 export async function withTempFile<T>(
   bytes: Uint8Array,

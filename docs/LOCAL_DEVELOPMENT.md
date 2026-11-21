@@ -14,7 +14,35 @@ Every command runs from the repository root.
 FFmpeg validates audio and video, renders the final video, and lets the mock providers make real
 test files. Install it with your package manager (`apt-get install ffmpeg`, `brew install ffmpeg`).
 Without it, media features answer `503 MEDIA_TOOLS_MISSING`; set `FFPROBE_PATH`/`FFMPEG_PATH` if
-the binaries are not on `PATH`.
+the binaries are not on `PATH`. The worker checks both tools when it starts and before every paid
+clip or voice-over call: while one is missing, those jobs end with `MEDIA_TOOLS_MISSING` **before**
+anything is sent to a provider, so nothing is charged. After installing, resume the job; the
+worker needs no restart.
+
+### Windows (`pnpm dev`, no Docker for the apps)
+
+The apps run natively on Windows; only PostgreSQL, Redis and SeaweedFS need Docker Desktop (or
+native installs listening on the ports in `.env`).
+
+1. Install FFmpeg (includes FFprobe), in PowerShell:
+
+   ```powershell
+   winget install --id Gyan.FFmpeg -e
+   ```
+
+   Open a **new** terminal so `PATH` is refreshed, then check `ffmpeg -version` and
+   `ffprobe -version`.
+2. If the tools are not on `PATH` (portable ZIP, or `winget` without a shell restart), set full
+   paths in `.env`, with forward slashes:
+
+   ```dotenv
+   FFMPEG_PATH=C:/ffmpeg/bin/ffmpeg.exe
+   FFPROBE_PATH=C:/ffmpeg/bin/ffprobe.exe
+   ```
+3. Check the render pipeline end to end: `pnpm media:selftest` (prints `✔ render self-test
+   passed`).
+4. Start the worker (`pnpm dev:worker`). Its start-up log shows the FFmpeg and FFprobe versions,
+   or a `media_tools_missing` error with what to fix.
 
 ## 2. First-time setup
 
@@ -257,3 +285,5 @@ Behind an HTTPS proxy, Node's `fetch` (catalog import, smoke tests) needs `NODE_
 - **Generation answers "No usable model for this task"**: no enabled route; run `pnpm db:seed` or
   set a route.
 - **Jobs stay queued**: the worker is not running (`pnpm dev:worker`).
+- **Clip or voice-over fails with "FFmpeg or FFprobe is not installed"**: see Windows in §1 (or
+  install with your package manager), then Resume. Nothing was sent to the provider.

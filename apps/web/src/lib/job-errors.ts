@@ -80,7 +80,10 @@ const ERRORS: Readonly<
   STORAGE_UNAVAILABLE: { text: 'File storage was unavailable. Try again.', group: 'retry' },
   CHECKSUM_MISMATCH: { text: 'A stored file was damaged. Try again.', group: 'retry' },
   OBJECT_TOO_LARGE: { text: 'The file is too large to store.', group: 'input' },
-  MEDIA_TOOLS_MISSING: { text: 'FFmpeg is not installed on the worker.', group: 'operator' },
+  MEDIA_TOOLS_MISSING: {
+    text: 'FFmpeg or FFprobe is not installed on the worker. Install it (see the Windows guide in docs/LOCAL_DEVELOPMENT.md), then resume.',
+    group: 'operator',
+  },
   SUBMIT_OUTCOME_UNKNOWN: {
     text: 'The submission could not be confirmed. Resuming may be charged twice.',
     group: 'charged',
