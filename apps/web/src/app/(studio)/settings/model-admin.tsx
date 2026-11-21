@@ -10,6 +10,7 @@ import { Modal } from '@/components/modal';
 import { Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { errorText, mutate } from '@/lib/api-client';
+import { countedLines } from '@/lib/format';
 
 const CATALOGS = [
   { id: 'llm', label: 'Text (LLM)' },
@@ -175,9 +176,10 @@ export function ImportModelsPanel() {
                 <Pill tone="red">Cannot import</Pill>
               )}
               <div className="small-text">{e.summary ?? e.reason}</div>
-              {[...e.warnings, ...e.detail].map((w) => (
-                <div key={w} className="small-text muted">
-                  {w}
+              {countedLines([...e.warnings, ...e.detail]).map((w) => (
+                <div key={w.text} className="small-text muted">
+                  {w.text}
+                  {w.count > 1 ? ` (×${String(w.count)})` : ''}
                 </div>
               ))}
             </li>

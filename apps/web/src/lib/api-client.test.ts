@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { mutate } from './api-client';
 
-vi.mock('./csrf-client', () => ({ csrfToken: () => Promise.resolve('t') }));
+const forget = vi.fn();
+vi.mock('./csrf-client', () => ({
+  csrfToken: () => Promise.resolve('t'),
+  forgetCsrfToken: () => {
+    forget();
+  },
+}));
 
 const refused = (status: number, code: string) =>
   Response.json(
@@ -56,5 +62,33 @@ describe('mutate: budget confirmation (M7 §3)', () => {
     expect(r).toMatchObject({ ok: false, status: 402, code: 'BUDGET_EXCEEDED' });
     expect(confirm).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});
+
+describe('mutate: stale CSRF token', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    forget.mockReset();
+  });
+
+  it('refetches the token and resends once', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(refused(403, 'CSRF_INVALID'))
+      .mockResolvedValueOnce(Response.json({ ok: 1 }, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await mutate('POST', '/x/validate')).toMatchObject({ ok: true, status: 200 });
+    expect(forget).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up after one resend', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(refused(403, 'CSRF_INVALID'))
+      .mockResolvedValueOnce(refused(403, 'CSRF_INVALID'));
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await mutate('POST', '/x/validate')).toMatchObject({ ok: false, status: 403 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

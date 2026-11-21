@@ -73,3 +73,17 @@ export const JOB_KIND_LABEL: Readonly<Record<string, string>> = {
   tts_generation: 'Voice-over',
   render: 'Render',
 };
+
+/**
+ * Identical lines once each, in first-seen order, with how often they occurred: a model can list
+ * the same unimported price override several times (e.g. per weekday window).
+ */
+export function countedLines(lines: readonly string[]): { text: string; count: number }[] {
+  const out: { text: string; count: number }[] = [];
+  for (const text of lines) {
+    const seen = out.find((l) => l.text === text);
+    if (seen) seen.count += 1;
+    else out.push({ text, count: 1 });
+  }
+  return out;
+}

@@ -1,6 +1,6 @@
 'use client';
 
-import { csrfToken } from './csrf-client';
+import { csrfToken, forgetCsrfToken } from './csrf-client';
 
 export interface MutationResult<T> {
   readonly ok: boolean;
@@ -43,7 +43,13 @@ export async function mutate<T>(
   /** Extra request headers, e.g. `If-Match` for optimistic concurrency. */
   headers: Readonly<Record<string, string>> = {},
 ): Promise<MutationResult<T>> {
-  const first = await send<T>(method, path, body, headers);
+  let first = await send<T>(method, path, body, headers);
+  // A stale in-memory token (e.g. after a hot reload or a new session): refetch once and resend.
+  // The server refused the request before handling it, so resending is safe.
+  if (first.code === 'CSRF_INVALID') {
+    forgetCsrfToken();
+    first = await send<T>(method, path, body, headers);
+  }
   const plain = typeof body === 'object' && body !== null && !Array.isArray(body);
   if (
     first.code === 'BUDGET_CONFIRMATION_REQUIRED' &&

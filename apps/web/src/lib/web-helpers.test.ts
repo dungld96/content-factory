@@ -8,7 +8,7 @@ import {
   statusInfo,
   weeklyCreation,
 } from './content-status';
-import { initials, specLabel } from './format';
+import { countedLines, initials, specLabel } from './format';
 import { addUsd, formatUsd, sumJobCosts } from './money';
 
 describe('money', () => {
@@ -98,6 +98,13 @@ describe('content status', () => {
 });
 
 describe('format', () => {
+  it('counts repeated lines once each, in order (unique React keys)', () => {
+    expect(countedLines(['a', 'b', 'a', 'a'])).toEqual([
+      { text: 'a', count: 3 },
+      { text: 'b', count: 1 },
+    ]);
+  });
+
   it('builds initials and specs', () => {
     expect(initials('Demo Studio')).toBe('DS');
     expect(initials('studio')).toBe('ST');
