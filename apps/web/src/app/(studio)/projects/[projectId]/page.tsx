@@ -69,6 +69,9 @@ export default async function ProjectPage(props: {
           <Link className="btn" href={`/projects/${projectId}/costs`}>
             <span aria-hidden="true">$</span> Costs
           </Link>
+          <Link className="btn" href={`/projects/${projectId}/brand`}>
+            Characters &amp; environments
+          </Link>
           <Link className="btn" href={`/assets?project=${projectId}`}>
             <span aria-hidden="true">▧</span> Assets
           </Link>

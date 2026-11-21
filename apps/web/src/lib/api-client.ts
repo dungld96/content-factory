@@ -40,18 +40,22 @@ export async function mutate<T>(
   method: 'POST' | 'PATCH' | 'PUT',
   path: string,
   body?: unknown,
+  /** Extra request headers, e.g. `If-Match` for optimistic concurrency. */
+  headers: Readonly<Record<string, string>> = {},
 ): Promise<MutationResult<T>> {
-  const first = await send<T>(method, path, body);
+  const first = await send<T>(method, path, body, headers);
   const plain = typeof body === 'object' && body !== null && !Array.isArray(body);
   if (
     first.code === 'BUDGET_CONFIRMATION_REQUIRED' &&
     (body === undefined || plain) &&
     confirmOverBudget(first.message ?? 'This request exceeds a soft budget.')
   ) {
-    return send<T>(method, path, {
-      ...((body ?? {}) as Record<string, unknown>),
-      acceptOverBudget: true,
-    });
+    return send<T>(
+      method,
+      path,
+      { ...((body ?? {}) as Record<string, unknown>), acceptOverBudget: true },
+      headers,
+    );
   }
   return first;
 }
@@ -59,13 +63,15 @@ export async function mutate<T>(
 async function send<T>(
   method: 'POST' | 'PATCH' | 'PUT',
   path: string,
-  body?: unknown,
+  body: unknown,
+  extra: Readonly<Record<string, string>>,
 ): Promise<MutationResult<T>> {
   try {
     const token = await csrfToken();
     const res = await fetch(`/api/v1${path}`, {
       method,
       headers: {
+        ...extra,
         'content-type': 'application/json',
         ...(token ? { 'x-csrf-token': token } : {}),
       },
@@ -152,4 +158,9 @@ function detailsOf(value: unknown): { path: string; message: string }[] {
       ? [{ path: typeof path === 'string' ? path : '', message }]
       : [];
   });
+}
+
+/** The weak ETag the API sets on mutable resources (`W/"<updatedAt epoch-ms>"`, API spec §12). */
+export function etagOf(updatedAt: string): string {
+  return `W/"${String(Date.parse(updatedAt))}"`;
 }
