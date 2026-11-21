@@ -172,6 +172,47 @@ describe('video job submission (decision V3)', () => {
   });
 });
 
+describe('delivered output (P3d)', () => {
+  const running = `UPDATE generation_jobs SET status = 'running', attempt = 1 WHERE id = '${TTS}'`;
+  const staged = `staged_asset_id = '${INV}', staged_object_key = 'projects/x/assets/y/z.mp3',
+    staged_sha256 = '${'a'.repeat(64)}', staged_mime_type = 'audio/mpeg'`;
+
+  it('records a delivery once and never rewrites it', async () => {
+    expect(
+      await fails(
+        `${running}; UPDATE generation_jobs SET delivered_at = now(), ${staged} WHERE id = '${TTS}'`,
+      ),
+    ).toBeNull();
+    for (const change of [
+      `delivered_at = now() + interval '1 minute'`,
+      `staged_object_key = 'other'`,
+      `staged_sha256 = '${'b'.repeat(64)}'`,
+    ]) {
+      expect(
+        await fails(`${running}; UPDATE generation_jobs SET delivered_at = now(), ${staged} WHERE id = '${TTS}';
+          UPDATE generation_jobs SET ${change} WHERE id = '${TTS}'`),
+        change,
+      ).toBe('AC011');
+    }
+  });
+
+  it('requires a complete staged record with a delivery, on media jobs only', async () => {
+    expect(
+      await fails(
+        `${running}; UPDATE generation_jobs SET staged_object_key = 'k' WHERE id = '${TTS}'`,
+      ),
+    ).toBe('23514');
+    expect(
+      await fails(`${running}; UPDATE generation_jobs SET ${staged} WHERE id = '${TTS}'`),
+    ).toBe('23514');
+    expect(
+      await fails(`${job('61000000-0000-7000-8000-00000000000a', 'script_generation', 'script.v1')};
+        UPDATE generation_jobs SET status = 'running', attempt = 1, delivered_at = now()
+        WHERE id = '61000000-0000-7000-8000-00000000000a'`),
+    ).toBe('23514');
+  });
+});
+
 describe('asset lineage', () => {
   it('accepts the keyframe role for clip inputs', async () => {
     expect(

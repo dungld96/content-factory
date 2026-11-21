@@ -2,7 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 
 import {
   imageJobInputSchema,
-  OUTCOME_UNKNOWN_CODES,
+  DOUBLE_CHARGE_CODES,
   renderJobInputSchema,
   renderManifestSchema,
   renderSettingsSchema,
@@ -79,7 +79,7 @@ export class ResumeService {
         });
       } else if (
         job.errorCode !== null &&
-        OUTCOME_UNKNOWN_CODES.has(job.errorCode) &&
+        DOUBLE_CHARGE_CODES.has(job.errorCode) &&
         !request.acceptPossibleDoubleCharge
       ) {
         skipped.push({ jobId: job.id, sceneId, reason: 'outcome_unknown' });

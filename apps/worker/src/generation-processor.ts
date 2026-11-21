@@ -109,6 +109,8 @@ export interface ProcessorDeps {
   readonly mediaTools?: MediaTools;
   /** FFmpeg/FFprobe check before paid media calls (P3d R6); the worker always passes one. */
   readonly mediaToolsGate?: MediaToolsGate;
+  /** Storage retries after a paid delivery (P3d R5); default 1 s, 4 s, 16 s. */
+  readonly storageRetryDelaysMs?: readonly number[];
   /** Ceiling per FFmpeg step of a render (M6, `RENDER_TIMEOUT_MS`). */
   readonly renderStepTimeoutMs?: number;
   /** Factor applied to the video poll schedule (tests and E2E). */
@@ -181,6 +183,7 @@ export class GenerationProcessor {
         schedulePoll: deps.schedulePoll,
         tools: deps.mediaTools,
         toolsGate: deps.mediaToolsGate,
+        storageRetryDelaysMs: deps.storageRetryDelaysMs,
         pollScale: deps.videoPollScale,
         logger: deps.logger,
       },

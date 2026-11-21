@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DOUBLE_CHARGE_CODES,
+  FINISHABLE_CODES,
+  isFinishable,
   isJobErrorCode,
   JOB_ERROR_CODES,
   OUTCOME_UNKNOWN_CODES,
@@ -29,5 +32,22 @@ describe('job error codes (P3 W3, W5)', () => {
       'CALL_OUTCOME_UNKNOWN',
       'SUBMIT_OUTCOME_UNKNOWN',
     ]);
+  });
+
+  it('finishes only delivered media jobs that failed for an environmental reason (P3d R3)', () => {
+    for (const code of [...FINISHABLE_CODES, ...DOUBLE_CHARGE_CODES])
+      expect(isJobErrorCode(code)).toBe(true);
+    const job = {
+      kind: 'video_generation',
+      status: 'failed',
+      errorCode: 'MEDIA_TOOLS_MISSING',
+      deliveredAt: new Date(),
+    };
+    expect(isFinishable(job)).toBe(true);
+    expect(isFinishable({ ...job, deliveredAt: null })).toBe(false);
+    expect(isFinishable({ ...job, errorCode: 'OUTPUT_INVALID' })).toBe(false);
+    expect(isFinishable({ ...job, kind: 'image_generation' })).toBe(false);
+    expect(isFinishable({ ...job, status: 'canceled' })).toBe(false);
+    expect(DOUBLE_CHARGE_CODES.has('OUTPUT_NOT_STORED')).toBe(true);
   });
 });

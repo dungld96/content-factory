@@ -38,6 +38,8 @@ export const JOB_ERROR_CODES = [
   'CHECKSUM_MISMATCH',
   'OBJECT_TOO_LARGE',
   'MEDIA_TOOLS_MISSING',
+  // P3d: a paid output was delivered but could not be stored; it is lost (known cost).
+  'OUTPUT_NOT_STORED',
   // A paid call whose outcome could not be confirmed (never retried automatically).
   'SUBMIT_OUTCOME_UNKNOWN',
   'CALL_OUTCOME_UNKNOWN',
@@ -70,6 +72,45 @@ export const OUTCOME_UNKNOWN_CODES: ReadonlySet<string> = new Set<JobErrorCode>(
   'SUBMIT_OUTCOME_UNKNOWN',
   'CALL_OUTCOME_UNKNOWN',
 ]);
+
+/**
+ * Job endings that a resume repeats only with the user's consent to paying again: the outcome
+ * is unknown (above), or the output was paid for and lost (`OUTPUT_NOT_STORED`, P3d R5). Only the
+ * first group holds the reservation; a lost output's charge is already in the ledger.
+ */
+export const DOUBLE_CHARGE_CODES: ReadonlySet<string> = new Set<JobErrorCode>([
+  'SUBMIT_OUTCOME_UNKNOWN',
+  'CALL_OUTCOME_UNKNOWN',
+  'OUTPUT_NOT_STORED',
+]);
+
+/**
+ * P3d R3: a clip or voice-over job that failed with one of these codes **after** its output was
+ * delivered is finished from the delivered file (no provider call, no cost). The file itself was
+ * fine as far as anyone knows: the failure was the environment's.
+ */
+export const FINISHABLE_CODES: ReadonlySet<string> = new Set<JobErrorCode>([
+  'MEDIA_TOOLS_MISSING',
+  'STORAGE_UNAVAILABLE',
+  'WORKER_LOST',
+  'INTERNAL_ERROR',
+]);
+
+/** Whether a failed job can be finished without calling the provider again (P3d R3). */
+export function isFinishable(job: {
+  readonly kind: string;
+  readonly status: string;
+  readonly errorCode: string | null;
+  readonly deliveredAt: Date | string | null;
+}): boolean {
+  return (
+    job.status === 'failed' &&
+    (job.kind === 'video_generation' || job.kind === 'tts_generation') &&
+    job.deliveredAt !== null &&
+    job.errorCode !== null &&
+    FINISHABLE_CODES.has(job.errorCode)
+  );
+}
 
 const CODES: ReadonlySet<string> = new Set(JOB_ERROR_CODES);
 

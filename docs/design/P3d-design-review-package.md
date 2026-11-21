@@ -1,6 +1,7 @@
 # P3d Design Review Package — Keep paid media when a later step fails
 
-- Status: **Draft, revision 1, awaiting owner review** (2026-11-21).
+- Status: **Revision 1, approved by the owner (2026-11-21)**: R1–R8 as recommended. Slices in
+  progress; deviations in §12.
 - Extends: `docs/design/P3-design-review-package.md` (W1–W6, approved). P3d is its second
   revision: it does not change W1–W6.
 - Input: the owner's local test (Issue #03 of the post-MVP review): a clip was generated and paid
@@ -205,3 +206,15 @@ paid call), and it ships without a migration.
 - **`WORKER_LOST` after staging** is finishable only when `delivered_at` was written; a crash
   between the object write and the update leaves the job as today (reconciler → `WORKER_LOST`,
   not finishable) and the object is cleaned up after 14 days.
+
+## 12. Deviations found during implementation
+
+| Item          | Planned                                                      | Done                                                                                                                                                         | Why                                                                                                                         |
+| ------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| Staging key   | `staging/{project}/{job}/{attempt}`, deleted after finishing | The delivered file is written straight to its **final asset key** under an asset id reserved at delivery (`staged_asset_id`); finishing creates only the row | The object store is write-once with no delete (ADR-0006, `ObjectStore`); no copy, no cleanup pass, nothing to back up twice |
+| Cleanup       | Reconciler deletes staged files after 14 days                | None: a delivery that is never finished stays an unreferenced object, like any write-once orphan                                                             | Same as above                                                                                                               |
+| Type sniffing | New `sniffMediaType` in `@acf/storage`                       | `sniffContainer` from `@acf/media` (already used by the validators), mapped to the stored type                                                               | No duplicate sniffer                                                                                                        |
+| Columns       | four delivery columns                                        | five: `staged_asset_id` added                                                                                                                                | Reserved asset id                                                                                                           |
+| Finishable    | `MEDIA_TOOLS_MISSING`, `STORAGE_UNAVAILABLE`, `WORKER_LOST`  | also `INTERNAL_ERROR`: any unexpected error after delivery ends the job (never a retry that pays again) with that code                                       | A TTS retry after delivery would call the provider again                                                                    |
+| Resume rule   | `OUTPUT_NOT_STORED` joins `OUTCOME_UNKNOWN_CODES` for resume | New `DOUBLE_CHARGE_CODES` (unknown outcomes + `OUTPUT_NOT_STORED`) for resume; `OUTCOME_UNKNOWN_CODES` still decides held reservations                       | Keeps the two rules separate                                                                                                |
+| Unsupported   | —                                                            | A delivered file that is not MP4/MOV/WebM (clip) or MP3/WAV/AAC/M4A (audio) is not stored; the job ends `OUTPUT_INVALID` with its cost recorded              | Nothing usable to keep                                                                                                      |

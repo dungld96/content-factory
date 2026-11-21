@@ -1,5 +1,5 @@
 import { createWriteStream } from 'node:fs';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -18,6 +18,7 @@ import {
   buildVideoPrompt,
   MAX_CLIP_BYTES,
   ttsJobInputSchema,
+  type TtsJobInput,
   VIDEO_POLL_LIMIT_MS,
   VIDEO_PROMPT_TEMPLATE_ID,
   videoJobInputSchema,
@@ -33,11 +34,20 @@ import {
   inspectVideoFile,
   MediaToolsMissingError,
   MediaValidationError,
+  sniffContainer,
+  type SniffedContainer,
   type MediaTools,
 } from '@acf/media';
-import { assetObjectKey, uuidv7, type ObjectStore } from '@acf/storage';
+import {
+  assetObjectKey,
+  sha256Hex,
+  StorageError,
+  uuidv7,
+  type ObjectStore,
+  type StoredMimeType,
+} from '@acf/storage';
 
-import type { JobStore } from './job-store.js';
+import type { JobStore, StagedOutput } from './job-store.js';
 import type { Logger } from './logger.js';
 import type { MediaToolsGate } from './media-tools-gate.js';
 
@@ -76,6 +86,8 @@ export interface MediaJobsDeps {
   readonly toolsGate?: MediaToolsGate | undefined;
   readonly logger: Logger;
   readonly now?: (() => Date) | undefined;
+  /** Waits between storage retries after a paid delivery (P3d R5); tests pass zeros. */
+  readonly storageRetryDelaysMs?: readonly number[] | undefined;
   /** Factor applied to the poll schedule (`WORKER_VIDEO_POLL_SCALE`; tests and E2E only). */
   readonly pollScale?: number | undefined;
 }
@@ -331,6 +343,9 @@ export class MediaJobs {
     const store = this.deps.store;
     if (!store)
       throw new MediaPermanentError('STORAGE_NOT_CONFIGURED', 'object storage is not configured');
+    // P3d: after a restart following delivery, carry on from the stored file (never download or
+    // record the cost twice).
+    if (job.deliveredAt) return this.finishVideo(job, job, input, state);
     const dir = await mkdtemp(path.join(tmpdir(), 'acf-clip-'));
     try {
       const file = path.join(dir, 'clip.bin');
@@ -379,97 +394,152 @@ export class MediaJobs {
         return { type: 'polling', pollCount };
       }
 
-      let clip;
-      try {
-        clip = await inspectVideoFile(
-          file,
-          contentType,
-          {
-            aspectRatio: RATIO[input.aspectRatio] ?? 9 / 16,
-            minDurationMs: Math.floor(input.durationSeconds * 900),
-            maxBytes: MAX_CLIP_BYTES,
-          },
-          this.deps.tools ?? DEFAULT_MEDIA_TOOLS,
-        );
-      } catch (error) {
-        if (error instanceof MediaValidationError) {
-          // Paid already: never resubmitted automatically; the user may regenerate.
-          await this.deps.jobs.recordPoll(job, state, null);
-          await videos.fail(invocationId, state, 'OUTPUT_INVALID', error.message);
-          return await this.outcomes.failFinal(
-            job,
-            'OUTPUT_INVALID',
-            `the clip failed validation: ${error.message}`,
-          );
-        }
-        if (error instanceof MediaToolsMissingError) {
-          throw new MediaPermanentError(
-            'MEDIA_TOOLS_MISSING',
-            'FFprobe is not installed on the worker',
-          );
-        }
-        throw error;
-      }
       const bytes = new Uint8Array(await readFile(file));
-      const id = uuidv7();
-      const storageKey = assetObjectKey({
-        projectId: job.projectId,
-        assetId: id,
-        sha256Hex: clip.sha256Hex,
-        mimeType: clip.mimeType,
-      });
-      await store.putIfAbsent(storageKey, bytes, {
-        contentType: clip.mimeType,
-        sha256Hex: clip.sha256Hex,
-      });
+      // P3d R2: the clip is delivered: its cost is final whatever happens next.
       const request = await this.request(job, input);
       await videos.complete(invocationId, request, state);
-      const model = await this.deps.prisma.aiModel.findUniqueOrThrow({
-        where: { id: job.modelId },
-        select: { modelKey: true },
-      });
-      await this.deps.prisma.$transaction(async (tx) => {
-        await tx.asset.create({
-          data: {
-            id,
-            projectId: job.projectId,
-            contentItemId: job.contentItemId,
-            assetType: 'video',
-            sourceType: 'generated',
-            generationJobId: job.id,
-            storyboardSceneId: input.sceneId,
-            storageKey,
-            mimeType: clip.mimeType,
-            sizeBytes: BigInt(clip.sizeBytes),
-            checksumSha256: clip.sha256Hex,
-            width: clip.width,
-            height: clip.height,
-            durationMs: clip.durationMs,
-            label: `Scene ${String(input.scene.sceneNumber)} clip`,
-            metadata: {
-              clipHash: input.clipHash,
-              model: model.modelKey,
-              requestedSeconds: input.durationSeconds,
-              resolution: input.resolution,
-              video: {
-                codec: clip.codec,
-                fps: clip.fps,
-                bitRate: clip.bitRate,
-                hasAudio: clip.hasAudio,
-                audioCodec: clip.audioCodec,
-              },
+      const staged = await this.stage(job, bytes, 'video');
+      if (staged === 'unsupported') {
+        await this.deps.jobs.recordPoll(job, state, null);
+        return await this.outcomes.failFinal(
+          job,
+          'OUTPUT_INVALID',
+          'the clip failed validation: not an MP4, MOV or WebM video',
+        );
+      }
+      if (staged === 'not_stored') {
+        await this.deps.jobs.recordPoll(job, state, null);
+        return await this.outcomes.failFinal(
+          job,
+          'STORAGE_UNAVAILABLE',
+          'the clip was delivered but could not be stored; finish it once storage is back (no new charge)',
+        );
+      }
+      return await this.validateAndStoreVideo(job, job, input, file, contentType, staged, state);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * Validates a delivered clip (the running job's, or a failed job's for a finish job) from its
+   * stored copy and creates the asset (P3d R3). Never calls the provider.
+   */
+  private async finishVideo(
+    job: GenerationJob,
+    paid: GenerationJob,
+    input: VideoJobInput,
+    state: VideoJobState | null,
+  ): Promise<MediaStepOutcome> {
+    const store = this.deps.store;
+    if (!store)
+      throw new MediaPermanentError('STORAGE_NOT_CONFIGURED', 'object storage is not configured');
+    const staged = stagedOf(paid);
+    if (!staged) {
+      throw new MediaPermanentError(
+        'OUTPUT_NOT_STORED',
+        'the delivered clip was not stored; regenerate it',
+      );
+    }
+    const bytes = await readStaged(store, staged, MAX_CLIP_BYTES);
+    const dir = await mkdtemp(path.join(tmpdir(), 'acf-clip-'));
+    try {
+      const file = path.join(dir, 'clip.bin');
+      await writeFile(file, bytes, { mode: 0o600 });
+      return await this.validateAndStoreVideo(job, paid, input, file, null, staged, state);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  private async validateAndStoreVideo(
+    job: GenerationJob,
+    paid: GenerationJob,
+    input: VideoJobInput,
+    file: string,
+    contentType: string | null,
+    staged: StagedOutput,
+    state: VideoJobState | null,
+  ): Promise<MediaStepOutcome> {
+    let clip;
+    try {
+      clip = await inspectVideoFile(
+        file,
+        contentType,
+        {
+          aspectRatio: RATIO[input.aspectRatio] ?? 9 / 16,
+          minDurationMs: Math.floor(input.durationSeconds * 900),
+          maxBytes: MAX_CLIP_BYTES,
+        },
+        this.deps.tools ?? DEFAULT_MEDIA_TOOLS,
+      );
+    } catch (error) {
+      if (error instanceof MediaValidationError) {
+        // Paid already (cost recorded at delivery): never resubmitted; the user may regenerate.
+        if (state) await this.deps.jobs.recordPoll(job, state, null);
+        return await this.outcomes.failFinal(
+          job,
+          'OUTPUT_INVALID',
+          `the clip failed validation: ${error.message}`,
+        );
+      }
+      if (error instanceof MediaToolsMissingError) {
+        throw new MediaPermanentError(
+          'MEDIA_TOOLS_MISSING',
+          'FFprobe is not installed on the worker; the delivered clip is kept: install it, then finish (no new charge)',
+        );
+      }
+      throw error;
+    }
+    const model = await this.deps.prisma.aiModel.findUniqueOrThrow({
+      where: { id: paid.modelId },
+      select: { modelKey: true },
+    });
+    const id = staged.assetId;
+    await this.deps.prisma.$transaction(async (tx) => {
+      await tx.asset.create({
+        data: {
+          id,
+          projectId: job.projectId,
+          contentItemId: job.contentItemId,
+          assetType: 'video',
+          sourceType: 'generated',
+          // The job that paid for the clip (a finish job only validates and stores it).
+          generationJobId: paid.id,
+          storyboardSceneId: input.sceneId,
+          storageKey: staged.objectKey,
+          mimeType: clip.mimeType,
+          sizeBytes: BigInt(clip.sizeBytes),
+          checksumSha256: clip.sha256Hex,
+          width: clip.width,
+          height: clip.height,
+          durationMs: clip.durationMs,
+          label: `Scene ${String(input.scene.sceneNumber)} clip`,
+          metadata: {
+            clipHash: input.clipHash,
+            model: model.modelKey,
+            requestedSeconds: input.durationSeconds,
+            resolution: input.resolution,
+            video: {
+              codec: clip.codec,
+              fps: clip.fps,
+              bitRate: clip.bitRate,
+              hasAudio: clip.hasAudio,
+              audioCodec: clip.audioCodec,
             },
-            createdById: job.requestedById,
           },
-        });
-        await tx.assetInput.create({
-          data: {
-            projectId: job.projectId,
-            assetId: id,
-            inputAssetId: input.keyframeAssetId,
-            role: 'keyframe',
-          },
-        });
+          createdById: job.requestedById,
+        },
+      });
+      await tx.assetInput.create({
+        data: {
+          projectId: job.projectId,
+          assetId: id,
+          inputAssetId: input.keyframeAssetId,
+          role: 'keyframe',
+        },
+      });
+      if (state) {
         await tx.generationJob.update({
           where: { id: job.id },
           data: {
@@ -479,19 +549,70 @@ export class MediaJobs {
             nextPollAt: null,
           },
         });
-        if (!(await this.deps.jobs.succeedSceneJobIn(tx, job, [id])))
-          throw new MediaDiscardedError();
-      });
-      this.deps.logger.log('info', 'video_completed', { jobId: job.id, assetId: id });
-      return { type: 'succeeded', versionId: id };
-    } finally {
-      await rm(dir, { recursive: true, force: true });
+      }
+      if (!(await this.deps.jobs.succeedSceneJobIn(tx, job, [id]))) throw new MediaDiscardedError();
+    });
+    this.deps.logger.log('info', 'video_completed', { jobId: job.id, assetId: id });
+    return { type: 'succeeded', versionId: id };
+  }
+
+  // ------------------------------------------------------------------- delivery (P3d)
+
+  /**
+   * Stores a delivered output at its final asset key before anything else happens to it (P3d R1)
+   * and records the delivery on the job. Storage outages are retried in place (R5): the bytes are
+   * paid for and must not be fetched again. Returns `not_stored` when storage stayed down.
+   */
+  private async stage(
+    job: GenerationJob,
+    bytes: Uint8Array,
+    kind: 'video' | 'audio',
+  ): Promise<StagedOutput | 'not_stored' | 'unsupported'> {
+    const store = this.deps.store;
+    if (!store)
+      throw new MediaPermanentError('STORAGE_NOT_CONFIGURED', 'object storage is not configured');
+    const mimeType = stagedMimeType(kind, bytes);
+    if (!mimeType) {
+      // Not a format we accept: nothing to keep (the job ends OUTPUT_INVALID, cost recorded).
+      await this.deps.jobs.recordDelivery(job, null);
+      return 'unsupported';
     }
+    const assetId = uuidv7();
+    const digest = sha256Hex(bytes);
+    const objectKey = assetObjectKey({
+      projectId: job.projectId,
+      assetId,
+      sha256Hex: digest,
+      mimeType,
+    });
+    const delays = this.deps.storageRetryDelaysMs ?? STORAGE_RETRY_DELAYS_MS;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await store.putIfAbsent(objectKey, bytes, { contentType: mimeType, sha256Hex: digest });
+        break;
+      } catch (error) {
+        const delay = delays[attempt];
+        if (!(error instanceof StorageError) || error.code !== 'STORAGE_UNAVAILABLE') throw error;
+        if (delay === undefined) {
+          this.deps.logger.log('error', 'delivered_output_not_stored', { jobId: job.id });
+          await this.deps.jobs.recordDelivery(job, null);
+          return 'not_stored';
+        }
+        await sleep(jitter(delay));
+      }
+    }
+    const result: StagedOutput = { assetId, objectKey, sha256Hex: digest, mimeType };
+    if (!(await this.deps.jobs.recordDelivery(job, result))) throw new MediaDiscardedError();
+    return result;
   }
 
   // ------------------------------------------------------------------- TTS
 
-  /** One voice-over: synthesize, validate with FFprobe, store, succeed (M5 design §7.2). */
+  /**
+   * One voice-over: synthesize, store as delivered, validate with FFprobe, succeed (M5 design
+   * §7.2, P3d). Once the audio is delivered, every failure is final for this job (never a second
+   * paid call); environmental failures can be finished from the stored file.
+   */
   async runTts(job: GenerationJob): Promise<string> {
     const tts = this.deps.tts;
     if (!tts) throw new MediaPermanentError('NO_ELIGIBLE_MODEL', 'no TTS providers are configured');
@@ -522,9 +643,36 @@ export class MediaJobs {
       },
       { idempotencyKey: `${job.id}:${String(job.attempt)}:0` },
     );
+    return this.afterDelivery(async () => {
+      const staged = await this.stage(job, result.bytes, 'audio');
+      if (staged === 'unsupported') {
+        throw new MediaPermanentError(
+          'OUTPUT_INVALID',
+          'the audio failed validation: only MP3, WAV and M4A/AAC audio is accepted',
+        );
+      }
+      if (staged === 'not_stored') {
+        throw new MediaPermanentError(
+          'OUTPUT_NOT_STORED',
+          'the voice-over was paid for but could not be stored',
+        );
+      }
+      return this.validateAndStoreAudio(job, job, input, result.bytes, staged, result.characters);
+    });
+  }
+
+  /** Validates a stored voice-over and creates the asset; never calls the provider. */
+  private async validateAndStoreAudio(
+    job: GenerationJob,
+    paid: GenerationJob,
+    input: TtsJobInput,
+    bytes: Uint8Array,
+    staged: StagedOutput,
+    characters: number | null,
+  ): Promise<string> {
     let audio;
     try {
-      audio = await inspectAudio(result.bytes, result.mimeType, {
+      audio = await inspectAudio(bytes, staged.mimeType, {
         tools: this.deps.tools ?? DEFAULT_MEDIA_TOOLS,
       });
     } catch (error) {
@@ -536,21 +684,15 @@ export class MediaJobs {
       if (error instanceof MediaToolsMissingError)
         throw new MediaPermanentError(
           'MEDIA_TOOLS_MISSING',
-          'FFprobe is not installed on the worker',
+          'FFprobe is not installed on the worker; the delivered voice-over is kept: install it, then finish (no new charge)',
         );
       throw error;
     }
-    const id = uuidv7();
-    const storageKey = assetObjectKey({
-      projectId: job.projectId,
-      assetId: id,
-      sha256Hex: audio.sha256Hex,
-      mimeType: audio.mimeType,
+    const model = await this.deps.prisma.aiModel.findUniqueOrThrow({
+      where: { id: paid.modelId },
+      select: { modelKey: true },
     });
-    await store.putIfAbsent(storageKey, result.bytes, {
-      contentType: audio.mimeType,
-      sha256Hex: audio.sha256Hex,
-    });
+    const id = staged.assetId;
     await this.deps.prisma.$transaction(async (tx) => {
       await tx.asset.create({
         data: {
@@ -559,9 +701,9 @@ export class MediaJobs {
           contentItemId: job.contentItemId,
           assetType: 'audio',
           sourceType: 'generated',
-          generationJobId: job.id,
+          generationJobId: paid.id,
           storyboardSceneId: input.sceneId,
-          storageKey,
+          storageKey: staged.objectKey,
           mimeType: audio.mimeType,
           sizeBytes: BigInt(audio.sizeBytes),
           checksumSha256: audio.sha256Hex,
@@ -573,7 +715,7 @@ export class MediaJobs {
             model: model.modelKey,
             voice: input.voice.voice,
             language: input.voice.language,
-            characters: result.characters,
+            ...(characters === null ? {} : { characters }),
             // M6 does not stretch narration silently: the scene is flagged for the user.
             exceedsScene: audio.durationMs > input.sceneDurationSeconds * 1000,
             audio: { codec: audio.codec, sampleRate: audio.sampleRate, channels: audio.channels },
@@ -585,4 +727,85 @@ export class MediaJobs {
     });
     return id;
   }
+
+  /**
+   * Runs the steps after a paid output was delivered. A failure there must not retry the job
+   * (that would pay again): unexpected errors become final and finishable (P3d R3).
+   */
+  private async afterDelivery<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error instanceof MediaPermanentError || error instanceof MediaDiscardedError) throw error;
+      if (error instanceof StorageError && error.code === 'STORAGE_UNAVAILABLE') {
+        throw new MediaPermanentError(
+          'STORAGE_UNAVAILABLE',
+          'storage failed after delivery; finish once it is back (no new charge)',
+        );
+      }
+      this.deps.logger.log('error', 'after_delivery_failed', {
+        error: error instanceof Error ? error.name : 'unknown',
+      });
+      throw new MediaPermanentError(
+        'INTERNAL_ERROR',
+        'an internal error occurred after delivery; finish to retry (no new charge)',
+      );
+    }
+  }
+}
+
+/** Storage write retries after a paid delivery (P3d R5): 1 s, 4 s, 16 s, ±20 % jitter. */
+export const STORAGE_RETRY_DELAYS_MS: readonly number[] = [1_000, 4_000, 16_000];
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const jitter = (ms: number) => Math.round(ms * (0.8 + Math.random() * 0.4));
+
+const VIDEO_CONTAINERS: Partial<Record<SniffedContainer, StoredMimeType>> = {
+  iso: 'video/mp4',
+  quicktime: 'video/quicktime',
+  webm: 'video/webm',
+};
+const AUDIO_CONTAINERS: Partial<Record<SniffedContainer, StoredMimeType>> = {
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  adts: 'audio/aac',
+  iso: 'audio/mp4',
+};
+
+/** The stored type of a delivered file, from its first bytes; null when it is not one we keep. */
+export function stagedMimeType(kind: 'video' | 'audio', bytes: Uint8Array): StoredMimeType | null {
+  const container = sniffContainer(bytes.subarray(0, 16));
+  if (!container) return null;
+  return (kind === 'video' ? VIDEO_CONTAINERS : AUDIO_CONTAINERS)[container] ?? null;
+}
+
+/** The stored delivery of a job, or null when nothing usable was stored. */
+export function stagedOf(job: GenerationJob): StagedOutput | null {
+  if (!job.stagedObjectKey || !job.stagedAssetId || !job.stagedSha256 || !job.stagedMimeType)
+    return null;
+  return {
+    assetId: job.stagedAssetId,
+    objectKey: job.stagedObjectKey,
+    sha256Hex: job.stagedSha256,
+    mimeType: job.stagedMimeType,
+  };
+}
+
+/** Reads a stored delivery and checks its checksum. */
+async function readStaged(
+  store: ObjectStore,
+  staged: StagedOutput,
+  maxBytes: number,
+): Promise<Uint8Array> {
+  const bytes = await store.getBytes(staged.objectKey, maxBytes);
+  if (!bytes) {
+    throw new MediaPermanentError(
+      'OUTPUT_NOT_STORED',
+      'the delivered file is missing from storage',
+    );
+  }
+  if (sha256Hex(bytes) !== staged.sha256Hex) {
+    throw new MediaPermanentError('OUTPUT_INVALID', 'the stored file does not match its checksum');
+  }
+  return bytes;
 }

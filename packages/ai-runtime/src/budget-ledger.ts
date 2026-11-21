@@ -192,9 +192,15 @@ export async function resolveReservation(
   return count === 1 ? to : null;
 }
 
-/** The reservation outcome of a job that ended with `errorCode` (null = succeeded). */
-export function reservationOutcomeFor(errorCode: string | null): ReservationOutcome {
-  if (errorCode === null) return 'settled';
+/**
+ * The reservation outcome of a job that ended with `errorCode` (null = succeeded). A job whose
+ * paid output was delivered (P3d R2) is `settled` however it ended: its charge is in the ledger.
+ */
+export function reservationOutcomeFor(
+  errorCode: string | null,
+  delivered = false,
+): ReservationOutcome {
+  if (errorCode === null || delivered) return 'settled';
   return HELD_ERROR_CODES.has(errorCode) ? 'held' : 'released';
 }
 

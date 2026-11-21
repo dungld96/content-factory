@@ -23,6 +23,14 @@ export const SCENE_JOB_KINDS: ReadonlySet<GenerationJob['kind']> = new Set([
  * (CLAUDE.md §7: record state transitions). Guarded updates (`WHERE status = …`) make each
  * transition happen at most once, also when a job is delivered twice or canceled concurrently.
  */
+/** Where a delivered clip or voice-over was stored before validation (P3d R1). */
+export interface StagedOutput {
+  readonly assetId: string;
+  readonly objectKey: string;
+  readonly sha256Hex: string;
+  readonly mimeType: string;
+}
+
 export class JobStore {
   constructor(
     private readonly prisma: PrismaClient,
@@ -118,7 +126,7 @@ export class JobStore {
         errorCode,
         ...detail,
       });
-      await this.resolveBudget(tx, current, errorCode);
+      await this.resolveBudget(tx, current, errorCode, current.deliveredAt !== null);
       if (SCENE_JOB_KINDS.has(current.kind)) {
         await this.settleImageWork(tx, current);
       } else if (current.kind === 'render') {
@@ -262,6 +270,36 @@ export class JobStore {
         });
       }
       return current.pollCount + 1;
+    });
+  }
+
+  /**
+   * P3d R1: the provider delivered this job's paid output, stored at `staged` (null when it could
+   * not be stored). Recorded once, while the job runs; returns false when the job is no longer
+   * running or the delivery was already recorded.
+   */
+  async recordDelivery(job: GenerationJob, staged: StagedOutput | null): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.generationJob.updateMany({
+        where: { id: job.id, status: 'running', deliveredAt: null },
+        data: {
+          deliveredAt: new Date(),
+          ...(staged
+            ? {
+                stagedAssetId: staged.assetId,
+                stagedObjectKey: staged.objectKey,
+                stagedSha256: staged.sha256Hex,
+                stagedMimeType: staged.mimeType,
+              }
+            : {}),
+        },
+      });
+      if (count !== 1) return false;
+      await this.event(tx, job, 'running', 'running', job.attempt, {
+        type: 'output_delivered',
+        stored: staged !== null,
+      });
+      return true;
     });
   }
 
@@ -417,8 +455,13 @@ export class JobStore {
     tx: TransactionClient,
     job: Pick<GenerationJob, 'id' | 'projectId'>,
     errorCode: string | null,
+    delivered = false,
   ): Promise<void> {
-    const outcome = await resolveReservation(tx, job.id, reservationOutcomeFor(errorCode));
+    const outcome = await resolveReservation(
+      tx,
+      job.id,
+      reservationOutcomeFor(errorCode, delivered),
+    );
     if (outcome === 'held') {
       this.logger.log('warn', 'reservation_held', {
         jobId: job.id,

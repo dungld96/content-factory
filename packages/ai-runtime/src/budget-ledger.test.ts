@@ -17,4 +17,10 @@ describe('reservationOutcomeFor (M7 §4, P3 W5)', () => {
     expect(reservationOutcomeFor('TIMEOUT')).toBe('released');
     expect(reservationOutcomeFor('CONTENT_POLICY')).toBe('released');
   });
+
+  it('settles a delivered output however the job ended (P3d R2)', () => {
+    expect(reservationOutcomeFor('MEDIA_TOOLS_MISSING', true)).toBe('settled');
+    expect(reservationOutcomeFor('OUTPUT_NOT_STORED', true)).toBe('settled');
+    expect(reservationOutcomeFor('MEDIA_TOOLS_MISSING')).toBe('released');
+  });
 });

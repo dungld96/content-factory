@@ -1015,6 +1015,17 @@ model GenerationJob {
   pollCount                 Int                 @default(0) @map("poll_count")
   /// When the provider's stored output stops being downloadable.
   providerExpiresAt         DateTime?           @map("provider_expires_at") @db.Timestamptz(3)
+  // --- P3d: the paid output as delivered, kept before validation (video and TTS) ---
+  /// The provider's output was received (download finished or TTS returned); write-once.
+  deliveredAt               DateTime?           @map("delivered_at") @db.Timestamptz(3)
+  /// Asset id reserved for the delivered file; its bytes are at `stagedObjectKey`.
+  stagedAssetId             String?             @map("staged_asset_id") @db.Uuid
+  stagedObjectKey           String?             @map("staged_object_key") @db.VarChar(500)
+  stagedSha256              String?             @map("staged_sha256") @db.Char(64)
+  /// From the file's first bytes (not validated yet).
+  stagedMimeType            String?             @map("staged_mime_type") @db.VarChar(100)
+  /// On a finish job: the failed job whose delivered output it validates and stores.
+  recoverFromJobId          String?             @map("recover_from_job_id") @db.Uuid
   resultScriptVersionId     String?             @map("result_script_version_id") @db.Uuid
   resultStoryboardVersionId String?             @map("result_storyboard_version_id") @db.Uuid
   errorCode                 String?             @map("error_code") @db.VarChar(64)
@@ -1034,6 +1045,8 @@ model GenerationJob {
   resultStoryboard StoryboardVersion?  @relation("JobResultStoryboard", fields: [projectId, resultStoryboardVersionId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   storyboardScene  StoryboardScene?    @relation("SceneImageJobs", fields: [projectId, storyboardSceneId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   invocation       AiInvocation?       @relation("JobInFlightInvocation", fields: [projectId, invocationId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  recoverFrom      GenerationJob?      @relation("JobRecovery", fields: [projectId, recoverFromJobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  recoveries       GenerationJob[]     @relation("JobRecovery")
   assets           Asset[]             @relation("JobAssets")
   render           Render?
   reservation      BudgetReservation?
@@ -1046,6 +1059,7 @@ model GenerationJob {
   @@index([contentItemId, kind, executionKey])
   @@index([productionRunId])
   @@index([storyboardSceneId])
+  @@index([recoverFromJobId])
   @@index([status, queuedAt])
   @@index([modelId])
   @@index([requestedById])

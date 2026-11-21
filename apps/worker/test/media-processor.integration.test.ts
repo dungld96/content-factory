@@ -14,8 +14,8 @@ import { MockTtsProvider, MockVideoProvider } from '@acf/ai-core/testing';
 import { ImageService, LlmService, ModelCatalog, TtsService, VideoService } from '@acf/ai-runtime';
 import { VIDEO_POLL_JOB_NAME, type DeadLetterPayload } from '@acf/content-domain';
 import type { PrismaClient } from '@acf/database';
-import { DEFAULT_MEDIA_TOOLS, probeFile } from '@acf/media';
-import { readAll, sha256Hex, type ObjectStore } from '@acf/storage';
+import { DEFAULT_MEDIA_TOOLS, probeFile, type MediaTools } from '@acf/media';
+import { readAll, sha256Hex, StorageError, type ObjectStore } from '@acf/storage';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -45,7 +45,13 @@ let deadLetters: DeadLetterPayload[];
 let polls: { jobId: string; pollCount: number; delayMs: number }[];
 
 function build(
-  options: { video?: VideoProvider; tts?: TtsProvider; toolsGate?: MediaToolsGate } = {},
+  options: {
+    video?: VideoProvider;
+    tts?: TtsProvider;
+    toolsGate?: MediaToolsGate;
+    tools?: MediaTools;
+    store?: ObjectStore;
+  } = {},
 ) {
   const videos = new Map<string, VideoProvider>(options.video ? [['mock', options.video]] : []);
   const ttsProviders = new Map<string, TtsProvider>(options.tts ? [['mock', options.tts]] : []);
@@ -61,14 +67,16 @@ function build(
       polls.push({ jobId, pollCount, delayMs });
       return Promise.resolve();
     },
-    store,
+    store: options.store ?? store,
     deadLetter: (p) => {
       deadLetters.push(p);
       return Promise.resolve();
     },
     logger: silentLogger,
     retryDelay: () => 0,
+    storageRetryDelaysMs: [0, 0, 0],
     ...(options.toolsGate ? { mediaToolsGate: options.toolsGate } : {}),
+    ...(options.tools ? { mediaTools: options.tools } : {}),
   });
 }
 
@@ -170,9 +178,13 @@ describe('video jobs', () => {
       'submit_started',
       'provider_job_accepted',
       'provider_status',
+      'output_delivered',
       'succeeded',
     ]);
     expect(row.promptSnapshot).toContain('### video.v1');
+    // P3d R1: the delivered file is the asset's object; no second copy.
+    expect(row.deliveredAt).not.toBeNull();
+    expect(row.stagedAssetId).not.toBeNull();
 
     const [clip] = await prisma.asset.findMany({
       where: { generationJobId: jobId },
@@ -331,6 +343,10 @@ describe('video jobs', () => {
     const row = await job(jobId);
     expect([row.status, row.errorCode]).toEqual(['failed', 'OUTPUT_INVALID']);
     expect(mock.submissions).toHaveLength(1);
+    // P3d R2: the clip was delivered, so its cost is recorded (not unknown).
+    expect(row.invocations.map((i) => [i.status, i.costStatus])).toEqual([
+      ['succeeded', 'estimated'],
+    ]);
   });
 
   it('a canceled job drops its polls', async () => {
@@ -456,5 +472,84 @@ describe('missing FFmpeg/FFprobe (P3d R6)', () => {
     expect(await build({ tts: mock, toolsGate: gate }).process(jobId ?? '')).toMatchObject({
       type: 'succeeded',
     });
+  });
+});
+
+/** FFprobe disappears after the paid call (the owner's case): validation cannot run. */
+const NO_PROBE: MediaTools = { ...DEFAULT_MEDIA_TOOLS, ffprobePath: '/nonexistent/ffprobe' };
+
+/** A store whose writes fail as if storage were down (reads still work). */
+function downStore(): ObjectStore {
+  return {
+    putIfAbsent: () => Promise.reject(new StorageError('STORAGE_UNAVAILABLE', 'down')),
+    head: (key) => store.head(key),
+    get: (key, range) => store.get(key, range),
+    getBytes: (key, max) => store.getBytes(key, max),
+  };
+}
+
+describe('delivered output is kept when a later step fails (P3d R1, R2, R5)', () => {
+  it('keeps a delivered clip and its cost when FFprobe is missing', async () => {
+    const mock = videoMock();
+    const processor = build({ video: mock, tools: NO_PROBE });
+    const jobId = await newVideoJob();
+    await processor.process(jobId);
+    await drainPolls(processor, jobId);
+    const row = await job(jobId);
+    expect(row).toMatchObject({ status: 'failed', errorCode: 'MEDIA_TOOLS_MISSING' });
+    expect(row.errorMessage).toContain('no new charge');
+    expect(row.deliveredAt).not.toBeNull();
+    expect(row.stagedMimeType).toBe('video/mp4');
+    expect(mock.submissions).toHaveLength(1);
+    expect(row.invocations.map((i) => [i.status, i.costStatus])).toEqual([
+      ['succeeded', 'estimated'],
+    ]);
+    const bytes = await store.getBytes(row.stagedObjectKey ?? '', 50_000_000);
+    expect(bytes && sha256Hex(bytes)).toBe(row.stagedSha256);
+    expect(await prisma.asset.count({ where: { generationJobId: jobId } })).toBe(0);
+  });
+
+  it('keeps a delivered voice-over when FFprobe is missing', async () => {
+    const mock = new MockTtsProvider({ providerKey: 'mock', renderAudio: audioRenderer() });
+    const [jobId] = await createMediaJobs(prisma, world, 'tts_generation', mw.ttsModelId, [
+      await ttsInput(prisma, iw, mw, iw.sceneIds[0] ?? ''),
+    ]);
+    expect(await build({ tts: mock, tools: NO_PROBE }).process(jobId ?? '')).toEqual({
+      type: 'failed',
+      errorCode: 'MEDIA_TOOLS_MISSING',
+    });
+    const row = await job(jobId ?? '');
+    expect(row.attempt).toBe(1);
+    expect(mock.calls).toHaveLength(1);
+    expect(row.stagedMimeType).toBe('audio/mpeg');
+    expect(await store.head(row.stagedObjectKey ?? '')).not.toBeNull();
+  });
+
+  it('never pays twice when storage is down after a voice-over was synthesized', async () => {
+    const mock = new MockTtsProvider({ providerKey: 'mock', renderAudio: audioRenderer() });
+    const [jobId] = await createMediaJobs(prisma, world, 'tts_generation', mw.ttsModelId, [
+      await ttsInput(prisma, iw, mw, iw.sceneIds[0] ?? ''),
+    ]);
+    expect(await build({ tts: mock, store: downStore() }).process(jobId ?? '')).toEqual({
+      type: 'failed',
+      errorCode: 'OUTPUT_NOT_STORED',
+    });
+    expect(mock.calls).toHaveLength(1);
+    const row = await job(jobId ?? '');
+    expect(row).toMatchObject({ status: 'failed', attempt: 1, stagedObjectKey: null });
+    expect(row.deliveredAt).not.toBeNull();
+  });
+
+  it('a delivered clip that could not be stored ends STORAGE_UNAVAILABLE (finishable)', async () => {
+    const mock = videoMock();
+    const processor = build({ video: mock, store: downStore() });
+    const jobId = await newVideoJob();
+    // The submit reads the keyframe (reads work) and needs no write.
+    await processor.process(jobId);
+    await drainPolls(processor, jobId);
+    const row = await job(jobId);
+    expect(row).toMatchObject({ status: 'failed', errorCode: 'STORAGE_UNAVAILABLE' });
+    expect(row.deliveredAt).not.toBeNull();
+    expect(mock.submissions).toHaveLength(1);
   });
 });

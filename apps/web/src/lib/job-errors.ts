@@ -84,6 +84,10 @@ const ERRORS: Readonly<
     text: 'FFmpeg or FFprobe is not installed on the worker. Install it (see the Windows guide in docs/LOCAL_DEVELOPMENT.md), then resume.',
     group: 'operator',
   },
+  OUTPUT_NOT_STORED: {
+    text: 'The output was paid for but could not be stored. Generating it again is charged again.',
+    group: 'charged',
+  },
   SUBMIT_OUTCOME_UNKNOWN: {
     text: 'The submission could not be confirmed. Resuming may be charged twice.',
     group: 'charged',
