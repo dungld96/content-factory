@@ -565,7 +565,10 @@ export class MediaJobs {
       ? await this.deps.prisma.generationJob.findUnique({ where: { id: job.recoverFromJobId } })
       : null;
     if (!paid?.deliveredAt || paid.kind !== job.kind) {
-      throw new MediaPermanentError('INVALID_JOB_INPUT', 'the job to finish has no delivered output');
+      throw new MediaPermanentError(
+        'INVALID_JOB_INPUT',
+        'the job to finish has no delivered output',
+      );
     }
     return paid;
   }
@@ -611,7 +614,11 @@ export class MediaJobs {
     }
     const staged = await this.stage(job, bytes, 'video');
     if (staged === 'unsupported') {
-      return this.outcomes.failFinal(job, 'OUTPUT_INVALID', 'the clip failed validation: not an MP4, MOV or WebM video');
+      return this.outcomes.failFinal(
+        job,
+        'OUTPUT_INVALID',
+        'the clip failed validation: not an MP4, MOV or WebM video',
+      );
     }
     if (staged === 'not_stored') {
       throw new MediaPermanentError(
@@ -890,7 +897,8 @@ async function readStream(body: AsyncIterable<Uint8Array>, maxBytes: number): Pr
   let total = 0;
   for await (const chunk of body) {
     total += chunk.byteLength;
-    if (total > maxBytes) throw new MediaPermanentError('OUTPUT_INVALID', 'clip larger than 200 MB');
+    if (total > maxBytes)
+      throw new MediaPermanentError('OUTPUT_INVALID', 'clip larger than 200 MB');
     chunks.push(chunk);
   }
   return new Uint8Array(Buffer.concat(chunks));
