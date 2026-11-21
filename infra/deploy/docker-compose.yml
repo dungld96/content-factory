@@ -1,0 +1,212 @@
+# Single-server staging deployment (ADR-0014, ADR-0021, docs/DEPLOYMENT.md). Run through ./acf.sh, which
+# passes .env.production for variable substitution. Only Caddy publishes ports.
+name: acf-staging
+
+x-app: &app
+  image: acf-app:staging
+  restart: unless-stopped
+  networks: [internal]
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+    seaweedfs: { condition: service_healthy }
+
+services:
+  postgres:
+    image: postgres:17.12-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-acf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run ./generate-env.sh first}
+      POSTGRES_DB: ${POSTGRES_DB:-acf}
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4.12-alpine
+    restart: unless-stopped
+    # BullMQ requires noeviction; AOF keeps queued jobs across restarts.
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    volumes:
+      - redis-data:/data
+    networks: [internal]
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Object storage for asset bytes (M4a, ADR-0006). Internal network only; never published.
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.54
+    restart: unless-stopped
+    # Strips Windows line endings first: a CRLF checkout of start.sh would not run in /bin/sh.
+    entrypoint:
+      [
+        '/bin/sh',
+        '-c',
+        "tr -d '\\r' < /opt/acf/start.sh > /tmp/start.sh && exec /bin/sh /tmp/start.sh",
+      ]
+    environment:
+      STORAGE_ADMIN_ACCESS_KEY_ID: ${STORAGE_ADMIN_ACCESS_KEY_ID:?run ./generate-env.sh first}
+      STORAGE_ADMIN_SECRET_ACCESS_KEY: ${STORAGE_ADMIN_SECRET_ACCESS_KEY:?}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?}
+    volumes:
+      - ../seaweedfs/start.sh:/opt/acf/start.sh:ro
+      - seaweedfs-data:/data
+    networks: [internal]
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:9333/cluster/status']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # One-off tool: roles, migrations and grants (`./acf.sh run --rm migrate`), and the demo
+  # seed. The only service that receives the admin and migrator credentials.
+  migrate:
+    <<: *app
+    build:
+      context: ../..
+      dockerfile: infra/deploy/Dockerfile
+    profiles: [tools]
+    restart: 'no'
+    working_dir: /app
+    command: ['node', 'packages/database/scripts/db-setup.mjs', 'setup']
+    environment:
+      DATABASE_ADMIN_URL: ${DATABASE_ADMIN_URL:?}
+      DATABASE_MIGRATION_URL: ${DATABASE_MIGRATION_URL:?}
+      DATABASE_URL: ${DATABASE_URL:?}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+
+  # One-off tool: creates the asset bucket (`./acf.sh run --rm storage-setup`). The only service
+  # with the storage admin key.
+  storage-setup:
+    <<: *app
+    profiles: [tools]
+    restart: 'no'
+    working_dir: /app/packages/storage
+    command: ['node', 'scripts/storage-setup.mjs']
+    environment:
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET: acf-assets
+      STORAGE_ADMIN_ACCESS_KEY_ID: ${STORAGE_ADMIN_ACCESS_KEY_ID:?}
+      STORAGE_ADMIN_SECRET_ACCESS_KEY: ${STORAGE_ADMIN_SECRET_ACCESS_KEY:?}
+
+  # One-off tool: object export, import and verification for backups (`./acf.sh backup|restore`,
+  # backup.sh). Writes only below ./backups on the server.
+  backup:
+    <<: *app
+    profiles: [tools]
+    restart: 'no'
+    working_dir: /app/apps/api
+    volumes:
+      - ./backups:/backups
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?}
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET: acf-assets
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?}
+
+  api:
+    <<: *app
+    working_dir: /app/apps/api
+    command: ['node', '--enable-source-maps', 'dist/main.js']
+    environment:
+      NODE_ENV: production
+      LOG_JSON: 'true'
+      LOG_LEVEL: ${LOG_LEVEL:-log}
+      API_HOST: 0.0.0.0
+      API_PORT: '4000'
+      DATABASE_URL: ${DATABASE_URL:?}
+      REDIS_URL: redis://redis:6379
+      SESSION_SECRETS: ${SESSION_SECRETS:?}
+      CSRF_SECRET: ${CSRF_SECRET:?}
+      SESSION_COOKIE_SECURE: 'true'
+      # Only Next.js (web) and Caddy may set X-Forwarded-* (fixed addresses below).
+      TRUST_PROXY: 172.30.0.10,172.30.0.11
+      WEB_ORIGINS: https://${SITE_ADDRESS:?}
+      OPERATOR_EMAILS: ${OPERATOR_EMAILS:-}
+      API_CORS_ORIGINS: https://${SITE_ADDRESS:?}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET: acf-assets
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4000/api/v1/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  worker:
+    <<: *app
+    working_dir: /app/apps/worker
+    command: ['node', '--enable-source-maps', 'dist/main.js']
+    environment:
+      NODE_ENV: production
+      LOG_JSON: 'true'
+      LOG_LEVEL: ${LOG_LEVEL:-log}
+      DATABASE_URL: ${DATABASE_URL:?}
+      REDIS_URL: redis://redis:6379
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET: acf-assets
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?}
+
+  web:
+    <<: *app
+    working_dir: /app/apps/web
+    command: ['node_modules/.bin/next', 'start', '--port', '3000']
+    environment:
+      NODE_ENV: production
+      API_INTERNAL_URL: http://api:4000
+    depends_on:
+      api: { condition: service_healthy }
+    networks:
+      internal: { ipv4_address: 172.30.0.10 }
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [web]
+    networks:
+      internal: { ipv4_address: 172.30.0.11 }
+
+networks:
+  internal:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  postgres-data:
+  redis-data:
+  seaweedfs-data:
+  caddy-data:
+  caddy-config:

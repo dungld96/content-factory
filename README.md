@@ -1,75 +1,108 @@
-# AI Content Factory — Technical Specification Pack
+# AI Content Factory
 
-**Version:** 1.0.0  
-**Status:** Initial implementation baseline  
-**Purpose:** A Claude Code-ready technical specification for building a low-cost, multi-provider AI content production platform.
+A low-cost, multi-provider platform that turns a content brief into an approved, downloadable
+vertical video (9:16 MP4). Every prompt, asset, job, model call and cost is recorded, and a person
+approves the work at five gates.
 
-## Product outcome
+**Status:** MVP complete (milestones M0–M8.5, 2026-11-20). See `docs/IMPLEMENTATION_PLAN.md`.
 
-A user submits a content brief. The system researches and plans the content, generates a script and storyboard, creates approved image/video/audio assets, assembles a final vertical MP4, tracks actual costs, and presents the result for human approval.
+## How it works
 
-The MVP is complete when one brief can reliably become one downloadable, reviewable video package with traceable prompts, assets, provider/model usage, costs, and recoverable job state.
+1. Write a brief → the system generates a **script** (gate 1: approve).
+2. Script → **storyboard** of 3–6 scenes (gate 2: approve).
+3. One **keyframe image** per scene (gate 3: choose).
+4. One **video clip** and one **voice-over** per scene (gate 4: choose).
+5. FFmpeg **renders** the final MP4 with captions and music, then runs automated checks (gate 5: approve).
+6. **Export** the package: MP4, SRT, thumbnail, manifest, cost report.
+
+## Quickstart
+
+Requires Node.js ≥ 22.12, pnpm 10, Docker and FFmpeg ≥ 5.1. Full details: `docs/LOCAL_DEVELOPMENT.md`.
+
+```bash
+cp .env.example .env
+```
+
+```bash
+pnpm install
+```
+
+```bash
+pnpm infra:up
+```
+
+```bash
+pnpm db:setup
+```
+
+```bash
+pnpm storage:setup
+```
+
+```bash
+pnpm db:seed
+```
+
+```bash
+pnpm dev
+```
+
+`pnpm db:seed` creates a demo workspace and prints three demo sign-ins once. Then open
+http://localhost:3000/login. Run the worker too (`pnpm dev:worker`) to generate content.
+
+Before pushing, run every quality gate (format, lint, typecheck, unit tests, build):
+
+```bash
+pnpm check
+```
+
+## Repository layout
+
+```text
+apps/
+  web/              Next.js Content Studio
+  api/              NestJS REST API
+  worker/           BullMQ worker: generation, media, rendering
+packages/
+  contracts/        Zod schemas and shared types (API boundary)
+  database/         Prisma schema, migrations, integrity tests
+  content-domain/   Pipeline rules: brief, script, storyboard, media, render, budgets
+  ai-core/          Provider interfaces, routing, money, OpenRouter adapters, mocks
+  ai-runtime/       LLM/image/video/TTS services, ledger, budgets, circuit breaker
+  storage/          S3 object store, image validation, backups
+  media/            FFprobe/FFmpeg: validation, captions, rendering, QC
+  config/           Typed environment validation
+infra/
+  compose/          Local PostgreSQL, Redis, SeaweedFS
+  deploy/           Staging: Dockerfile, Compose, Caddy, acf.sh, backups
+docs/               Specifications, ADRs, design records
+```
+
+## Technology
+
+TypeScript · Next.js · NestJS · PostgreSQL + Prisma · Redis + BullMQ · FFmpeg · S3-compatible
+storage (SeaweedFS) · pnpm workspace. AI models are reached through OpenRouter, behind
+capability-specific interfaces (LLM, image, video, TTS).
 
 ## Documents
 
-| File | Purpose |
+| Document | What it covers |
 |---|---|
-| `docs/PRD.md` | Product requirements and acceptance criteria |
-| `docs/ARCHITECTURE.md` | System architecture and module boundaries |
-| `docs/DATABASE.md` | Data model and relational schema guidance |
-| `docs/API_SPEC.md` | REST API contracts |
-| `docs/AI_PROVIDER_STRATEGY.md` | Provider abstraction, routing, and model registry |
-| `docs/CONTENT_PIPELINE.md` | End-to-end production workflow |
-| `docs/COST_STRATEGY.md` | Budgeting, usage metering, and cost controls |
-| `docs/IMPLEMENTATION_PLAN.md` | Milestones, task breakdown, and Definition of Done |
-| `CLAUDE.md` | Instructions for Claude Code working in this repository |
+| [PRD](docs/PRD.md) | Product goals, users, requirements, acceptance criteria |
+| [Architecture](docs/ARCHITECTURE.md) | Components, runtime flow, reliability, security |
+| [Content pipeline](docs/CONTENT_PIPELINE.md) | Stages, gates, statuses, reuse |
+| [AI providers](docs/AI_PROVIDER_STRATEGY.md) | Provider interfaces, registry, routing, data policy |
+| [Cost strategy](docs/COST_STRATEGY.md) | Money, prices, budgets, cost reports |
+| [Database](docs/DATABASE.md) | Tables by area, database-enforced rules, roles |
+| [API](docs/API_SPEC.md) | REST endpoints, errors, conventions |
+| [Local development](docs/LOCAL_DEVELOPMENT.md) | Setup, commands, tests |
+| [Deployment](docs/DEPLOYMENT.md) | Staging on one Ubuntu VPS, operations, backups |
+| [UAT](docs/UAT.md) | Acceptance walk-through and results |
+| [Known limitations](docs/KNOWN_LIMITATIONS.md) | What the MVP does not do |
+| [Implementation plan](docs/IMPLEMENTATION_PLAN.md) | Milestones, process, Definition of Done |
+| [ADRs](docs/adr/README.md) | Architecture decisions |
+| `docs/design/` | Design review packages and verification records per milestone (historical) |
+| [CLAUDE.md](CLAUDE.md) | Rules for Claude Code in this repository |
 
-## Decisions fixed for MVP
-
-- Monorepo with modular architecture; do not start with microservices.
-- Frontend: Next.js + TypeScript.
-- Backend: NestJS + TypeScript.
-- Database: PostgreSQL + Prisma.
-- Queue: Redis + BullMQ.
-- Workflow automation: n8n is optional integration/orchestration support, not the source of truth for production state.
-- Media processing: FFmpeg worker.
-- Storage: S3-compatible object storage (Cloudflare R2 is a candidate).
-- AI providers are accessed through capability-specific adapters.
-- LLM gateway and image/video/TTS providers are separate concerns.
-- All generated media and jobs must be traceable and resumable.
-- Human approval is required before final export is marked approved or content is published.
-
-## Important implementation note
-
-Provider capabilities, model IDs, pricing, free-tier quotas, API schemas, and usage terms change frequently. Do not hardcode claims from this document as current facts. Before implementing a provider adapter, verify its official API documentation, supported capabilities, pricing, data retention/training terms, and rate limits. Store model pricing as configurable registry data with an effective date.
-
-## Suggested repository layout
-
-```text
-ai-content-factory/
-├── apps/
-│   ├── web/                  # Next.js dashboard
-│   ├── api/                  # NestJS REST API
-│   └── worker/               # BullMQ workers
-├── packages/
-│   ├── contracts/            # Shared DTOs, schemas, enums
-│   ├── database/             # Prisma schema and migrations
-│   ├── ai-core/              # Provider interfaces, routing, usage
-│   ├── content-domain/       # Content/script/storyboard domain
-│   ├── media/                # FFmpeg and media validation
-│   └── config/               # Shared config and environment validation
-├── workflows/
-│   └── n8n/                  # Optional workflow exports
-├── infra/
-│   ├── docker/
-│   └── compose/
-├── docs/
-├── .env.example
-├── pnpm-workspace.yaml
-├── package.json
-└── CLAUDE.md
-```
-
-## First implementation command
-
-Ask Claude Code to read `CLAUDE.md` and all documents in `docs/`, then implement **Milestone M0 only**: repository skeleton, architecture decisions, environment validation, local Docker Compose, health checks, and a short ADR log. Do not build the full pipeline in one pass.
+Provider models, prices and terms change often. Treat the figures in these documents as recorded
+at a date, and check the provider's current documentation before you rely on them.
