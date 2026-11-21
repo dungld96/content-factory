@@ -2,6 +2,7 @@
 
 - Status: **Revision 1, approved by the owner (2026-11-21)** by standing instruction ("follow your
   recommendations until all packages are complete"): L1–L6 as proposed; collections per project.
+  Slices P2b-1–P2b-4 implemented (§10); API integration and E2E verification pending.
 - Date: 2026-11-21
 - Baseline: P2a implemented (Library review, immutable system metadata, production lineage).
   Input: `docs/post-mvp/POST_MVP_AUDIT.md` §B2, §C2 (steps 4–7).
@@ -124,3 +125,19 @@ Web: collection filter and "Add to collection" in the Library panel; create from
   reference are now refused; stored versions are unaffected.
 - **Search uses `ILIKE`** on two columns within one project: fine at current volume; an index can
   follow if needed.
+
+## 10. Deviations and results found during implementation
+
+| Item                          | Planned                                | Done                                                                         | Why                                                                                                                           |
+| ----------------------------- | -------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Unique active collection name | Partial unique index                   | Checked in `CollectionsService` (case-insensitive)                           | A partial index is invisible to Prisma and fails the drift check; names only organise the Library, so a rare race is harmless |
+| Library paging                | "Show more" per project                | Newest 60 per project with server filters, and a notice to narrow the search | Smaller change; search and filters reach older assets                                                                         |
+| Brief character/environment   | `NewContentForm` and master brief form | Master brief form only (variants get it by resync)                           | The master holds the brief; variants copy it                                                                                  |
+| Scene references              | Field inside the scene editor          | Separate "References" button with the picker                                 | Avoids a dialog inside a dialog                                                                                               |
+| `mutate()`                    | —                                      | Accepts request headers and `DELETE`                                         | `If-Match` on approvals; removing collection members                                                                          |
+| E2E                           | Picker, brand page, collections        | **Not written**                                                              | Follow-up with the full stack                                                                                                 |
+
+Verification: lint, typecheck, format, build and unit tests pass; database integration **run**
+(301 passed, incl. collections, drift and grants); API integration tests (filters, scene
+references, collections, permission matrix) written, **not run** (the API suite needs S3 storage in
+the implementation session).

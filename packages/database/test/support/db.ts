@@ -58,6 +58,8 @@ export const ALL_TABLES = [
   'provider_circuits',
   'provider_circuit_events',
   'ai_registry_events',
+  'asset_collection_items',
+  'asset_collections',
 ] as const;
 
 /** Empties every table. Must run as the migrator (the app role has no TRUNCATE). */

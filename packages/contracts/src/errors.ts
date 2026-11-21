@@ -136,6 +136,8 @@ export const ApiErrorCode = {
   // --- P2b: bindings to Library assets ---
   /** A scene reference is not an active, non-rejected reference or image of the project. */
   ReferenceInvalid: 'REFERENCE_INVALID',
+  /** An active collection of the project already has this name. */
+  NameTaken: 'NAME_TAKEN',
 
   // --- R0: content masters and variants (ADR-0015) ---
   /** The format cannot be published on the target platform. */

@@ -185,6 +185,8 @@ model User {
   budgetEvents       BudgetEvent[]          @relation("BudgetEventActor")
   circuitEvents      ProviderCircuitEvent[] @relation("CircuitEventActor")
   registryEvents        AiRegistryEvent[]    @relation("RegistryEventActor")
+  createdCollections    AssetCollection[]    @relation("CollectionCreatedBy")
+  addedCollectionItems  AssetCollectionItem[] @relation("CollectionItemAddedBy")
 
   @@map("users")
 }
@@ -233,6 +235,7 @@ model Project {
   channels      Channel[]
   characters    Character[]
   environments  Environment[]
+  assetCollections AssetCollection[]
   assets        Asset[]
   contentItems  ContentItem[]
   aiInvocations AiInvocation[]
@@ -517,6 +520,7 @@ model Asset {
   environmentVersionLinks   EnvironmentVersionAsset[] @relation("EnvironmentVersionAssets")
 
   sceneReferences StoryboardSceneAsset[]
+  collectionItems AssetCollectionItem[]
 
   @@unique([projectId, id]) // composite-FK target
   @@index([projectId, createdAt(sort: Desc), id(sort: Desc)]) // list/pagination
@@ -1618,4 +1622,43 @@ model AiRegistryEvent {
   @@index([createdAt(sort: Desc), id(sort: Desc)])
   @@index([actorId])
   @@map("ai_registry_events")
+}
+
+/// A named group of Library assets in one project (P2b design L5). Organisational only: no
+/// production path reads it. Archived, never deleted.
+model AssetCollection {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  projectId   String    @map("project_id") @db.Uuid
+  name        String    @db.VarChar(100)
+  createdById String    @map("created_by_id") @db.Uuid
+  archivedAt  DateTime? @map("archived_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  project   Project               @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy User                  @relation("CollectionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  items     AssetCollectionItem[]
+
+  @@unique([projectId, id]) // composite-FK target
+  @@index([projectId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([createdById])
+  @@map("asset_collections")
+}
+
+/// Membership of an asset in a collection (same project through composite FKs).
+model AssetCollectionItem {
+  projectId    String   @map("project_id") @db.Uuid
+  collectionId String   @map("collection_id") @db.Uuid
+  assetId      String   @map("asset_id") @db.Uuid
+  addedById    String   @map("added_by_id") @db.Uuid
+  addedAt      DateTime @default(now()) @map("added_at") @db.Timestamptz(3)
+
+  collection AssetCollection @relation(fields: [projectId, collectionId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  asset      Asset           @relation(fields: [projectId, assetId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  addedBy    User            @relation("CollectionItemAddedBy", fields: [addedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([collectionId, assetId])
+  @@index([assetId])
+  @@index([addedById])
+  @@map("asset_collection_items")
 }

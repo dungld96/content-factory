@@ -37,6 +37,7 @@ import {
 } from '../support/workspace.js';
 
 type Caller = 'unauthenticated' | Persona;
+const UNKNOWN_ID = '0f000000-0000-7000-8000-0000000000ff';
 const CALLERS: readonly Caller[] = ['unauthenticated', 'outsider', 'viewer', 'editor', 'owner'];
 
 interface Row {
@@ -578,6 +579,39 @@ const ROWS: Record<string, Row> = {
     method: 'GET',
     path: (f) => `/assets/${f.assetId}/usages`,
     expect: [401, 404, 200, 200, 200],
+  },
+  // P2b collections. Changes on an unknown collection are 404 for everyone (members included).
+  'GET /projects/:projectId/collections': {
+    method: 'GET',
+    path: (f) => `/projects/${f.projectId}/collections`,
+    expect: [401, 404, 200, 200, 200],
+  },
+  'POST /projects/:projectId/collections': {
+    method: 'POST',
+    path: (f) => `/projects/${f.projectId}/collections`,
+    body: () => ({ name: `Collection ${randomUUID().slice(0, 8)}` }),
+    expect: [401, 404, 403, 201, 201],
+  },
+  'PATCH /collections/:collectionId': {
+    method: 'PATCH',
+    path: () => `/collections/${UNKNOWN_ID}`,
+    body: () => ({ name: 'x' }),
+    expect: [401, 404, 404, 404, 404],
+  },
+  'POST /collections/:collectionId/archive': {
+    method: 'POST',
+    path: () => `/collections/${UNKNOWN_ID}/archive`,
+    expect: [401, 404, 404, 404, 404],
+  },
+  'PUT /collections/:collectionId/assets/:assetId': {
+    method: 'PUT',
+    path: (f) => `/collections/${UNKNOWN_ID}/assets/${f.assetId}`,
+    expect: [401, 404, 404, 404, 404],
+  },
+  'DELETE /collections/:collectionId/assets/:assetId': {
+    method: 'DELETE',
+    path: (f) => `/collections/${UNKNOWN_ID}/assets/${f.assetId}`,
+    expect: [401, 404, 404, 404, 404],
   },
   'GET /assets/:assetId/inputs': {
     method: 'GET',

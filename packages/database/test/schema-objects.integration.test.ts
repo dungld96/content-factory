@@ -31,6 +31,7 @@ const EXPECTED_TRIGGERS: readonly (readonly [string, string, boolean])[] = [
   ['ai_model_prices', 'ai_model_prices_append_only', false],
   ['ai_registry_events', 'ai_registry_events_append_only', false],
   ['ai_usage_records', 'ai_usage_records_append_only', false],
+  ['asset_collections', 'asset_collections_no_delete', false],
   ['asset_inputs', 'asset_inputs_append_only', false],
   ['assets', 'assets_guard', false],
   ['assets', 'assets_no_delete', false],
@@ -106,6 +107,7 @@ const EXPECTED_CHECKS = [
   'ai_usage_records.ai_usage_records_price_needs_unit_price',
   'ai_usage_records.ai_usage_records_quantity_nonnegative',
   'ai_usage_records.ai_usage_records_unit_price_nonnegative',
+  'asset_collections.asset_collections_name_nonempty',
   'asset_inputs.asset_inputs_not_self',
   'asset_inputs.asset_inputs_role_known',
   'assets.assets_checksum_format',
@@ -298,7 +300,7 @@ describe('role separation (U3)', () => {
       `SELECT tablename, has_table_privilege(current_user, 'public.' || tablename, 'SELECT, INSERT, UPDATE, DELETE') AS ok
        FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`,
     );
-    expect(rows.length).toBe(43); // M1–M3: 27; R0: content_masters; M4: 3 image tables; M5: 5 media tables; M6: renders; M7: 3 budget + 2 circuit tables; P1: ai_registry_events
+    expect(rows.length).toBe(45); // M1–M3: 27; R0: content_masters; M4: 3 image tables; M5: 5 media tables; M6: renders; M7: 3 budget + 2 circuit tables; P1: ai_registry_events; P2b: 2 collection tables
     expect(rows.filter((r) => !r.ok)).toEqual([]);
   });
 });

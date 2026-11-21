@@ -472,3 +472,32 @@ describe('archive-only tables', () => {
     ).toBe('23503');
   });
 });
+
+describe('asset collections (P2b L5)', () => {
+  const COL = '2c000000-0000-7000-8000-000000000001';
+  it('keep members in the collection project, archive instead of delete', async () => {
+    await commit(
+      app,
+      `INSERT INTO asset_collections (id, project_id, name, created_by_id, updated_at)
+         VALUES ('${COL}', '${P1}', 'Hero shots', '${U1}', now());
+       INSERT INTO asset_collection_items (project_id, collection_id, asset_id, added_by_id)
+         VALUES ('${P1}', '${COL}', '${A1}', '${U1}');`,
+    );
+    // An asset of another project cannot join (composite FK).
+    expect(
+      await fails(
+        `INSERT INTO asset_collection_items (project_id, collection_id, asset_id, added_by_id)
+         VALUES ('${P1}', '${COL}', '${A9}', '${U1}')`,
+      ),
+    ).toBe('23503');
+    expect(await fails(`DELETE FROM asset_collections WHERE id = '${COL}'`)).toBe('AC006');
+    expect(await fails(`UPDATE asset_collections SET name = '  ' WHERE id = '${COL}'`)).toBe(
+      '23514',
+    );
+    // Membership is organisational: removing it is allowed.
+    await commit(
+      app,
+      `DELETE FROM asset_collection_items WHERE collection_id = '${COL}' AND asset_id = '${A1}'`,
+    );
+  });
+});

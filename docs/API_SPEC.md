@@ -295,7 +295,7 @@ the old one. Skipped: `superseded` (a later job of the same stage and scope succ
 | `POST /scripts/:id/approve`, `POST /scripts/:id/reject` | One-time review (`{ note? }` on reject). Approval moves gate 1 and clears gate 2 (older storyboards become stale) |
 | `POST /scripts/:id/storyboards/generate` | `202`, only from the approved script |
 | `GET /content/:contentId/storyboards`, `GET /storyboards/:id` | Versions with `stale`, `isApproved`; detail includes scenes |
-| `PATCH /scenes/:sceneId` | Partial scene: **new** storyboard version with that scene changed (201); numbering and total duration (target ± max(1 s, 5 %)) re-validated |
+| `PATCH /scenes/:sceneId` | Partial scene: **new** storyboard version with that scene changed (201); numbering and total duration (target ± max(1 s, 5 %)) re-validated. `requiredReferenceAssetIds` must be active, non-rejected `reference`/`image` assets of the project (`422 REFERENCE_INVALID`) |
 | `POST /storyboards/:id/approve`, `/reject` | One-time review; approval sets gate 2; a stale storyboard is refused |
 
 Storyboard jobs (template `storyboard.v2`) are given the routed clip model's lengths and the
@@ -438,7 +438,11 @@ Schemas: `packages/contracts/src/assets.ts`.
 | Endpoint | Role | Notes |
 |---|---|---|
 | `POST /projects/:projectId/assets` | editor | registers metadata; see rules below |
-| `GET /projects/:projectId/assets` | viewer | paginated; filters `assetType`, `contentItemId`, `includeArchived` |
+| `GET /projects/:projectId/assets` | viewer | paginated; filters `assetType`, `contentItemId`, `includeArchived`, `purpose` (`voiceover`/`music`), `approvalStatus`, `q` (file name or label, case-insensitive), `collectionId` |
+| `GET /projects/:projectId/collections` | viewer | Collections with `itemCount` (`includeArchived`) |
+| `POST /projects/:projectId/collections` | editor | `{ name }`; `409 NAME_TAKEN` for an active collection with the same name (case-insensitive) |
+| `PATCH /collections/:collectionId`, `POST …/archive` | editor | Rename; archive (never deleted) |
+| `PUT /collections/:collectionId/assets/:assetId`, `DELETE …` | editor | Add (idempotent; same project only, else `422`) / remove a membership (`204`). Collections only organise the Library: no production path reads them |
 | `GET /assets/:assetId` | viewer | |
 | `GET /assets/:assetId/lineage` | viewer | `?direction=ancestors\|descendants&depth=1..50`; descendants are breadth-first and paginated (`limit`, `cursor`) |
 | `GET /assets/:assetId/usages` | viewer | `data`: character/environment versions referencing the asset (`primary` or `link`); `production`: where it is used — `generation_input` (with `role` and the asset made from it), `keyframe`/`clip`/`voiceover` selections and `scene_reference` (with scene and storyboard version), `render_output`; at most 100 per kind |

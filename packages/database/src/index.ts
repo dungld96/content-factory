@@ -18,6 +18,8 @@ export type {
   EnvironmentVersion,
   EnvironmentVersionAsset,
   Asset,
+  AssetCollection,
+  AssetCollectionItem,
   ContentItem,
   ContentMaster,
   AiProvider,

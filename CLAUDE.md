@@ -139,8 +139,10 @@ Worker monitoring & smart recovery:** design package revision 1 approved
 integration/E2E verification pending (package §10).
 **P2a — Asset Library integrity:** design package revision 1 approved
 (`docs/design/P2a-design-review-package.md`; A1–A3, 2026-11-20); slices P2a-1–P2a-3 implemented,
-API integration/E2E verification pending (package §9). P2b (picker, brand UI, references,
-collections) not started.
+API integration/E2E verification pending (package §9).
+**P2b — Asset Library features:** design package revision 1 approved
+(`docs/design/P2b-design-review-package.md`; L1–L6, collections per project); slices
+P2b-1–P2b-4 implemented, API integration/E2E verification pending (package §10).
 **P1 — OpenRouter Settings UI:** design package revision 1 approved
 (`docs/design/P1-design-review-package.md`; O1–O7); slices P1a–P1c implemented, API
 integration/E2E verification pending (package §10). Operators: `OPERATOR_EMAILS`.

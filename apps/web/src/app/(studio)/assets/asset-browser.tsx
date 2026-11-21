@@ -9,6 +9,7 @@ import type {
   AssetInputListDto,
   AssetProductionUsageDto,
   AssetUsagesDto,
+  CollectionDto,
   GenerationJobDto,
   LineageResponse,
 } from '@acf/contracts';
@@ -32,8 +33,54 @@ const REVIEWABLE = new Set<AssetDto['assetType']>(['reference', 'image', 'video'
 
 const IN_USE_CODES = new Set(['KEYFRAME_INVALID', 'SCENE_SELECTION_INVALID']);
 
+/** Creates a collection in the selected project (P2b L5). */
+export function NewCollectionForm({ projectId }: { readonly projectId: string }) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  async function create(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
+    event.preventDefault();
+    const formEl = event.currentTarget;
+    const value = new FormData(formEl).get('name');
+    const name = typeof value === 'string' ? value.trim() : '';
+    if (!name) return;
+    const r = await mutate('POST', `/projects/${projectId}/collections`, { name });
+    if (!r.ok) {
+      setError(errorText(r));
+      return;
+    }
+    setError(null);
+    formEl.reset();
+    toast(`Collection “${name}” created.`);
+    router.refresh();
+  }
+  return (
+    <form className="image-toolbar" aria-label="New collection" onSubmit={(e) => void create(e)}>
+      <label className="field">
+        New collection
+        <input name="name" maxLength={100} placeholder="e.g. Hero shots" required />
+      </label>
+      <button type="submit" className="btn">
+        Create
+      </button>
+      {error && (
+        <span className="form-error" role="alert">
+          {error}
+        </span>
+      )}
+    </form>
+  );
+}
+
 /** Review, label and archive from the Library (P2a A1); same endpoints as the scene tabs. */
-function AssetActions({ asset }: { readonly asset: AssetRow }) {
+function AssetActions({
+  asset,
+  collections,
+  activeCollectionId,
+}: {
+  readonly asset: AssetRow;
+  readonly collections: readonly CollectionDto[];
+  readonly activeCollectionId: string | null;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +88,7 @@ function AssetActions({ asset }: { readonly asset: AssetRow }) {
   const [confirmArchive, setConfirmArchive] = useState(false);
 
   async function act(
-    method: 'POST' | 'PATCH',
+    method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     path: string,
     body: unknown,
     done: string,
@@ -159,6 +206,43 @@ function AssetActions({ asset }: { readonly asset: AssetRow }) {
           Archive
         </button>
       )}
+      {collections.length > 0 && (
+        <label className="field">
+          Add to collection
+          <select
+            value=""
+            disabled={busy}
+            onChange={(e) => {
+              const c = collections.find((x) => x.id === e.target.value);
+              if (c) {
+                void act(
+                  'PUT',
+                  `/collections/${c.id}/assets/${asset.id}`,
+                  {},
+                  `Added to ${c.name}.`,
+                );
+              }
+            }}
+          >
+            <option value="">Choose…</option>
+            {collections.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {activeCollectionId && (
+        <button
+          type="button"
+          className="btn ghost"
+          disabled={busy}
+          onClick={() => void removeFromCollection(activeCollectionId)}
+        >
+          Remove from this collection
+        </button>
+      )}
       {error && (
         <span className="form-error" role="alert">
           {error}
@@ -166,6 +250,15 @@ function AssetActions({ asset }: { readonly asset: AssetRow }) {
       )}
     </div>
   );
+
+  async function removeFromCollection(collectionId: string) {
+    await act(
+      'DELETE',
+      `/collections/${collectionId}/assets/${asset.id}`,
+      undefined,
+      'Removed from the collection.',
+    );
+  }
 }
 
 const SOURCE_LABEL: Readonly<Record<AssetDto['sourceType'], string>> = {
@@ -276,7 +369,15 @@ function MediaPreview({ asset }: { readonly asset: AssetDto }) {
   return null;
 }
 
-function LineagePanel({ asset }: { readonly asset: AssetRow }) {
+function LineagePanel({
+  asset,
+  collections,
+  activeCollectionId,
+}: {
+  readonly asset: AssetRow;
+  readonly collections: readonly CollectionDto[];
+  readonly activeCollectionId: string | null;
+}) {
   const provenance = useProvenance(asset);
   return (
     <section className="card card-pad" style={{ marginTop: 18 }} aria-label="Asset lineage">
@@ -288,7 +389,14 @@ function LineagePanel({ asset }: { readonly asset: AssetRow }) {
         <ApprovalPill status={asset.approvalStatus} />
       </div>
       <MediaPreview asset={asset} />
-      {asset.canEdit && <AssetActions key={asset.id} asset={asset} />}
+      {asset.canEdit && (
+        <AssetActions
+          key={asset.id}
+          asset={asset}
+          collections={collections.filter((c) => c.projectId === asset.projectId)}
+          activeCollectionId={activeCollectionId}
+        />
+      )}
       <div className="brief-box">
         <span className="box-label">Selected asset · {nameOf(asset)}</span>
         <dl className="lineage">
@@ -403,7 +511,15 @@ function LineagePanel({ asset }: { readonly asset: AssetRow }) {
 }
 
 /** Asset grid; selecting an asset shows its lineage. */
-export function AssetBrowser({ assets }: { readonly assets: readonly AssetRow[] }) {
+export function AssetBrowser({
+  assets,
+  collections = [],
+  activeCollectionId = null,
+}: {
+  readonly assets: readonly AssetRow[];
+  readonly collections?: readonly CollectionDto[];
+  readonly activeCollectionId?: string | null;
+}) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = assets.find((a) => a.id === selectedId) ?? null;
 
@@ -458,7 +574,11 @@ export function AssetBrowser({ assets }: { readonly assets: readonly AssetRow[] 
         })}
       </ul>
       {selected ? (
-        <LineagePanel asset={selected} />
+        <LineagePanel
+          asset={selected}
+          collections={collections}
+          activeCollectionId={activeCollectionId}
+        />
       ) : (
         <p className="muted small-text" style={{ marginTop: 14 }}>
           Select an asset to see its lineage. <Pill tone="green">Traceability enabled</Pill>

@@ -279,3 +279,61 @@ describe('usages and archive', () => {
     expect((await ctx.as('outsider', 'GET', `/assets/${f.assetId}/inputs`)).status).toBe(404);
   });
 });
+
+describe('collections (P2b L5)', () => {
+  it('groups assets of one project without touching them, and filters the Library', async () => {
+    const f = await ctx.fixture();
+    const created = await ctx.as('editor', 'POST', `/projects/${f.projectId}/collections`, {
+      body: { name: 'Hero shots' },
+    });
+    expect(created.status).toBe(201);
+    const collection = bodyOf<{ id: string; itemCount: number }>(created);
+    const dup = await ctx.as('editor', 'POST', `/projects/${f.projectId}/collections`, {
+      body: { name: 'hero SHOTS' },
+    });
+    expect([dup.status, codeOf(dup)]).toEqual([409, 'NAME_TAKEN']);
+
+    const before = await ctx.prisma.asset.findUniqueOrThrow({ where: { id: f.assetId } });
+    for (let i = 0; i < 2; i += 1) {
+      const add = await ctx.as(
+        'editor',
+        'PUT',
+        `/collections/${collection.id}/assets/${f.assetId}`,
+      );
+      expect(bodyOf<{ itemCount: number }>(add).itemCount).toBe(1); // idempotent
+    }
+    // Membership changes nothing about the asset (identity, metadata, review).
+    expect(await ctx.prisma.asset.findUniqueOrThrow({ where: { id: f.assetId } })).toEqual(before);
+
+    const members = bodyOf<Page<AssetDto>>(
+      await ctx.as(
+        'viewer',
+        'GET',
+        `/projects/${f.projectId}/assets?collectionId=${collection.id}`,
+      ),
+    );
+    expect(members.data.map((a) => a.id)).toEqual([f.assetId]);
+
+    // Another project's asset cannot join.
+    const other = await ctx.fixture();
+    const foreign = await ctx.as(
+      'editor',
+      'PUT',
+      `/collections/${collection.id}/assets/${other.assetId}`,
+    );
+    expect(foreign.status).toBe(422);
+
+    const removed = await ctx.as(
+      'editor',
+      'DELETE',
+      `/collections/${collection.id}/assets/${f.assetId}`,
+    );
+    expect(removed.status).toBe(204);
+    const archived = await ctx.as('editor', 'POST', `/collections/${collection.id}/archive`);
+    expect(archived.status).toBe(200);
+    const list = bodyOf<{ data: { id: string }[] }>(
+      await ctx.as('viewer', 'GET', `/projects/${f.projectId}/collections`),
+    );
+    expect(list.data.map((c) => c.id)).not.toContain(collection.id);
+  });
+});

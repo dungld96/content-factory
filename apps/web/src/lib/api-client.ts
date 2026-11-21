@@ -37,7 +37,7 @@ function confirmOverBudget(message: string): boolean {
  * (recorded as an override). Hard limits (`402 BUDGET_EXCEEDED`) are never retried.
  */
 export async function mutate<T>(
-  method: 'POST' | 'PATCH' | 'PUT',
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   path: string,
   body?: unknown,
   /** Extra request headers, e.g. `If-Match` for optimistic concurrency. */
@@ -61,7 +61,7 @@ export async function mutate<T>(
 }
 
 async function send<T>(
-  method: 'POST' | 'PATCH' | 'PUT',
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   path: string,
   body: unknown,
   extra: Readonly<Record<string, string>>,

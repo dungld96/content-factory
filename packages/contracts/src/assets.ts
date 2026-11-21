@@ -194,6 +194,8 @@ export const listAssetsQuerySchema = z.strictObject({
   approvalStatus: approvalStatusSchema.optional(),
   /** Case-insensitive substring of the file name or label. */
   q: z.string().trim().min(1).max(100).optional(),
+  /** Members of this collection only (P2b L5). */
+  collectionId: z.uuid().optional(),
 });
 
 export const LINEAGE_MAX_DEPTH = 50;
@@ -283,3 +285,36 @@ export const assetUsagesSchema = z
   })
   .meta({ id: 'AssetUsages' });
 export type AssetUsagesDto = z.infer<typeof assetUsagesSchema>;
+
+// --- P2b L5: collections (per project, organisational only) ---
+
+export const collectionSchema = z
+  .object({
+    id: z.uuid(),
+    projectId: z.uuid(),
+    name: z.string(),
+    itemCount: z.number().int(),
+    archivedAt: isoDateTimeSchema.nullable(),
+    createdAt: isoDateTimeSchema,
+    updatedAt: isoDateTimeSchema,
+  })
+  .meta({ id: 'AssetCollection' });
+export type CollectionDto = z.infer<typeof collectionSchema>;
+export const collectionListSchema = z
+  .object({ data: z.array(collectionSchema) })
+  .meta({ id: 'AssetCollectionList' });
+export type CollectionListDto = z.infer<typeof collectionListSchema>;
+
+export const collectionNameRequestSchema = z
+  .strictObject({ name: z.string().trim().min(1).max(100) })
+  .meta({ id: 'AssetCollectionNameRequest' });
+export type CollectionNameRequest = z.output<typeof collectionNameRequestSchema>;
+
+export const collectionIdParamsSchema = z.strictObject({ collectionId: z.uuid() });
+export const collectionAssetParamsSchema = z.strictObject({
+  collectionId: z.uuid(),
+  assetId: z.uuid(),
+});
+export const listCollectionsQuerySchema = z.strictObject({
+  includeArchived: includeArchivedSchema,
+});

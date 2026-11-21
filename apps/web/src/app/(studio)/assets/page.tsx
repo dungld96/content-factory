@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
-import type { AssetDto, Page, ProjectDto } from '@acf/contracts';
+import type { AssetDto, CollectionListDto, Page, ProjectDto } from '@acf/contracts';
 
 import { UploadAssetButton } from '@/components/forms';
 import { QueryFilters } from '@/components/query-filters';
@@ -10,7 +10,7 @@ import { param, type SearchParams } from '@/lib/content-filters';
 import { writableProjects } from '@/lib/project-options';
 import { apiGetAll } from '@/lib/workspace';
 
-import { AssetBrowser, type AssetRow } from './asset-browser';
+import { AssetBrowser, NewCollectionForm, type AssetRow } from './asset-browser';
 
 export const metadata: Metadata = { title: 'Asset library · Content Studio' };
 export const dynamic = 'force-dynamic';
@@ -43,11 +43,19 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
   const q = param(query, 'q')?.trim().slice(0, 100);
   const review = param(query, 'review') === 'pending';
   const scope = projects.data.items.filter((p) => !projectId || p.id === projectId);
+  // P2b L5: collections are per project, so they are offered once a project is chosen.
+  const selectedProject = projectId ? scope[0] : undefined;
+  const collections = selectedProject
+    ? await apiGet<CollectionListDto>(`/projects/${selectedProject.id}/collections`)
+    : null;
+  const collectionList = collections?.kind === 'ok' ? collections.data.data : [];
+  const collectionId = collectionList.find((c) => c.id === param(query, 'collection'))?.id;
   // P2b L1: the API filters and pages; one page per project.
   const filters = new URLSearchParams({ limit: String(PAGE_SIZE) });
   if (type) filters.set('assetType', type);
   if (review) filters.set('approvalStatus', 'pending');
   if (q) filters.set('q', q);
+  if (collectionId) filters.set('collectionId', collectionId);
   const lists = await Promise.all(
     scope.map((p) => apiGet<Page<AssetDto>>(`/projects/${p.id}/assets?${filters.toString()}`)),
   );
@@ -99,6 +107,19 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
             allLabel: 'All projects',
             options: projects.data.items.map((p) => ({ value: p.id, label: p.name })),
           },
+          ...(selectedProject
+            ? [
+                {
+                  name: 'collection',
+                  label: 'Collection',
+                  allLabel: 'All assets',
+                  options: collectionList.map((c) => ({
+                    value: c.id,
+                    label: `${c.name} (${String(c.itemCount)})`,
+                  })),
+                },
+              ]
+            : []),
         ]}
         count={`${String(assets.length)} asset${assets.length === 1 ? '' : 's'}`}
       />
@@ -113,7 +134,14 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
           Some projects’ assets could not be loaded.
         </p>
       )}
-      <AssetBrowser assets={assets} />
+      {selectedProject && writable.some((p) => p.id === selectedProject.id) && (
+        <NewCollectionForm projectId={selectedProject.id} />
+      )}
+      <AssetBrowser
+        assets={assets}
+        collections={collectionList}
+        activeCollectionId={collectionId ?? null}
+      />
     </>
   );
 }

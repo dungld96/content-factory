@@ -408,6 +408,7 @@ export class AssetsService {
       purpose?: 'voiceover' | 'music' | undefined;
       approvalStatus?: AssetDto['approvalStatus'] | undefined;
       q?: string | undefined;
+      collectionId?: string | undefined;
     },
   ): Promise<Page<AssetDto>> {
     await this.access.require(actor, projectId, 'viewer');
@@ -419,6 +420,9 @@ export class AssetsService {
         ...(query.contentItemId ? { contentItemId: query.contentItemId } : {}),
         ...(query.purpose ? { metadata: { path: ['purpose'], equals: query.purpose } } : {}),
         ...(query.approvalStatus ? { approvalStatus: query.approvalStatus } : {}),
+        ...(query.collectionId
+          ? { collectionItems: { some: { collectionId: query.collectionId } } }
+          : {}),
         ...(query.q
           ? {
               AND: [
