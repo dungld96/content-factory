@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 
 import type { BudgetDto, ContentItemDto, ContentMasterDto, ProjectDto } from '@acf/contracts';
 
+import { Icon } from '@/components/icon';
 import { ContentTable } from '@/components/content-table';
 import { NewContentButton } from '@/components/forms';
 import { QueryFilters } from '@/components/query-filters';
@@ -73,7 +74,7 @@ export default async function ProjectPage(props: {
             Characters &amp; environments
           </Link>
           <Link className="btn" href={`/assets?project=${projectId}`}>
-            <span aria-hidden="true">▧</span> Assets
+            <Icon name="assets" /> Assets
           </Link>
           {writable.length > 0 && <NewContentButton projects={writable} projectId={projectId} />}
         </div>

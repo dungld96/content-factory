@@ -11,6 +11,7 @@ import type {
   VideoGenerateResponseDto,
 } from '@acf/contracts';
 
+import { Icon } from '@/components/icon';
 import { CancelActiveRuns } from '@/components/cancel-run';
 import { ModelSelect, type ModelOption } from '@/components/model-select';
 import { ApprovalPill, Pill } from '@/components/status-pill';
@@ -41,6 +42,8 @@ const ACTION_LABEL: Readonly<Record<VideoEstimateDto['scenes'][number]['action']
 export function SceneClipsPanel(props: {
   readonly videos: StoryboardVideosDto;
   readonly canEdit: boolean;
+  /** Show only this scene (the Scenes board's selected row); null shows every scene. */
+  readonly onlySceneId?: string | null;
   /** Enabled video models the editor may pick instead of the task route. */
   readonly models?: readonly ModelOption[];
 }) {
@@ -172,7 +175,7 @@ export function SceneClipsPanel(props: {
             title={estimate ? undefined : 'Estimate the cost first'}
             onClick={() => void generate()}
           >
-            <span aria-hidden="true">▶</span> Generate clips
+            <Icon name="generate" /> Generate clips
           </button>
           <CancelActiveRuns jobs={videos.scenes.map((s) => s.activeJob)} video />
         </div>
@@ -237,76 +240,82 @@ export function SceneClipsPanel(props: {
           {error}
         </p>
       )}
-      {videos.scenes.map((scene) => (
-        <article
-          key={scene.sceneId}
-          className="scene-images"
-          aria-label={`Scene ${String(scene.sceneNumber)} clips`}
-        >
-          <div className="section-head">
-            <div>
-              <h3>
-                Scene {String(scene.sceneNumber).padStart(2, '0')}{' '}
-                {scene.clip ? (
-                  <Pill tone="green">Clip chosen</Pill>
-                ) : scene.keyframe ? (
-                  <Pill tone="gray">No clip</Pill>
-                ) : (
-                  <Pill tone="amber">No keyframe</Pill>
-                )}
-              </h3>
-              <p>
-                {scene.videoPrompt} · {String(scene.durationSeconds)} s
-              </p>
-              <JobLine
-                job={scene.activeJob ?? scene.lastJob}
-                progress={scene.progress}
-                canEdit={canEdit}
-                busy={busy}
-                onRecheck={(id) => void act(`/generation-jobs/${id}/recheck`)}
-              />
-            </div>
-            {canEdit && scene.keyframe && (
-              <button
-                type="button"
-                className="btn small"
-                disabled={busy || scene.activeJob !== null}
-                onClick={() =>
-                  void estimateCost({ sceneIds: [scene.sceneId], regenerate: true }).then(() => {
-                    toast(
-                      `Review the estimate for scene ${String(scene.sceneNumber)}, then generate.`,
-                    );
-                  })
-                }
-              >
-                Regenerate scene {scene.sceneNumber}
-              </button>
-            )}
-          </div>
-          {scene.candidates.length === 0 ? (
-            <p className="muted small-text">No clips yet.</p>
-          ) : (
-            <ul
-              className="candidate-grid"
-              aria-label={`Scene ${String(scene.sceneNumber)} clip candidates`}
+      <div className="scene-grid">
+        {videos.scenes
+          .filter((scene) => !props.onlySceneId || scene.sceneId === props.onlySceneId)
+          .map((scene) => (
+            <article
+              key={scene.sceneId}
+              className="scene-images"
+              aria-label={`Scene ${String(scene.sceneNumber)} clips`}
             >
-              {scene.candidates.map((asset, i) => (
-                <ClipCandidate
-                  key={asset.id}
-                  asset={asset}
-                  label={`Scene ${String(scene.sceneNumber)} clip ${String(i + 1)}`}
-                  index={i + 1}
-                  selected={scene.clip?.id === asset.id}
-                  canEdit={canEdit}
-                  busy={busy}
-                  sceneId={scene.sceneId}
-                  onAction={(path, method, body) => void act(path, method, body)}
-                />
-              ))}
-            </ul>
-          )}
-        </article>
-      ))}
+              <div className="section-head">
+                <div>
+                  <h3>
+                    Scene {String(scene.sceneNumber).padStart(2, '0')}{' '}
+                    {scene.clip ? (
+                      <Pill tone="green">Clip chosen</Pill>
+                    ) : scene.keyframe ? (
+                      <Pill tone="gray">No clip</Pill>
+                    ) : (
+                      <Pill tone="amber">No keyframe</Pill>
+                    )}
+                  </h3>
+                  <p>
+                    {scene.videoPrompt} · {String(scene.durationSeconds)} s
+                  </p>
+                  <JobLine
+                    job={scene.activeJob ?? scene.lastJob}
+                    progress={scene.progress}
+                    canEdit={canEdit}
+                    busy={busy}
+                    onRecheck={(id) => void act(`/generation-jobs/${id}/recheck`)}
+                  />
+                </div>
+                {canEdit && scene.keyframe && (
+                  <button
+                    type="button"
+                    className="btn small"
+                    disabled={busy || scene.activeJob !== null}
+                    onClick={() =>
+                      void estimateCost({ sceneIds: [scene.sceneId], regenerate: true }).then(
+                        () => {
+                          toast(
+                            `Review the estimate for scene ${String(scene.sceneNumber)}, then generate.`,
+                          );
+                        },
+                      )
+                    }
+                  >
+                    Regenerate scene {scene.sceneNumber}
+                  </button>
+                )}
+              </div>
+              {scene.candidates.length === 0 ? (
+                <p className="muted small-text">No clips yet.</p>
+              ) : (
+                <ul
+                  className="candidate-grid"
+                  aria-label={`Scene ${String(scene.sceneNumber)} clip candidates`}
+                >
+                  {scene.candidates.map((asset, i) => (
+                    <ClipCandidate
+                      key={asset.id}
+                      asset={asset}
+                      label={`Scene ${String(scene.sceneNumber)} clip ${String(i + 1)}`}
+                      index={i + 1}
+                      selected={scene.clip?.id === asset.id}
+                      canEdit={canEdit}
+                      busy={busy}
+                      sceneId={scene.sceneId}
+                      onAction={(path, method, body) => void act(path, method, body)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </article>
+          ))}
+      </div>
     </div>
   );
 }
@@ -372,7 +381,11 @@ function ClipCandidate(props: {
           playsInline
           aria-label={`Play ${props.label}`}
         />
-        {props.selected && <span className="selected-label">✓ Clip</span>}
+        {props.selected && (
+          <span className="selected-label">
+            <Icon name="check" size={14} /> Clip
+          </span>
+        )}
       </div>
       <div className="candidate-foot">
         <div className="row">

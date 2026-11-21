@@ -24,8 +24,14 @@ async function openDemoContent(page: Page, email: string, password: string) {
   ).toBeVisible();
 }
 
-/** Opens a tab of the content workspace (script & brief, storyboard, keyframes, clips, …). */
+/**
+ * Opens a tab of the content workspace (script & brief, storyboard, scenes, …). Keyframes, clips
+ * and voice-over are stages inside the Scenes tab (UX review U1).
+ */
 async function openTab(page: Page, name: RegExp) {
+  if (/Keyframes|Clips|Voice-over/.test(name.source)) {
+    await page.getByRole('tab', { name: /^Scenes/ }).click();
+  }
   await page.getByRole('tab', { name }).click();
   await expect(page.getByRole('tab', { name })).toHaveAttribute('aria-selected', 'true');
 }
@@ -233,7 +239,8 @@ test('editor: voice profile → clips → voice-over (gate 4)', async ({ page })
       .toBeGreaterThan(0);
     await candidate.getByRole('button', { name: 'Approve' }).click();
     await candidate.getByRole('button', { name: 'Use as voice-over' }).click();
-    await expect(candidate).toContainText('✓ Voice-over');
+    await expect(candidate).toHaveClass(/selected/);
+    await expect(candidate).toContainText('Voice-over');
   }
   await expect(page.getByLabel('Voice-over gate')).toHaveText(
     'Every scene with text has a voice-over',
@@ -266,7 +273,7 @@ test('editor: render → QC → approve (gate 5) → export the package', async 
       { timeout: 180_000, intervals: [2_000] },
     )
     .toContain('Review required');
-  await expect(card).toContainText('✓ Passed');
+  await expect(card).toContainText('Passed');
   await expect(card).toContainText('1080×1920');
   await expect(card.getByLabel('Cost summary')).toContainText('rendering $0');
 

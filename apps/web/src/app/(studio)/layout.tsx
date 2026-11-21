@@ -4,6 +4,8 @@ import { Suspense, type ReactNode } from 'react';
 
 import type { MeResponse } from '@acf/contracts';
 
+import { Icon } from '@/components/icon';
+import { AppShell } from '@/components/shell/app-shell';
 import { LogoutButton } from '@/components/shell/logout-button';
 import { SidebarNav } from '@/components/shell/sidebar-nav';
 import { Topbar } from '@/components/shell/topbar';
@@ -34,42 +36,45 @@ export default async function StudioLayout({ children }: { readonly children: Re
   const owned = memberships.filter((m) => m.role === 'owner').length;
 
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <Link href="/" className="brand" aria-label="Content Studio overview">
-          <span className="brand-mark" aria-hidden="true">
-            ✦
-          </span>
-          <span className="brand-copy">
-            <span className="brand-name">content studio</span>
-            <span className="brand-sub">AI content factory</span>
-          </span>
-        </Link>
-        <div className="workspace-switch">
-          <span className="workspace-icon" aria-hidden="true">
-            W
-          </span>
-          <span className="workspace-copy">
-            <b>My workspace</b>
-            <span>
-              {memberships.length} project{memberships.length === 1 ? '' : 's'} · {owned} owned
+    <AppShell
+      sidebar={
+        <>
+          <Link href="/" className="brand" aria-label="Content Studio overview">
+            <span className="brand-mark" aria-hidden="true">
+              <Icon name="generate" size={18} />
             </span>
-          </span>
-        </div>
-        <SidebarNav projectCount={memberships.length} />
-        <div className="sidebar-bottom">
-          <div className="profile">
-            <span className="avatar" aria-hidden="true">
-              {initials(user.displayName)}
+            <span className="brand-copy">
+              <span className="brand-name">content studio</span>
+              <span className="brand-sub">AI content factory</span>
             </span>
-            <span className="profile-copy">
-              <b>{user.displayName}</b>
-              <small>{user.email}</small>
+          </Link>
+          <div className="workspace-switch">
+            <span className="workspace-icon" aria-hidden="true">
+              W
             </span>
-            <LogoutButton />
+            <span className="workspace-copy">
+              <b>My workspace</b>
+              <span>
+                {memberships.length} project{memberships.length === 1 ? '' : 's'} · {owned} owned
+              </span>
+            </span>
           </div>
-        </div>
-      </aside>
+          <SidebarNav projectCount={memberships.length} />
+          <div className="sidebar-bottom">
+            <div className="profile">
+              <span className="avatar" aria-hidden="true">
+                {initials(user.displayName)}
+              </span>
+              <span className="profile-copy">
+                <b>{user.displayName}</b>
+                <small>{user.email}</small>
+              </span>
+              <LogoutButton />
+            </div>
+          </div>
+        </>
+      }
+    >
       <div className="main">
         {/* useSearchParams in the topbar needs a Suspense boundary. */}
         <Suspense fallback={<header className="topbar" />}>
@@ -78,6 +83,6 @@ export default async function StudioLayout({ children }: { readonly children: Re
         <main className="content">{children}</main>
       </div>
       <Toaster />
-    </div>
+    </AppShell>
   );
 }

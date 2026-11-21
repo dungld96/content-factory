@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 
 import type { ResumeRunResponseDto } from '@acf/contracts';
 
+import { Icon } from '@/components/icon';
 import { Modal } from '@/components/modal';
 import { toast } from '@/components/toast';
 import { mutate } from '@/lib/api-client';
@@ -103,7 +104,7 @@ export function ResumeRunButton(props: {
         disabled={busy}
         onClick={() => void resume()}
       >
-        <span aria-hidden="true">↻</span> {props.label ?? 'Resume'}
+        <Icon name="resume" /> {props.label ?? 'Resume'}
       </button>
       {error && (
         <span className="form-error" role="alert">

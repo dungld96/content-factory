@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import type { ContentItemDto } from '@acf/contracts';
 
+import { Icon } from '@/components/icon';
 import { FORMAT_LABEL, platformLabel } from '@/lib/format';
 
 import { RelativeTime } from './local-time';
@@ -42,7 +43,7 @@ export function ContentTable(props: {
                 <span className="title-cell">
                   {!props.compact && (
                     <span className="thumb-mini" aria-hidden="true">
-                      ▶
+                      <Icon name="play" size={14} />
                     </span>
                   )}
                   <span>

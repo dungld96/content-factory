@@ -3,10 +3,13 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { Icon, type IconName } from '@/components/icon';
+import { t } from '@/lib/i18n';
+
 interface NavEntry {
   readonly href: string;
   readonly label: string;
-  readonly icon: string;
+  readonly icon: IconName;
   readonly count?: number;
   /** Whether a pathname belongs to this entry. */
   readonly match: (path: string) => boolean;
@@ -32,60 +35,60 @@ export function SidebarNav({ projectCount }: { readonly projectCount: number }) 
   const path = usePathname();
   const groups: readonly { readonly label: string; readonly entries: readonly NavEntry[] }[] = [
     {
-      label: 'Workspace',
+      label: t('nav.workspace'),
       entries: [
-        { href: '/', label: 'Overview', icon: '◫', match: (p) => p === '/' },
+        { href: '/', label: t('nav.overview'), icon: 'overview', match: (p) => p === '/' },
         {
           href: '/projects',
-          label: 'Projects',
-          icon: '▦',
+          label: t('nav.projects'),
+          icon: 'projects',
           count: projectCount,
           match: (p) => p.startsWith('/projects'),
         },
         {
           href: '/content',
-          label: 'Content library',
-          icon: '▤',
+          label: t('nav.content'),
+          icon: 'content',
           match: (p) => p === '/content',
         },
         {
           href: '/masters',
-          label: 'Content masters',
-          icon: '◈',
+          label: t('nav.masters'),
+          icon: 'masters',
           match: (p) => p.startsWith('/masters'),
         },
       ],
     },
     {
-      label: 'Production',
+      label: t('nav.production'),
       entries: [
         {
           href: '/pipeline',
-          label: 'Production pipeline',
-          icon: '⌘',
+          label: t('nav.pipeline'),
+          icon: 'pipeline',
           match: (p) => p.startsWith('/pipeline') || isContentWorkspace(p),
         },
         {
           href: '/assets',
-          label: 'Asset library',
-          icon: '▧',
+          label: t('nav.assets'),
+          icon: 'assets',
           match: (p) => p.startsWith('/assets'),
         },
         {
           href: '/operations',
-          label: 'Operations',
-          icon: '◉',
+          label: t('nav.operations'),
+          icon: 'operations',
           match: (p) => p.startsWith('/operations'),
         },
       ],
     },
     {
-      label: 'Workspace settings',
+      label: t('nav.workspaceSettings'),
       entries: [
         {
           href: '/settings',
-          label: 'Settings',
-          icon: '⚙',
+          label: t('nav.settings'),
+          icon: 'settings',
           match: (p) => p.startsWith('/settings'),
         },
       ],
@@ -107,7 +110,7 @@ export function SidebarNav({ projectCount }: { readonly projectCount: number }) 
                 title={entry.label}
               >
                 <span className="nav-icon" aria-hidden="true">
-                  {entry.icon}
+                  <Icon name={entry.icon} size={18} />
                 </span>
                 <span className="nav-text">{entry.label}</span>
                 {entry.count !== undefined && (

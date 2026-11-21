@@ -14,6 +14,7 @@ import type {
   LineageResponse,
 } from '@acf/contracts';
 
+import { Icon } from '@/components/icon';
 import { LocalTime } from '@/components/local-time';
 import { ApprovalPill, Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
@@ -131,7 +132,7 @@ function AssetActions({
             disabled={busy || asset.approvalStatus === 'approved'}
             onClick={() => void act('POST', `/assets/${asset.id}/approve`, {}, 'Asset approved.')}
           >
-            <span aria-hidden="true">✓</span> Approve
+            <Icon name="check" /> Approve
           </button>
           <button
             type="button"
@@ -139,7 +140,7 @@ function AssetActions({
             disabled={busy || asset.approvalStatus === 'rejected'}
             onClick={() => void act('POST', `/assets/${asset.id}/reject`, {}, 'Asset rejected.')}
           >
-            <span aria-hidden="true">↺</span> Reject
+            <Icon name="reject" /> Reject
           </button>
         </>
       )}

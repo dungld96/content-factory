@@ -2,18 +2,19 @@ import Link from 'next/link';
 
 import type { ContentItemDto } from '@acf/contracts';
 
+import { Icon, type IconName } from './icon';
 import { countByStage, STAGE_LABEL, statusInfo, type Stage } from '@/lib/content-status';
 
 import { RelativeTime } from './local-time';
 
-const STAGE_MARK: Readonly<Record<Stage, string>> = {
-  draft: '✎',
-  script: '¶',
-  storyboard: '▤',
-  images: '✧',
-  render: '▶',
-  done: '✓',
-  attention: '!',
+const STAGE_MARK: Readonly<Record<Stage, IconName>> = {
+  draft: 'edit',
+  script: 'edit',
+  storyboard: 'content',
+  images: 'image',
+  render: 'render',
+  done: 'check',
+  attention: 'warning',
 };
 
 /** Stage rows (prototype "Pipeline health" / "Production snapshot"), real counts. */
@@ -30,7 +31,7 @@ export function StageList(props: {
       {counts.map((c) => (
         <li key={c.stage} className="pipeline-row">
           <span className="pipeline-mark" aria-hidden="true">
-            {STAGE_MARK[c.stage]}
+            <Icon name={STAGE_MARK[c.stage]} />
           </span>
           <span className="pipeline-meta">
             <b>{STAGE_LABEL[c.stage]}</b>

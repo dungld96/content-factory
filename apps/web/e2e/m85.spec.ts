@@ -65,7 +65,8 @@ test('owner: picks a model and approves an earlier script version', async ({ pag
   await v1.getByRole('button', { name: 'Approve script v1' }).click();
   await expect(page.getByText('The script v1 is approved.')).toBeVisible();
   await page.reload();
-  await expect(page.getByText('Version 1 in use')).toBeVisible();
+  // The step bar names the approved version (the checklist moved into it, UX review U2).
+  await expect(page.getByLabel('Production steps')).toContainText('v1 approved');
 });
 
 test('owner: voice picker offers the model voices', async ({ page }) => {

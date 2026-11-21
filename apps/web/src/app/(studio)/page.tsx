@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { ContentTable } from '@/components/content-table';
+import { Icon, type IconName } from '@/components/icon';
 import { NewContentButton } from '@/components/forms';
 import { StageList } from '@/components/snapshot';
 import { isFinished, isInProduction, needsReview, weeklyCreation } from '@/lib/content-status';
@@ -17,7 +18,7 @@ const DAY_MS = 86_400_000;
 
 function Stat(props: {
   readonly label: string;
-  readonly icon: string;
+  readonly icon: IconName;
   readonly value: number;
   readonly foot: string;
 }) {
@@ -26,7 +27,7 @@ function Stat(props: {
       <div className="stat-top">
         {props.label}
         <span className="stat-icon" aria-hidden="true">
-          {props.icon}
+          <Icon name={props.icon} />
         </span>
       </div>
       <div className="stat-value">{props.value}</div>
@@ -87,20 +88,25 @@ export default async function OverviewPage() {
       <section className="stats" aria-label="Workspace statistics">
         <Stat
           label="Content items"
-          icon="▤"
+          icon="content"
           value={content.length}
           foot={`${String(recentlyCreated.length)} created in the last 30 days`}
         />
         <Stat
           label="In production"
-          icon="◷"
+          icon="history"
           value={inProduction.length}
           foot={`${String(waiting.length)} need your review`}
         />
-        <Stat label="Approved" icon="✓" value={finished.length} foot="All review gates passed" />
+        <Stat
+          label="Approved"
+          icon="check"
+          value={finished.length}
+          foot="All review gates passed"
+        />
         <Stat
           label="Projects"
-          icon="▦"
+          icon="projects"
           value={projects.length}
           foot={`${String(owned)} owned by you`}
         />

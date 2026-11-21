@@ -10,6 +10,7 @@ import type {
   StoryboardImagesDto,
 } from '@acf/contracts';
 
+import { Icon } from '@/components/icon';
 import { CancelActiveRuns } from '@/components/cancel-run';
 import { ModelSelect, type ModelOption } from '@/components/model-select';
 import { ApprovalPill, Pill } from '@/components/status-pill';
@@ -26,6 +27,8 @@ import { formatUsd } from '@/lib/money';
 export function SceneImagesPanel(props: {
   readonly images: StoryboardImagesDto;
   readonly canEdit: boolean;
+  /** Show only this scene (the Scenes board's selected row); null shows every scene. */
+  readonly onlySceneId?: string | null;
   /** Enabled image models the editor may pick instead of the task route. */
   readonly models?: readonly ModelOption[];
 }) {
@@ -132,7 +135,7 @@ export function SceneImagesPanel(props: {
             disabled={busy}
             onClick={() => void generate()}
           >
-            <span aria-hidden="true">✧</span> Generate images
+            <Icon name="generate" /> Generate images
           </button>
           <CancelActiveRuns jobs={images.scenes.map((s) => s.activeJob)} />
         </div>
@@ -167,69 +170,73 @@ export function SceneImagesPanel(props: {
           {error}
         </p>
       )}
-      {images.scenes.map((scene) => {
-        const job = scene.activeJob ?? scene.lastJob;
-        return (
-          <article
-            key={scene.sceneId}
-            className="scene-images"
-            aria-label={`Scene ${String(scene.sceneNumber)} images`}
-          >
-            <div className="section-head">
-              <div>
-                <h3>
-                  Scene {String(scene.sceneNumber).padStart(2, '0')}{' '}
-                  {scene.keyframe ? (
-                    <Pill tone="green">Keyframe chosen</Pill>
-                  ) : (
-                    <Pill tone="gray">No keyframe</Pill>
-                  )}
-                </h3>
-                <p>{scene.imagePrompt}</p>
-                {job && (
-                  <p role="status">
-                    Image job {job.status}
-                    {job.attempt > 1 ? ` (attempt ${String(job.attempt)})` : ''}
-                    {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}
-                  </p>
-                )}
-              </div>
-              {canEdit && (
-                <button
-                  type="button"
-                  className="btn small"
-                  disabled={busy || scene.activeJob !== null}
-                  onClick={() => void generate({ sceneIds: [scene.sceneId], regenerate: true })}
-                >
-                  Regenerate scene {scene.sceneNumber}
-                </button>
-              )}
-            </div>
-            {scene.candidates.length === 0 ? (
-              <p className="muted small-text">No images yet.</p>
-            ) : (
-              <ul
-                className="candidate-grid"
-                aria-label={`Scene ${String(scene.sceneNumber)} candidates`}
+      <div className="scene-grid">
+        {images.scenes
+          .filter((scene) => !props.onlySceneId || scene.sceneId === props.onlySceneId)
+          .map((scene) => {
+            const job = scene.activeJob ?? scene.lastJob;
+            return (
+              <article
+                key={scene.sceneId}
+                className="scene-images"
+                aria-label={`Scene ${String(scene.sceneNumber)} images`}
               >
-                {scene.candidates.map((asset, i) => (
-                  <Candidate
-                    key={asset.id}
-                    asset={asset}
-                    index={i + 1}
-                    label={`Scene ${String(scene.sceneNumber)} candidate ${String(i + 1)}`}
-                    isKeyframe={scene.keyframe?.id === asset.id}
-                    canEdit={canEdit}
-                    busy={busy}
-                    onAction={(path, method, body) => void act(path, method, body)}
-                    sceneId={scene.sceneId}
-                  />
-                ))}
-              </ul>
-            )}
-          </article>
-        );
-      })}
+                <div className="section-head">
+                  <div>
+                    <h3>
+                      Scene {String(scene.sceneNumber).padStart(2, '0')}{' '}
+                      {scene.keyframe ? (
+                        <Pill tone="green">Keyframe chosen</Pill>
+                      ) : (
+                        <Pill tone="gray">No keyframe</Pill>
+                      )}
+                    </h3>
+                    <p>{scene.imagePrompt}</p>
+                    {job && (
+                      <p role="status">
+                        Image job {job.status}
+                        {job.attempt > 1 ? ` (attempt ${String(job.attempt)})` : ''}
+                        {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}
+                      </p>
+                    )}
+                  </div>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      className="btn small"
+                      disabled={busy || scene.activeJob !== null}
+                      onClick={() => void generate({ sceneIds: [scene.sceneId], regenerate: true })}
+                    >
+                      Regenerate scene {scene.sceneNumber}
+                    </button>
+                  )}
+                </div>
+                {scene.candidates.length === 0 ? (
+                  <p className="muted small-text">No images yet.</p>
+                ) : (
+                  <ul
+                    className="candidate-grid"
+                    aria-label={`Scene ${String(scene.sceneNumber)} candidates`}
+                  >
+                    {scene.candidates.map((asset, i) => (
+                      <Candidate
+                        key={asset.id}
+                        asset={asset}
+                        index={i + 1}
+                        label={`Scene ${String(scene.sceneNumber)} candidate ${String(i + 1)}`}
+                        isKeyframe={scene.keyframe?.id === asset.id}
+                        canEdit={canEdit}
+                        busy={busy}
+                        onAction={(path, method, body) => void act(path, method, body)}
+                        sceneId={scene.sceneId}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </article>
+            );
+          })}
+      </div>
     </div>
   );
 }
@@ -257,7 +264,11 @@ function Candidate(props: {
           height={asset.height ?? undefined}
           loading="lazy"
         />
-        {props.isKeyframe && <span className="selected-label">✓ Keyframe</span>}
+        {props.isKeyframe && (
+          <span className="selected-label">
+            <Icon name="check" size={14} /> Keyframe
+          </span>
+        )}
       </div>
       <div className="candidate-foot">
         <div className="row">

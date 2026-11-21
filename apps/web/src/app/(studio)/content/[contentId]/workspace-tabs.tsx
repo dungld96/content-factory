@@ -2,6 +2,9 @@
 
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
 
+/** Former tabs, now stages of the Scenes tab (UX review U1): old links keep working. */
+const STAGE_ALIASES: ReadonlySet<string> = new Set(['keyframes', 'clips', 'voiceover']);
+
 export interface WorkspaceTab {
   readonly id: string;
   readonly label: string;
@@ -23,7 +26,9 @@ export function WorkspaceTabs(props: {
 
   useEffect(() => {
     const fromHash = () => {
-      const id = window.location.hash.slice(1);
+      // `#scenes?filter=failed` links carry options; stage names open the Scenes tab.
+      const raw = window.location.hash.slice(1).split('?')[0] ?? '';
+      const id = STAGE_ALIASES.has(raw) ? 'scenes' : raw;
       if (tabs.some((t) => t.id === id)) setActive(id);
     };
     fromHash();
@@ -32,6 +37,13 @@ export function WorkspaceTabs(props: {
       window.removeEventListener('hashchange', fromHash);
     };
   }, [tabs]);
+
+  // Phones (UX review U4): keep the active tab in view in the scrolling tab row.
+  useEffect(() => {
+    document
+      .getElementById(`tab-${active}`)
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [active]);
 
   function select(id: string) {
     setActive(id);

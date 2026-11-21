@@ -24,7 +24,16 @@ export function useHydrated(): boolean {
  */
 export function LocalTime({ iso }: { readonly iso: string }) {
   const hydrated = useHydrated();
-  return <time dateTime={iso}>{hydrated ? new Date(iso).toLocaleString() : iso}</time>;
+  return <time dateTime={iso}>{hydrated ? formatLocal(iso) : iso}</time>;
+}
+
+/** "21 Nov 2026, 14:52": the viewer's locale and timezone, 24-hour clock (UX review U3). */
+export function formatLocal(iso: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    hourCycle: 'h23',
+  }).format(new Date(iso));
 }
 
 const UNITS: readonly [Intl.RelativeTimeFormatUnit, number][] = [
@@ -75,7 +84,7 @@ export function RelativeTime({ iso }: { readonly iso: string }) {
     ? format.format(Math.round(seconds / unit[1]), unit[0])
     : format.format(0, 'minute');
   return (
-    <time dateTime={iso} title={new Date(iso).toLocaleString()}>
+    <time dateTime={iso} title={formatLocal(iso)}>
       {text}
     </time>
   );

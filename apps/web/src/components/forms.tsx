@@ -14,6 +14,7 @@ import type {
   VersionedEntityDto,
 } from '@acf/contracts';
 
+import { Icon } from '@/components/icon';
 import { fetchJson, mutate, uploadImage, type MutationResult } from '@/lib/api-client';
 import { PLATFORM_OPTIONS } from '@/lib/format';
 
@@ -866,7 +867,7 @@ export function UploadAssetButton(props: {
       className="btn primary"
       label={
         <>
-          <span aria-hidden="true">↑</span> Upload asset
+          <Icon name="upload" /> Upload asset
         </>
       }
       title="Upload an asset"

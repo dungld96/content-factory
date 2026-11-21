@@ -11,7 +11,9 @@
   --text: #17202f;
   --text-2: #39465a;
   --text-3: #526074;
-  --muted: #7c8798;
+  /* UX review U3: 5.4:1 on white, 5.0:1 on --bg (WCAG AA for normal text). */
+  --muted: #5f6b7d;
+  /* Borders, separators, placeholders and disabled text only: not for readable text. */
   --muted-2: #a1aaba;
   --nav: #151d2b;
   --nav-2: #202b3c;
@@ -22,13 +24,13 @@
   --accent-hover: #574bd4;
   --accent-soft: #efedff;
   --accent-line: #c9c5fa;
-  --green: #17855f;
+  --green: #136b4d;
   --green-soft: #e7f7f0;
-  --amber: #a86e14;
+  --amber: #8a5a10;
   --amber-soft: #fff5e5;
-  --red: #c2414f;
+  --red: #b23a47;
   --red-soft: #fdecee;
-  --gray: #677386;
+  --gray: #5f6b7d;
   --gray-soft: #f0f2f5;
   --placeholder: linear-gradient(145deg, #e8e4f7, #c9d2e0);
   --shadow: 0 8px 28px rgb(25 36 56 / 5.5%);
@@ -163,7 +165,7 @@ code {
 }
 
 .brand-sub {
-  font-size: 10px;
+  font-size: 12px;
   color: #8491a5;
   margin-top: 2px;
   letter-spacing: 1.3px;
@@ -209,12 +211,12 @@ code {
 }
 
 .workspace-copy span {
-  font-size: 10px;
+  font-size: 12px;
   color: #9ba7b9;
 }
 
 .nav-label {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 1.2px;
   text-transform: uppercase;
@@ -265,7 +267,7 @@ code {
 
 .nav-count {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 12px;
   padding: 2px 7px;
   background: #343f51;
   border-radius: 20px;
@@ -294,7 +296,7 @@ code {
   display: grid;
   place-items: center;
   font-weight: 700;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .profile-copy {
@@ -309,7 +311,7 @@ code {
 }
 
 .profile-copy small {
-  font-size: 10px;
+  font-size: 12px;
   color: #8996a9;
   display: block;
   overflow: hidden;
@@ -323,7 +325,7 @@ code {
   color: #aab4c4;
   border-radius: 8px;
   padding: 5px 8px;
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -398,7 +400,7 @@ code {
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 1px 5px;
-  font-size: 10px;
+  font-size: 12px;
   background: var(--surface);
   font-family: inherit;
 }
@@ -438,7 +440,7 @@ code {
 }
 
 .eyebrow {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 1.35px;
   text-transform: uppercase;
@@ -520,7 +522,7 @@ code {
 
 .btn.small {
   padding: 7px 10px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .btn:disabled {
@@ -560,13 +562,13 @@ code {
 
 .section-head p {
   margin: 4px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
 .link {
   color: var(--accent);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
@@ -581,7 +583,7 @@ code {
 }
 
 .small-text {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .empty {
@@ -625,7 +627,7 @@ code {
   gap: 5px;
   border-radius: 20px;
   padding: 4px 8px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
   background: var(--gray-soft);
@@ -652,7 +654,7 @@ code {
 
 .status.purple {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-hover);
 }
 
 .status.red {
@@ -661,7 +663,7 @@ code {
 }
 
 .tag {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   background: var(--surface);
   border: 1px solid var(--line);
@@ -678,7 +680,7 @@ code {
 }
 
 .chip-count {
-  font-size: 10px;
+  font-size: 12px;
   padding: 2px 7px;
   border-radius: 20px;
   background: var(--accent-soft);
@@ -703,7 +705,7 @@ code {
   justify-content: space-between;
   align-items: center;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .stat-icon {
@@ -724,7 +726,7 @@ code {
 }
 
 .stat-foot {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -773,7 +775,7 @@ code {
 .bar-label {
   position: absolute;
   bottom: -22px;
-  font-size: 9px;
+  font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -783,7 +785,7 @@ code {
   gap: 15px;
   margin-top: 33px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .legend-dot {
@@ -836,7 +838,7 @@ code {
 }
 
 .pipeline-meta span {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -859,7 +861,7 @@ code {
 .table th {
   text-align: left;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   padding: 11px 10px;
   border-bottom: 1px solid var(--line);
@@ -905,7 +907,7 @@ code {
 
 .subline {
   display: block;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   font-weight: 400;
   margin-top: 3px;
@@ -921,7 +923,7 @@ code {
   vertical-align: middle;
   margin-right: 10px;
   color: var(--accent);
-  font-size: 11px;
+  font-size: 12px;
   flex-shrink: 0;
 }
 
@@ -971,7 +973,7 @@ code {
 }
 
 .project-card p {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin: 0;
   line-height: 1.5;
@@ -1037,7 +1039,7 @@ code {
 }
 
 .project-metrics span {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -1053,7 +1055,7 @@ code {
 .toolbar-count {
   margin-left: auto;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .filter {
@@ -1073,7 +1075,7 @@ input.filter {
 .field {
   display: grid;
   gap: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   font-weight: 700;
 }
@@ -1181,7 +1183,7 @@ input.filter {
 }
 
 .activity-item p {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin: 0;
   line-height: 1.5;
@@ -1256,7 +1258,7 @@ input.filter {
   align-items: center;
   gap: 6px;
   margin-top: 10px;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -1285,7 +1287,7 @@ input.filter {
   place-items: center;
   background: var(--gray-soft);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -1303,11 +1305,11 @@ input.filter {
 
 .step b {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .step small {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   display: block;
 }
@@ -1371,7 +1373,7 @@ input.filter {
 .brief-box .box-label {
   display: block;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.8px;
   font-weight: 700;
@@ -1386,14 +1388,14 @@ input.filter {
 }
 
 .brief-box .brief-meta {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 10px;
 }
 
 .brief-check {
   margin-top: 12px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -1438,7 +1440,7 @@ input.filter {
 
 .script-label {
   display: block;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--accent);
   text-transform: uppercase;
   letter-spacing: 0.7px;
@@ -1454,7 +1456,7 @@ input.filter {
 }
 
 .job-line {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -1487,17 +1489,17 @@ input.filter {
   color: var(--green);
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: 12px;
   flex-shrink: 0;
 }
 
 .progress-copy b {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .progress-copy span {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -1519,7 +1521,7 @@ input.filter {
 
 .cost-box span,
 .cost-box small {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   display: block;
 }
@@ -1539,7 +1541,7 @@ input.filter {
 }
 
 .routing-label {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   letter-spacing: 0.6px;
   text-transform: uppercase;
@@ -1547,7 +1549,7 @@ input.filter {
 
 .routing dl {
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 4px 8px;
@@ -1589,7 +1591,7 @@ input.filter {
   display: grid;
   place-items: center;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .scene-art img {
@@ -1608,7 +1610,7 @@ input.filter {
   color: #17202f;
   padding: 4px 7px;
   border-radius: 5px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   z-index: 1;
 }
@@ -1626,7 +1628,7 @@ input.filter {
 }
 
 .scene-body p {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--muted);
   margin: 0 0 6px;
@@ -1712,7 +1714,7 @@ input.filter {
   color: #fff;
   border-radius: 5px;
   padding: 4px 7px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -1720,7 +1722,7 @@ input.filter {
   padding: 10px;
   display: grid;
   gap: 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -1928,7 +1930,7 @@ input.filter {
   display: grid;
   place-items: center;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .asset-visual img {
@@ -1945,14 +1947,14 @@ input.filter {
 
 .asset-meta b {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .asset-meta span {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -2008,7 +2010,7 @@ input.filter {
 }
 
 .settings-nav a span {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -2126,7 +2128,7 @@ input.filter {
 }
 
 .provider-head code {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -2169,14 +2171,14 @@ input.filter {
 }
 
 .cell-sub {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 2px;
 }
 
 .mono {
   font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .nowrap {
@@ -2259,7 +2261,7 @@ input.filter {
 
 .price-more {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .price-more summary {
@@ -2329,7 +2331,7 @@ input.filter {
   .table.stack-mobile td[data-label]::before {
     content: attr(data-label);
     display: block;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -2533,41 +2535,81 @@ input.filter {
 }
 
 @media (width <= 760px) {
+  /* UX review U4: the sidebar becomes a drawer; a bottom bar holds the main destinations. */
   .sidebar {
-    width: 62px;
-    padding: 18px 8px;
+    width: min(300px, 86vw);
+    transform: translateX(-100%);
+    transition: transform 150ms ease-out;
+    z-index: 30;
+    box-shadow: none;
   }
 
-  .brand {
-    padding: 2px 5px 25px;
+  .nav-open .sidebar {
+    transform: none;
+    box-shadow: 0 18px 48px rgb(0 0 0 / 35%);
   }
 
-  .brand-copy,
-  .workspace-switch,
-  .nav-label,
-  .nav-text,
-  .nav-count,
-  .profile-copy {
-    display: none;
+  .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    border: 0;
+    background: rgb(15 20 29 / 45%);
   }
 
-  .nav-item {
-    justify-content: center;
-    padding: 12px 0;
+  .menu-button {
+    display: grid;
   }
 
-  .nav-icon {
-    font-size: 17px;
-  }
-
-  .profile {
-    flex-direction: column;
-    padding: 12px 0;
+  .bottom-nav {
+    display: grid;
   }
 
   .main {
-    margin-left: 62px;
-    width: calc(100% - 62px);
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .content {
+    padding-bottom: 96px;
+  }
+
+  .topbar {
+    padding: 0 16px 0 64px;
+  }
+
+  .search kbd {
+    display: none;
+  }
+
+  .workflow {
+    display: none;
+  }
+
+  .workflow-compact {
+    display: flex;
+  }
+
+  .tabs {
+    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 28px), transparent);
+    scrollbar-width: none;
+  }
+
+  .btn,
+  .tab,
+  .nav-item {
+    min-height: 44px;
+  }
+
+  .btn.small {
+    min-height: 40px;
+  }
+
+  input,
+  select,
+  textarea {
+    min-height: 44px;
   }
 
   .topbar {
@@ -2602,7 +2644,7 @@ input.filter {
   }
 
   .signout {
-    font-size: 10px;
+    font-size: 12px;
     padding: 4px 5px;
   }
 
@@ -2756,4 +2798,415 @@ input.filter {
   align-items: center;
   gap: 6px;
   margin-left: 4px;
+}
+
+/* UX review U3/U7: Lucide SVG icons sit on the text baseline and never shrink in flex rows. */
+.icon {
+  flex: none;
+  vertical-align: -0.2em;
+}
+
+.nav-icon .icon,
+.stat-icon .icon,
+.pipeline-mark .icon,
+.brand-mark .icon,
+.thumb-mini .icon {
+  vertical-align: middle;
+}
+
+/* UX review U4: phone-only controls, hidden on wide screens. */
+.menu-button {
+  display: none;
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 35;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.nav-backdrop {
+  display: none;
+}
+
+.bottom-nav {
+  display: none;
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 20;
+  height: 64px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.bottom-nav a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.bottom-nav a.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.workflow-compact {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+}
+
+.workflow-compact .bar-track {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.workflow-compact .bar-fill {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------- Scenes board (UX review U1, P3e) */
+
+.board-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 14px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.chip-num {
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+
+.board-table {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.board-head,
+.board-row {
+  display: grid;
+  grid-template-columns: 56px repeat(3, minmax(0, 1fr)) 120px;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+}
+
+.board-head {
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.board-row {
+  border-top: 1px solid var(--line-soft);
+}
+
+.board-row.focused {
+  background: var(--accent-soft);
+}
+
+.board-scene b {
+  font-family: var(--font-display);
+  font-size: 16px;
+}
+
+.board-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.board-cell:hover {
+  border-color: var(--line);
+  background: var(--surface-2);
+}
+
+.board-cell-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.board-cell-copy b {
+  font-size: 13px;
+}
+
+.board-cell-copy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-cell.failed b {
+  color: var(--red);
+}
+
+.board-cell.pick b {
+  color: var(--amber);
+}
+
+.board-cell.running b,
+.board-cell.queued b {
+  color: var(--accent);
+}
+
+.board-cell.waiting b,
+.board-cell.todo b,
+.board-cell.none b {
+  color: var(--muted);
+}
+
+.board-thumb {
+  display: grid;
+  flex: none;
+  width: 28px;
+  height: 48px;
+  place-items: center;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--muted);
+  object-fit: cover;
+}
+
+img.board-thumb {
+  border-style: solid;
+}
+
+.board-thumb.chosen {
+  border-style: solid;
+  border-color: var(--green);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.board-thumb.failed {
+  border-color: var(--red);
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.board-thumb.pick {
+  border-color: var(--amber);
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.board-thumb.running,
+.board-thumb.queued {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.board-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.board-empty {
+  margin: 0;
+  padding: 20px;
+  text-align: center;
+}
+
+.stage-tabs {
+  margin-top: -6px;
+}
+
+.focus-note {
+  margin: 0 0 12px;
+  color: var(--text-2);
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.next-step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+  border-color: var(--accent-line);
+}
+
+.next-step .eyebrow {
+  margin: 0;
+}
+
+.next-step b {
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+@media (width <= 760px) {
+  .board-head {
+    display: none;
+  }
+
+  .board-row {
+    grid-template-columns: 1fr auto;
+    gap: 6px;
+  }
+
+  .board-row > [role='cell']:not(.board-status) {
+    grid-column: 1 / -1;
+  }
+
+  .board-scene {
+    grid-row: 1;
+  }
+
+  .board-status {
+    grid-row: 1;
+    grid-column: 2;
+    align-items: flex-end;
+  }
+}
+
+/* UX review U2: Next step and cost, sticky beside the workspace. */
+.side-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-self: start;
+  position: sticky;
+  top: 16px;
+}
+
+.side-stack .next-step {
+  margin-bottom: 0;
+}
+
+@media (width <= 900px) {
+  .side-stack {
+    position: static;
+  }
+}
+
+/* UX review U1: scene cards of a stage sit side by side instead of one full-width row each. */
+.scene-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.scene-grid > .scene-images {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.scene-grid > .scene-images .section-head {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scene-grid .candidate-grid {
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+}
+
+/* Phone overrides for the controls defined above (they must come after the base rules). */
+@media (width <= 760px) {
+  .menu-button,
+  .bottom-nav {
+    display: grid;
+  }
+
+  .nav-backdrop {
+    display: block;
+  }
+
+  .workflow-compact {
+    display: flex;
+  }
+
+  .topbar {
+    padding-left: 64px;
+  }
+
+  /* With the drawer open, the close button sits just outside it. */
+  .nav-open .menu-button {
+    left: calc(min(300px, 86vw) + 10px);
+  }
+}
+
+.cost-card .cost-box {
+  margin: 0;
+  border: 0;
+  background: transparent;
 }

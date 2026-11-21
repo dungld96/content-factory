@@ -1,9 +1,13 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, type SyntheticEvent } from 'react';
+import { useEffect, useRef, useSyncExternalStore, type SyntheticEvent } from 'react';
+
+import { Icon } from '@/components/icon';
 
 import { sectionOf } from './sidebar-nav';
+
+const noSubscription = (): (() => void) => () => undefined;
 
 /** Breadcrumb and content search (⌘K / Ctrl+K focuses it; Enter opens the content library). */
 export function Topbar() {
@@ -11,6 +15,13 @@ export function Topbar() {
   const params = useSearchParams();
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
+  // Ctrl K on Windows and Linux (most operators), ⌘ K on a Mac; decided after hydration.
+  const isMac = useSyncExternalStore(
+    noSubscription,
+    () => /Mac|iPhone|iPad/.test(navigator.userAgent),
+    () => false,
+  );
+  const shortcut = isMac ? '⌘ K' : 'Ctrl K';
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -42,7 +53,7 @@ export function Topbar() {
       </div>
       <div className="top-spacer" />
       <form className="search" role="search" onSubmit={search}>
-        <span aria-hidden="true">⌕</span>
+        <Icon name="search" />
         <input
           ref={input}
           // Re-mount when the URL query changes so the field shows the active search.
@@ -53,7 +64,7 @@ export function Topbar() {
           aria-label="Search content"
           defaultValue={path === '/content' ? (params.get('q') ?? '') : ''}
         />
-        <kbd aria-hidden="true">⌘ K</kbd>
+        <kbd aria-hidden="true">{shortcut}</kbd>
       </form>
     </header>
   );

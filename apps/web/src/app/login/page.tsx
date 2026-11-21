@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 
 import type { MeResponse } from '@acf/contracts';
 
+import { Icon } from '@/components/icon';
 import { apiGet } from '@/lib/api-server';
 
 import { LoginForm } from './login-form';
@@ -20,7 +21,7 @@ export default async function LoginPage() {
       <section className="card standalone-card">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
-            ✦
+            <Icon name="generate" size={18} />
           </span>
           <span className="brand-copy">
             <span className="brand-name">content studio</span>

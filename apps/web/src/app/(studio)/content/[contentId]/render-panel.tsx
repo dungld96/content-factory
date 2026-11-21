@@ -10,6 +10,7 @@ import type {
   RenderPlanDto,
 } from '@acf/contracts';
 
+import { Icon } from '@/components/icon';
 import { CancelRunButton } from '@/components/cancel-run';
 import { LocalTime } from '@/components/local-time';
 import { Pill } from '@/components/status-pill';
@@ -193,7 +194,7 @@ export function RenderPanel(props: {
             disabled={busy || !ready}
             onClick={() => void render()}
           >
-            <span aria-hidden="true">▣</span> Render video
+            <Icon name="render" /> Render video
           </button>
         </div>
       )}
@@ -321,15 +322,23 @@ function RenderCard(props: {
           <div className="render-side">
             <h4>Automated checks</h4>
             <p className="small-text">
-              {errors.length === 0 ? '✓ Passed' : '✖ Failed'} · {r.qc?.measured.width ?? '?'}×
-              {r.qc?.measured.height ?? '?'} · {r.qc?.measured.fps ?? '?'} fps ·{' '}
-              {r.qc?.measured.integratedLufs ?? '?'} LUFS
+              {errors.length === 0 ? (
+                <>
+                  <Icon name="check" /> Passed
+                </>
+              ) : (
+                <>
+                  <Icon name="failed" /> Failed
+                </>
+              )}{' '}
+              · {r.qc?.measured.width ?? '?'}×{r.qc?.measured.height ?? '?'} ·{' '}
+              {r.qc?.measured.fps ?? '?'} fps · {r.qc?.measured.integratedLufs ?? '?'} LUFS
             </p>
             {warnings.length > 0 ? (
               <ul className="plain-list small-text" aria-label="QC warnings">
                 {warnings.map((w) => (
                   <li key={`${w.check}-${w.message}`}>
-                    ⚠ {w.scene ? `Scene ${String(w.scene)}: ` : ''}
+                    <Icon name="warning" /> {w.scene ? `Scene ${String(w.scene)}: ` : ''}
                     {w.message}
                   </li>
                 ))}
@@ -342,7 +351,9 @@ function RenderCard(props: {
                 <h4>Human review</h4>
                 <ul className="plain-list small-text" aria-label="Human review checklist">
                   {HUMAN_CHECKS.map((c) => (
-                    <li key={c}>☐ {c}</li>
+                    <li key={c}>
+                      <Icon name="todo" /> {c}
+                    </li>
                   ))}
                 </ul>
               </>

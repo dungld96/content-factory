@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import type { GenerationJobDto } from '@acf/contracts';
 
+import { Icon } from '@/components/icon';
 import { Modal } from '@/components/modal';
 import { ResumeRunButton } from '@/components/resume-run';
 
@@ -34,7 +35,7 @@ export function DeliveredOutputActions(props: {
             setOpen(true);
           }}
         >
-          <span aria-hidden="true">▶</span> Preview {what}
+          <Icon name="play" /> Preview {what}
         </button>
       )}
       {props.canEdit && job.finishable && (

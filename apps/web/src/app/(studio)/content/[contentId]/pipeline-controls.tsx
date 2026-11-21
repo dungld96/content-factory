@@ -11,6 +11,7 @@ import type {
   StoryboardSceneDto,
 } from '@acf/contracts';
 
+import { Icon } from '@/components/icon';
 import { AssetPicker } from '@/components/asset-picker';
 import { CancelRunButton } from '@/components/cancel-run';
 import { Modal } from '@/components/modal';
@@ -147,7 +148,7 @@ export function GenerateButton(props: {
         onClick={() => void start()}
         disabled={busy || running}
       >
-        <span aria-hidden="true">✧</span> {running ? 'Generating…' : props.label}
+        <Icon name="generate" /> {running ? 'Generating…' : props.label}
       </button>
       {job && (
         <span className="job-line" role="status">
@@ -200,7 +201,7 @@ export function ReviewButtons(props: {
         disabled={busy}
         onClick={() => void review('approve')}
       >
-        <span aria-hidden="true">✓</span> Approve {props.label}
+        <Icon name="check" /> Approve {props.label}
       </button>
       <button
         type="button"
@@ -208,7 +209,7 @@ export function ReviewButtons(props: {
         disabled={busy}
         onClick={() => void review('reject')}
       >
-        <span aria-hidden="true">↺</span> Reject
+        <Icon name="reject" /> Reject
       </button>
       <ErrorText error={error} />
     </>
@@ -271,7 +272,7 @@ export function ScriptEditor({ script }: { readonly script: ScriptVersionDto }) 
           setOpen(true);
         }}
       >
-        <span aria-hidden="true">✎</span> Edit script
+        <Icon name="edit" /> Edit script
       </button>
       <Modal
         open={open}

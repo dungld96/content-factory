@@ -12,6 +12,7 @@ import type {
   VoiceProfileDto,
 } from '@acf/contracts';
 
+import { Icon } from '@/components/icon';
 import { CancelActiveRuns } from '@/components/cancel-run';
 import { ApprovalPill, Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
@@ -39,6 +40,8 @@ export function SceneVoiceoversPanel(props: {
   readonly voiceovers: StoryboardVoiceoversDto;
   readonly profiles: readonly VoiceProfileDto[];
   readonly canEdit: boolean;
+  /** Show only this scene (the Scenes board's selected row); null shows every scene. */
+  readonly onlySceneId?: string | null;
 }) {
   const router = useRouter();
   const { voiceovers, profiles, canEdit } = props;
@@ -153,7 +156,7 @@ export function SceneVoiceoversPanel(props: {
               disabled={busy || !profile}
               onClick={() => void generate()}
             >
-              <span aria-hidden="true">♪</span> Generate voice-overs
+              <Icon name="generate" /> Generate voice-overs
             </button>
           </>
         )}
@@ -207,76 +210,80 @@ export function SceneVoiceoversPanel(props: {
           {error}
         </p>
       )}
-      {voiceovers.scenes.map((scene) => {
-        const job = scene.activeJob ?? scene.lastJob;
-        return (
-          <article
-            key={scene.sceneId}
-            className="scene-images"
-            aria-label={`Scene ${String(scene.sceneNumber)} voice-over`}
-          >
-            <div className="section-head">
-              <div>
-                <h3>
-                  Scene {String(scene.sceneNumber).padStart(2, '0')}{' '}
-                  {scene.text === '' ? (
-                    <Pill tone="gray">No text</Pill>
-                  ) : scene.voiceover ? (
-                    <Pill tone="green">Voice-over chosen</Pill>
-                  ) : (
-                    <Pill tone="gray">No voice-over</Pill>
-                  )}
-                  {scene.exceedsScene && <Pill tone="amber">Longer than the scene</Pill>}
-                </h3>
-                <p>
-                  {scene.text || 'This scene has no voice-over text.'} ·{' '}
-                  {String(scene.durationSeconds)} s
-                </p>
-                {job && (
-                  <p role="status">
-                    Voice-over job {job.status}
-                    {job.attempt > 1 ? ` (attempt ${String(job.attempt)})` : ''}
-                    {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}{' '}
-                    <DeliveredOutputActions job={job} canEdit={canEdit} />
-                  </p>
-                )}
-              </div>
-              {canEdit && scene.text !== '' && profile && (
-                <button
-                  type="button"
-                  className="btn small"
-                  disabled={busy || scene.activeJob !== null}
-                  onClick={() => void generate({ sceneIds: [scene.sceneId], regenerate: true })}
-                >
-                  Regenerate scene {scene.sceneNumber}
-                </button>
-              )}
-            </div>
-            {scene.candidates.length === 0 ? (
-              <p className="muted small-text">No voice-overs yet.</p>
-            ) : (
-              <ul
-                className="audio-list"
-                aria-label={`Scene ${String(scene.sceneNumber)} voice-over candidates`}
+      <div className="scene-grid">
+        {voiceovers.scenes
+          .filter((scene) => !props.onlySceneId || scene.sceneId === props.onlySceneId)
+          .map((scene) => {
+            const job = scene.activeJob ?? scene.lastJob;
+            return (
+              <article
+                key={scene.sceneId}
+                className="scene-images"
+                aria-label={`Scene ${String(scene.sceneNumber)} voice-over`}
               >
-                {scene.candidates.map((asset, i) => (
-                  <AudioCandidate
-                    key={asset.id}
-                    asset={asset}
-                    label={`Scene ${String(scene.sceneNumber)} voice-over ${String(i + 1)}`}
-                    sceneSeconds={scene.durationSeconds}
-                    selected={scene.voiceover?.id === asset.id}
-                    canEdit={canEdit}
-                    busy={busy}
-                    sceneId={scene.sceneId}
-                    onAction={(path, method, body) => void act(path, method, body)}
-                  />
-                ))}
-              </ul>
-            )}
-          </article>
-        );
-      })}
+                <div className="section-head">
+                  <div>
+                    <h3>
+                      Scene {String(scene.sceneNumber).padStart(2, '0')}{' '}
+                      {scene.text === '' ? (
+                        <Pill tone="gray">No text</Pill>
+                      ) : scene.voiceover ? (
+                        <Pill tone="green">Voice-over chosen</Pill>
+                      ) : (
+                        <Pill tone="gray">No voice-over</Pill>
+                      )}
+                      {scene.exceedsScene && <Pill tone="amber">Longer than the scene</Pill>}
+                    </h3>
+                    <p>
+                      {scene.text || 'This scene has no voice-over text.'} ·{' '}
+                      {String(scene.durationSeconds)} s
+                    </p>
+                    {job && (
+                      <p role="status">
+                        Voice-over job {job.status}
+                        {job.attempt > 1 ? ` (attempt ${String(job.attempt)})` : ''}
+                        {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}{' '}
+                        <DeliveredOutputActions job={job} canEdit={canEdit} />
+                      </p>
+                    )}
+                  </div>
+                  {canEdit && scene.text !== '' && profile && (
+                    <button
+                      type="button"
+                      className="btn small"
+                      disabled={busy || scene.activeJob !== null}
+                      onClick={() => void generate({ sceneIds: [scene.sceneId], regenerate: true })}
+                    >
+                      Regenerate scene {scene.sceneNumber}
+                    </button>
+                  )}
+                </div>
+                {scene.candidates.length === 0 ? (
+                  <p className="muted small-text">No voice-overs yet.</p>
+                ) : (
+                  <ul
+                    className="audio-list"
+                    aria-label={`Scene ${String(scene.sceneNumber)} voice-over candidates`}
+                  >
+                    {scene.candidates.map((asset, i) => (
+                      <AudioCandidate
+                        key={asset.id}
+                        asset={asset}
+                        label={`Scene ${String(scene.sceneNumber)} voice-over ${String(i + 1)}`}
+                        sceneSeconds={scene.durationSeconds}
+                        selected={scene.voiceover?.id === asset.id}
+                        canEdit={canEdit}
+                        busy={busy}
+                        sceneId={scene.sceneId}
+                        onAction={(path, method, body) => void act(path, method, body)}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </article>
+            );
+          })}
+      </div>
     </div>
   );
 }
@@ -312,7 +319,11 @@ function AudioCandidate(props: {
           </span>
         )}
         <ApprovalPill status={asset.approvalStatus} />
-        {props.selected && <Pill tone="green">✓ Voice-over</Pill>}
+        {props.selected && (
+          <Pill tone="green">
+            <Icon name="check" size={14} /> Voice-over
+          </Pill>
+        )}
       </span>
       {tooLong && asset.durationMs !== null && (
         <p className="form-error small-text" role="alert">

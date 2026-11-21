@@ -23,6 +23,8 @@ import type {
   StoryboardVersionDto,
 } from '@acf/contracts';
 
+import { Icon } from '@/components/icon';
+import { buildSceneRows, nextStep } from '@/lib/scene-board';
 import { RelativeTime } from '@/components/local-time';
 import { ContentStatusPill, Pill, VersionPill } from '@/components/status-pill';
 import { assetContentUrl } from '@/lib/asset-url';
@@ -42,16 +44,15 @@ import {
   ScriptEditor,
 } from './pipeline-controls';
 import { RenderPanel } from './render-panel';
-import { SceneClipsPanel } from './scene-clips';
-import { ResyncBriefButton, SceneImagesPanel } from './scene-images';
-import { SceneVoiceoversPanel } from './scene-voiceovers';
+import { ResyncBriefButton } from './scene-images';
+import { ScenesTab } from './scenes-tab';
 import { JobActivity } from './job-activity';
 import { WorkspaceTabs } from './workspace-tabs';
 
 export const metadata: Metadata = { title: 'Content · Content Studio' };
 export const dynamic = 'force-dynamic';
 
-type TabId = 'script' | 'storyboard' | 'keyframes' | 'clips' | 'voiceover' | 'render' | 'activity';
+type TabId = 'script' | 'storyboard' | 'scenes' | 'render' | 'activity';
 
 interface Step {
   readonly label: string;
@@ -61,29 +62,48 @@ interface Step {
 
 function Workflow({ steps }: { readonly steps: readonly Step[] }) {
   const current = steps.findIndex((s) => !s.done);
+  const doneCount = steps.filter((s) => s.done).length;
+  const now = steps[current];
   return (
-    <ol className="card workflow" aria-label="Production steps">
-      {steps.map((step, i) => {
-        const state = step.done ? 'done' : i === current ? 'current' : '';
-        return (
-          <li key={step.label} style={{ display: 'contents' }}>
-            {i > 0 && <span className="step-line" aria-hidden="true" />}
-            <span
-              className={`step ${state}`}
-              aria-current={state === 'current' ? 'step' : undefined}
-            >
-              <span className="step-circle" aria-hidden="true">
-                {step.done ? '✓' : i + 1}
+    <>
+      {/* Phones (UX review U4): one line and a progress bar instead of six steps. */}
+      <div className="card workflow-compact" aria-hidden="true">
+        <b>
+          {now
+            ? `Step ${String(current + 1)} of ${String(steps.length)} · ${now.label}`
+            : 'All steps done'}
+        </b>
+        <span className="muted small-text">{now?.note ?? 'Exported'}</span>
+        <span className="bar-track">
+          <span
+            className="bar-fill"
+            style={{ display: 'block', width: `${String((doneCount / steps.length) * 100)}%` }}
+          />
+        </span>
+      </div>
+      <ol className="card workflow" aria-label="Production steps">
+        {steps.map((step, i) => {
+          const state = step.done ? 'done' : i === current ? 'current' : '';
+          return (
+            <li key={step.label} style={{ display: 'contents' }}>
+              {i > 0 && <span className="step-line" aria-hidden="true" />}
+              <span
+                className={`step ${state}`}
+                aria-current={state === 'current' ? 'step' : undefined}
+              >
+                <span className="step-circle" aria-hidden="true">
+                  {step.done ? <Icon name="check" size={14} /> : i + 1}
+                </span>
+                <span>
+                  <b>{step.label}</b>
+                  <small>{step.note}</small>
+                </span>
               </span>
-              <span>
-                <b>{step.label}</b>
-                <small>{step.note}</small>
-              </span>
-            </span>
-          </li>
-        );
-      })}
-    </ol>
+            </li>
+          );
+        })}
+      </ol>
+    </>
   );
 }
 
@@ -371,11 +391,10 @@ export default async function ContentPage({
     ? 'script'
     : !content.approvedStoryboardVersionId
       ? 'storyboard'
-      : !keyframesDone
-        ? 'keyframes'
-        : !mediaDone
-          ? 'clips'
-          : 'render';
+      : !keyframesDone || !mediaDone
+        ? 'scenes'
+        : 'render';
+  const initialStage = !keyframesDone ? 'keyframes' : 'clips';
   const keyframeByScene = new Map(
     board && imageData && board.id === imageData.storyboardVersionId
       ? imageData.scenes.flatMap((s) => (s.keyframe ? [[s.sceneId, s.keyframe] as const] : []))
@@ -688,80 +707,25 @@ export default async function ContentPage({
     </section>
   );
 
-  const keyframesPanel = (
-    <section className="card work-card">
-      {content.status === 'generating_assets' && (
-        <p className="notice" role="status">
-          Generating images…
-        </p>
-      )}
-      {!images ? (
-        <>
-          <div className="section-head">
-            <div>
-              <h2>Scene keyframes</h2>
-              <p>Generate candidates, compare them and choose one approved image per scene.</p>
-            </div>
-          </div>
-          <div className="empty">Approve a storyboard first (gate 2).</div>
-        </>
-      ) : !imageData ? (
-        <p className="notice error" role="alert">
-          The scene images could not be loaded.
-        </p>
-      ) : (
-        <SceneImagesPanel images={imageData} canEdit={canEdit} models={optionsOf(imageModels)} />
-      )}
-    </section>
-  );
-
-  const clipsPanel = (
-    <section className="card work-card">
-      {!videos ? (
-        <>
-          <div className="section-head">
-            <div>
-              <h2>Scene clips</h2>
-              <p>Animate each approved keyframe, review the clips and choose one per scene.</p>
-            </div>
-          </div>
-          <div className="empty">Approve a storyboard first (gate 2).</div>
-        </>
-      ) : !videoData ? (
-        <p className="notice error" role="alert">
-          The scene clips could not be loaded.
-        </p>
-      ) : (
-        <SceneClipsPanel videos={videoData} canEdit={canEdit} models={optionsOf(videoModels)} />
-      )}
-    </section>
-  );
-
-  const voiceoverPanel = (
-    <section className="card work-card">
-      {!voiceovers ? (
-        <>
-          <div className="section-head">
-            <div>
-              <h2>Voice-over</h2>
-              <p>Narrate each scene with the content’s voice profile, or use imported narration.</p>
-            </div>
-          </div>
-          <div className="empty">Approve a storyboard first (gate 2).</div>
-        </>
-      ) : !voiceData ? (
-        <p className="notice error" role="alert">
-          The voice-overs could not be loaded.
-        </p>
-      ) : (
-        <SceneVoiceoversPanel
-          contentId={content.id}
-          voiceovers={voiceData}
-          profiles={profileList}
-          canEdit={canEdit}
-        />
-      )}
-    </section>
+  const scenesPanel = (
+    <ScenesTab
+      contentId={content.id}
+      canEdit={canEdit}
+      images={imageData}
+      videos={videoData}
+      voiceovers={voiceData}
+      locked={!images || !videos || !voiceovers}
+      loadFailed={
+        Boolean(images && !imageData) ||
+        Boolean(videos && !videoData) ||
+        Boolean(voiceovers && !voiceData)
+      }
+      generating={content.status === 'generating_assets'}
+      imageModels={optionsOf(imageModels)}
+      videoModels={optionsOf(videoModels)}
+      profiles={profileList}
+      initialStage={initialStage}
+    />
   );
 
   const renderPanel = (
@@ -792,6 +756,25 @@ export default async function ContentPage({
   const activityPanel = (
     <section className="card work-card">
       <h2>Activity & version history</h2>
+      <div className="routing" style={{ marginBottom: 18 }}>
+        <span className="routing-label">Model routing (latest jobs)</span>
+        <dl>
+          <dt>Script</dt>
+          <dd>{scriptJobData?.modelKey ?? 'Not generated yet'}</dd>
+          <dt>Storyboard</dt>
+          <dd>{storyboardJobData?.modelKey ?? 'Not generated yet'}</dd>
+          <dt>Images</dt>
+          <dd>
+            {[...new Set(imageJobs.map((j) => j.modelKey))].join(', ') || 'Not generated yet'}
+          </dd>
+          <dt>Clips</dt>
+          <dd>{[...new Set(clipJobs.map((j) => j.modelKey))].join(', ') || 'Not generated yet'}</dd>
+          <dt>Voice-over</dt>
+          <dd>
+            {[...new Set(voiceJobs.map((j) => j.modelKey))].join(', ') || 'Not generated yet'}
+          </dd>
+        </dl>
+      </div>
       <JobActivity contentId={content.id} sceneNumbers={sceneNumbers} canEdit={canEdit} />
       <h3 style={{ marginTop: 24 }}>Version history</h3>
       {events.length === 0 ? (
@@ -869,6 +852,8 @@ export default async function ContentPage({
               : 'Unlocks with every clip and voice-over',
     },
   ];
+  const sceneRows = buildSceneRows(imageData, videoData, voiceData);
+  const next = nextStep(checklist, sceneRows);
   const costs = [scriptJobData, storyboardJobData, ...imageJobs, ...clipJobs, ...voiceJobs].flatMap(
     (j) => (j ? [j.cost] : []),
   );
@@ -892,7 +877,7 @@ export default async function ContentPage({
         <div className="actions">
           <ContentStatusPill status={content.status} label="Content status" />
           <a className="btn" href="#activity">
-            <span aria-hidden="true">◷</span> Version history
+            <Icon name="history" /> Version history
           </a>
         </div>
       </div>
@@ -907,24 +892,12 @@ export default async function ContentPage({
               { id: 'script', label: 'Script & brief', panel: scriptPanel },
               { id: 'storyboard', label: 'Storyboard', panel: storyboardPanel },
               {
-                id: 'keyframes',
-                label: 'Keyframes',
-                badge: imageData ? `${String(keyframeCount)}/${String(sceneCount)}` : undefined,
-                panel: keyframesPanel,
-              },
-              {
-                id: 'clips',
-                label: 'Clips',
-                badge: videoData ? `${String(clipCount)}/${String(sceneCount)}` : undefined,
-                panel: clipsPanel,
-              },
-              {
-                id: 'voiceover',
-                label: 'Voice-over',
-                badge: voiceData
-                  ? `${String(voiceCount)}/${String(voiceScenes.length)}`
+                id: 'scenes',
+                label: 'Scenes',
+                badge: imageData
+                  ? `${String(sceneRows.filter((r) => r.status === 'done').length)}/${String(sceneRows.length)}`
                   : undefined,
-                panel: voiceoverPanel,
+                panel: scenesPanel,
               },
               {
                 id: 'render',
@@ -936,46 +909,28 @@ export default async function ContentPage({
             ]}
           />
         </div>
-        <aside className="card progress-card">
-          <h3>Production checklist</h3>
-          <ul className="progress-list">
-            {checklist.map((c, i) => (
-              <li key={c.label} className={c.done ? 'progress-line' : 'progress-line pending'}>
-                <span className="progress-icon" aria-hidden="true">
-                  {c.done ? '✓' : i + 1}
-                </span>
-                <span className="progress-copy">
-                  <b>
-                    {c.label}
-                    <span className="sr-only">{c.done ? ' (done)' : ' (pending)'}</span>
-                  </b>
-                  <span>{c.note}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-          <CostBox costs={costs} />
-          <div className="routing">
-            <span className="routing-label">Model routing (latest jobs)</span>
-            <dl>
-              <dt>Script</dt>
-              <dd>{scriptJobData?.modelKey ?? 'Not generated yet'}</dd>
-              <dt>Storyboard</dt>
-              <dd>{storyboardJobData?.modelKey ?? 'Not generated yet'}</dd>
-              <dt>Images</dt>
-              <dd>
-                {[...new Set(imageJobs.map((j) => j.modelKey))].join(', ') || 'Not generated yet'}
-              </dd>
-              <dt>Clips</dt>
-              <dd>
-                {[...new Set(clipJobs.map((j) => j.modelKey))].join(', ') || 'Not generated yet'}
-              </dd>
-              <dt>Voice-over</dt>
-              <dd>
-                {[...new Set(voiceJobs.map((j) => j.modelKey))].join(', ') || 'Not generated yet'}
-              </dd>
-            </dl>
-          </div>
+        <aside className="side-stack">
+          {next ? (
+            <section className="card card-pad next-step" aria-label="Next step">
+              <p className="eyebrow">Next step</p>
+              <b>{next.title}</b>
+              <span className="muted">{next.detail}</span>
+              <a
+                className="btn primary"
+                href={`#${next.tab}${next.filter ? `?filter=${next.filter}` : ''}`}
+              >
+                {next.action}
+              </a>
+            </section>
+          ) : (
+            <section className="card card-pad next-step" aria-label="Next step">
+              <p className="eyebrow">All done</p>
+              <b>Every gate is passed and the video is exported.</b>
+            </section>
+          )}
+          <section className="card cost-card" aria-label="Cost">
+            <CostBox costs={costs} />
+          </section>
         </aside>
       </div>
     </>

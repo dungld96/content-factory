@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import type { GenerationJobDto } from '@acf/contracts';
 
+import { Icon } from '@/components/icon';
 import { Modal } from '@/components/modal';
 import { toast } from '@/components/toast';
 import { errorText, mutate } from '@/lib/api-client';
@@ -52,7 +53,7 @@ export function CancelRunButton(props: {
           setOpen(true);
         }}
       >
-        <span aria-hidden="true">✕</span> Cancel
+        <Icon name="cancel" /> Cancel
       </button>
       {error && (
         <span className="form-error" role="alert">
