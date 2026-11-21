@@ -56,6 +56,7 @@ export function toPriceDto(p: AiModelPrice): AiPriceDto {
     sourceValue: p.sourceValue,
     currency: 'USD',
     minPromptTokens: p.minPromptTokens,
+    variant: p.variant,
     effectiveFrom: p.effectiveFrom.toISOString(),
     source: p.source,
     sourceUrl: p.sourceUrl,

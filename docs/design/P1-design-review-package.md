@@ -151,3 +151,13 @@ Verification: lint, typecheck, format, build and unit tests pass; database integ
 (300 passed, incl. `ai_registry_events` and the schema inventory); API integration tests
 (`registry-settings.integration.test.ts`, CLI audit, permission matrix) written, **not run** (the API
 suite needs S3 storage in the implementation session).
+
+### Settings redesign (2026-11-21)
+
+Settings is split into sections with their own URL (`/settings?section=general|voices|ai|models|
+activity|system`; a menu on small screens): a summary of providers, routes and models; provider
+cards with status, credentials and Test connection; a routes table that says why a step cannot run
+("No API key configured", "Model disabled", …); a model catalogue with capability tabs, search,
+status filter and prices in readable units (per 1M tokens, per image, per second, per megapixel,
+per 1M characters, computed exactly from the stored per-unit decimals); and a readable change log.
+The price DTO gains `variant` (additive) so resolution/audio tiers are labelled.

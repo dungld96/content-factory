@@ -140,8 +140,8 @@ test('editor: voice profile → clips → voice-over (gate 4)', async ({ page })
   test.setTimeout(180_000);
   await openDemoContent(page, EDITOR, passwordOf('EDITOR'));
 
-  // A project voice profile (Settings) with the seeded mock TTS model.
-  await page.goto('/settings');
+  // A project voice profile (Settings → Voice profiles) with the seeded mock TTS model.
+  await page.goto('/settings?section=voices');
   const form = page.getByRole('form', { name: 'New voice profile' });
   await form.getByLabel('Name').fill('Narrator');
   await form

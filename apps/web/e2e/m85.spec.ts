@@ -71,7 +71,7 @@ test('owner: picks a model and approves an earlier script version', async ({ pag
 test('owner: voice picker offers the model voices', async ({ page }) => {
   await signIn(page);
   const projectId = projectUrl.split('/').pop() ?? '';
-  await page.goto(`/settings?project=${projectId}`);
+  await page.goto(`/settings?section=voices&project=${projectId}`);
   const form = page.getByRole('form', { name: 'New voice profile' });
   await expect(form).toBeVisible();
   // Only enabled models are offered; the voice field lists the model's voices.

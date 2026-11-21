@@ -82,6 +82,8 @@ export const aiPriceSchema = z
     currency: z.literal('USD'),
     /** Prompt-size tier: applies to calls with at least this many input tokens. */
     minPromptTokens: z.number().int(),
+    /** Resolution/audio tier the price applies to (e.g. `720p-silent`); '' = any request. */
+    variant: z.string(),
     effectiveFrom: isoDateTimeSchema,
     source: z.enum(['official_api', 'official_page', 'manual_estimate']),
     sourceUrl: z.string(),

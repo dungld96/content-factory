@@ -88,9 +88,13 @@ test('owner: overview, search, filters, pipeline board, masters and asset lineag
 test('owner: project settings and a new project', async ({ page }) => {
   await signIn(page);
 
-  // Owners edit the project profile; the change is persisted and shown everywhere.
+  // System status has its own Settings section.
+  await page.goto('/settings?section=system');
+  await expect(page.getByRole('region', { name: 'Dependencies' })).toContainText('Database');
+
+  // Owners edit the project profile (General, the default section); the change is persisted.
   await nav(page, 'Settings').click();
-  await expect(page.getByRole('region', { name: 'System status' })).toContainText('database');
+  await expect(page.getByRole('navigation', { name: 'Settings sections' })).toBeVisible();
   const settings = page.getByRole('form', { name: 'Project settings' });
   await settings.getByLabel('Project name').fill('Demo Studio HQ');
   await settings.getByRole('button', { name: 'Save changes' }).click();

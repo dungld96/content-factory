@@ -1975,10 +1975,395 @@ input.filter {
 }
 
 /* --- Settings, status ---------------------------------------------------------------------- */
-.settings-grid {
+/* --- Settings: section navigation and panels -------------------------------------------- */
+.settings-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.settings-nav {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.settings-nav a {
+  display: grid;
+  gap: 2px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  color: var(--text-2);
+  text-decoration: none;
+}
+
+.settings-nav a b {
+  font: 700 12.5px var(--font-display);
+}
+
+.settings-nav a span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.settings-nav a:hover {
+  background: var(--surface-2);
+}
+
+.settings-nav a[aria-current='page'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.settings-nav a[aria-current='page'] span {
+  color: var(--accent);
+  opacity: 0.8;
+}
+
+.settings-main {
   display: grid;
   gap: 16px;
-  max-width: 760px;
+  min-width: 0;
+}
+
+/* Shown instead of the side navigation on small screens. */
+.settings-section-select {
+  display: none;
+}
+
+/* Grid items default to min-width: auto; a wide table would stretch its card past the column. */
+.settings-main > *,
+.settings-columns > * {
+  min-width: 0;
+}
+
+.routes-table td:first-child {
+  min-width: 150px;
+}
+
+.routes-table .compact-select {
+  width: 100%;
+  max-width: 320px;
+}
+
+.settings-section-head h2 {
+  margin: 0;
+  font: 800 18px var(--font-display);
+}
+
+.settings-section-head p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.settings-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.settings-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 0;
+}
+
+.settings-stats .stat-foot a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.role-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.role-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.provider-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.provider-card {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.provider-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.provider-head b {
+  display: block;
+  font: 700 13.5px var(--font-display);
+}
+
+.provider-head code {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.provider-facts {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 8px 10px;
+  margin: 0;
+  font-size: 12px;
+  align-items: center;
+}
+
+.provider-facts dt {
+  color: var(--muted);
+}
+
+.provider-facts dd {
+  margin: 0;
+}
+
+.provider-facts a {
+  color: var(--accent);
+}
+
+.provider-check {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+
+.provider-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cell-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cell-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.mono {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.compact-select {
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 28px 7px 10px;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.compact-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.catalogue-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.catalogue-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.segmented button {
+  border: 0;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font: 600 12px var(--font-body);
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.segmented button[aria-selected='true'] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgb(25 36 56 / 10%);
+}
+
+.price-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.price-list span {
+  color: var(--muted);
+}
+
+.price-list b {
+  white-space: nowrap;
+}
+
+.price-more {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.price-more summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.price-more .price-list {
+  margin-top: 6px;
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.health-tiles {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.health-tiles li {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.health-name {
+  font: 700 13px var(--font-display);
+  text-transform: capitalize;
+}
+
+/* Small screens: table rows become stacked cards, each value labelled. */
+@media (max-width: 720px) {
+  .table.stack-mobile thead {
+    display: none;
+  }
+
+  .table.stack-mobile,
+  .table.stack-mobile tbody,
+  .table.stack-mobile tr,
+  .table.stack-mobile td {
+    display: block;
+    width: 100%;
+  }
+
+  .table.stack-mobile tr {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .table.stack-mobile td {
+    border: 0;
+    padding: 3px 0;
+  }
+
+  .table.stack-mobile td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+
+  .table.stack-mobile .row-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .routes-table td:first-child {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-nav {
+    display: none;
+  }
+
+  .settings-section-select {
+    display: grid;
+  }
+
+  .settings-columns,
+  .settings-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .kv {
