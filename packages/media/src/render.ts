@@ -143,14 +143,26 @@ export class RenderInputError extends Error {
   override readonly name = 'RenderInputError';
 }
 
-/** Paths placed inside filter graphs must be plain (FFmpeg filter syntax has no safe quoting). */
-const SAFE_PATH = /^[A-Za-z0-9/_.-]+$/;
-function filterPath(p: string): string {
-  const resolved = path.resolve(p);
-  if (!SAFE_PATH.test(resolved)) {
-    throw new RenderInputError(`unsafe path for a filter graph: ${resolved}`);
+/**
+ * Paths placed inside filter graphs and the concat list must be plain (FFmpeg filter syntax has no
+ * safe quoting): letters, digits, `/ _ . -`, and on Windows a leading drive (`C:`). Windows
+ * separators become `/`, which FFmpeg accepts. `pathApi` is injectable for tests.
+ */
+const SAFE_PATH = /^(?:[A-Za-z]:)?[A-Za-z0-9/_.-]+$/;
+export function plainMediaPath(p: string, pathApi: path.PlatformPath = path): string {
+  const resolved = pathApi.resolve(p);
+  const plain = pathApi.sep === '\\' ? resolved.replaceAll('\\', '/') : resolved;
+  if (!SAFE_PATH.test(plain)) {
+    throw new RenderInputError(
+      `unsafe path for a filter graph: ${resolved} (use a work directory with only letters, digits, / _ . -)`,
+    );
   }
-  return resolved;
+  return plain;
+}
+
+/** A plain path as a filter option value: the drive colon is escaped for both parsing levels. */
+export function filterOptionPath(p: string, pathApi: path.PlatformPath = path): string {
+  return plainMediaPath(p, pathApi).replace(/^([A-Za-z]):/, '$1\\\\:');
 }
 
 const sec = (ms: number) => (ms / 1000).toFixed(3);
@@ -189,8 +201,10 @@ export async function renderVideo(request: RenderRequest): Promise<RenderOutput>
   const tools = request.tools ?? DEFAULT_MEDIA_TOOLS;
   const spec = request.spec ?? DEFAULT_RENDER_SPEC;
   const timeout = request.stepTimeoutMs ?? 600_000;
-  const work = filterPath(request.workDir);
-  const fonts = filterPath(request.fontsDir ?? RENDER_FONTS_DIR);
+  // Validated here, before any FFmpeg step; native form for ordinary arguments.
+  plainMediaPath(request.workDir);
+  const work = path.resolve(request.workDir);
+  const fonts = filterOptionPath(request.fontsDir ?? RENDER_FONTS_DIR);
   const ff = (args: string[]) =>
     runTool(
       tools.ffmpegPath,
@@ -238,7 +252,7 @@ export async function renderVideo(request: RenderRequest): Promise<RenderOutput>
   // 2. Hard cuts (X7): identical segments, joined without re-encoding.
   await stage('concat');
   const list = path.join(work, 'scenes.txt');
-  await writeFile(list, segments.map((s) => `file '${filterPath(s)}'`).join('\n') + '\n');
+  await writeFile(list, segments.map((s) => `file '${plainMediaPath(s)}'`).join('\n') + '\n');
   const joined = path.join(work, 'joined.mp4');
   await ff(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', '--', joined]);
 
@@ -366,7 +380,7 @@ export async function renderVideo(request: RenderRequest): Promise<RenderOutput>
   await writeFile(assFile, toAss(cues, DEFAULT_CAPTION_STYLE), 'utf8');
   const video =
     request.burnInCaptions && cues.length > 0
-      ? `[0:v]subtitles=filename=${filterPath(assFile)}:fontsdir=${fonts}[v]`
+      ? `[0:v]subtitles=filename=${filterOptionPath(assFile)}:fontsdir=${fonts}[v]`
       : '[0:v]null[v]';
   const videoFile = path.join(work, 'render.mp4');
   await ff([

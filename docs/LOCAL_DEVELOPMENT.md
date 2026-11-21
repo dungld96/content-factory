@@ -287,3 +287,8 @@ Behind an HTTPS proxy, Node's `fetch` (catalog import, smoke tests) needs `NODE_
 - **Jobs stay queued**: the worker is not running (`pnpm dev:worker`).
 - **Clip or voice-over fails with "FFmpeg or FFprobe is not installed"**: see Windows in §1 (or
   install with your package manager), then Resume. Nothing was sent to the provider.
+- **Render or `pnpm media:selftest` fails with "unsafe path for a filter graph"**: FFmpeg filter
+  graphs cannot quote paths, so the temp directory may hold only letters, digits, `/ \ _ . -` and a
+  drive (`C:`). Windows temp paths such as `C:\Users\ADMIN\AppData\Local\Temp` work. If your
+  Windows user name has spaces or accents, point the temp directory elsewhere for the worker, e.g.
+  `mkdir C:\acf-tmp` and set `TEMP=C:\acf-tmp` and `TMP=C:\acf-tmp` before `pnpm dev:worker`.
