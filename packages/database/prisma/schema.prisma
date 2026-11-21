@@ -1227,7 +1227,7 @@ model AssetInput {
   projectId    String   @map("project_id") @db.Uuid
   assetId      String   @map("asset_id") @db.Uuid
   inputAssetId String   @map("input_asset_id") @db.Uuid
-  /// character | environment | scene_reference (CHECK).
+  /// character | environment | scene_reference | keyframe | clip | voiceover | music | sfx (CHECK).
   role         String   @db.VarChar(32)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 

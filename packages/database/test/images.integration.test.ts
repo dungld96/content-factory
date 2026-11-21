@@ -190,6 +190,14 @@ describe('asset lineage (asset_inputs)', () => {
       ),
     ).toBe('23514');
   });
+
+  it('accepts sound effects as inputs (P4 S3)', async () => {
+    expect(
+      await fails(
+        `INSERT INTO asset_inputs (project_id, asset_id, input_asset_id, role) VALUES ('${P}', '${A2}', '${REF}', 'sfx')`,
+      ),
+    ).toBeNull();
+  });
 });
 
 describe('scene keyframes (AC015)', () => {

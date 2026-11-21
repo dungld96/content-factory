@@ -15,13 +15,13 @@ import {
   activeRenderJobKey,
   DEFAULT_MUSIC_VOLUME_DB,
   nextContentStatus,
-  RENDERER_VERSION,
   renderExecutionKey,
   renderManifestSchema,
   renderSettings,
   renderSettingsSchema,
   upscaledFrom,
   type ContentStatus,
+  type RenderAudio,
   type RenderManifest,
 } from '@acf/content-domain';
 import {
@@ -35,7 +35,7 @@ import {
 
 import type { Actor } from '../auth/actor.js';
 import { ApiError } from '../common/api-error.js';
-import { archived, notFound } from '../common/domain-errors.js';
+import { archived, notFound, referenceNotFound } from '../common/domain-errors.js';
 import { toAssetDto } from '../assets/assets.service.js';
 import { ObjectStoreService, storageFailure } from '../infrastructure/object-store.service.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
@@ -52,6 +52,28 @@ const error = (status: number, code: string, message: string, current?: unknown)
   new ApiError({ status, code, message, ...(current === undefined ? {} : { current }) });
 
 type Blocker = RenderPlanDto['blockers'][number];
+
+/** How the plan treats voice-overs (P4 S4, S5); the default is the M6 plan. */
+interface PlanOptions {
+  readonly voiceEnabled: boolean;
+  readonly voiceOffsetsMs: ReadonlyMap<string, number>;
+  /** The render has an `audio` block: scenes record `clipHasAudio`. */
+  readonly mixed: boolean;
+}
+const M6_PLAN: PlanOptions = { voiceEnabled: true, voiceOffsetsMs: new Map(), mixed: false };
+
+/** The clip's probe metadata says it has an audio stream (M5 `metadata.video.hasAudio`). */
+function hasAudio(metadata: unknown): boolean {
+  const video =
+    typeof metadata === 'object' && metadata !== null
+      ? (metadata as Record<string, unknown>)['video']
+      : undefined;
+  return (
+    typeof video === 'object' &&
+    video !== null &&
+    (video as Record<string, unknown>)['hasAudio'] === true
+  );
+}
 
 interface PlanResult {
   readonly dto: RenderPlanDto;
@@ -91,7 +113,13 @@ export class RendersService {
     contentId: string,
     request: CreateRenderRequest,
   ): Promise<CreateRenderResponseDto> {
-    const plan = await this.buildPlan(actor, contentId, 'editor');
+    const plan = await this.buildPlan(actor, contentId, 'editor', {
+      voiceEnabled: request.audio?.voice?.enabled ?? true,
+      voiceOffsetsMs: new Map(
+        (request.audio?.scenes ?? []).map((sc) => [sc.sceneId, sc.voiceOffsetMs ?? 0]),
+      ),
+      mixed: request.audio !== undefined,
+    });
     const first = plan.dto.blockers[0];
     if (first || !plan.manifest) {
       throw error(
@@ -104,8 +132,12 @@ export class RendersService {
       );
     }
     const music = request.music ? await this.music(plan.item.projectId, request.music) : null;
-    const manifest: RenderManifest = { ...plan.manifest, music };
-    const settings = renderSettings(request.captions?.burnIn ?? true);
+    const audio = request.audio
+      ? await this.audio(plan.item.projectId, plan.manifest, request.audio)
+      : undefined;
+    // P4 S2: without `audio`, the manifest and settings are exactly the M6 ones (same key).
+    const manifest: RenderManifest = { ...plan.manifest, music, ...(audio ? { audio } : {}) };
+    const settings = renderSettings(request.captions?.burnIn ?? true, audio !== undefined);
     const key = renderExecutionKey(manifest, settings);
 
     if (!request.regenerate) {
@@ -162,7 +194,7 @@ export class RendersService {
             executionKey: key,
             input: { renderId },
             previousContentStatus: status,
-            promptTemplateId: RENDERER_VERSION,
+            promptTemplateId: settings.renderer,
             modelId,
             requestedById: actor.userId,
           },
@@ -427,6 +459,7 @@ export class RendersService {
     actor: Actor,
     contentId: string,
     role: 'viewer' | 'editor',
+    options: PlanOptions = M6_PLAN,
   ): Promise<PlanResult> {
     const item = await this.loadItem(contentId);
     await this.access.require(actor, item.projectId, role, { mutation: role === 'editor' });
@@ -443,6 +476,18 @@ export class RendersService {
         approvalStatus: 'approved',
         archivedAt: null,
         metadata: { path: ['purpose'], equals: 'music' },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 50,
+    });
+    const sfxOptions = await this.prisma.client.asset.findMany({
+      where: {
+        projectId: item.projectId,
+        assetType: 'audio',
+        sourceType: 'upload',
+        approvalStatus: 'approved',
+        archivedAt: null,
+        metadata: { path: ['purpose'], equals: 'sfx' },
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 50,
@@ -466,6 +511,7 @@ export class RendersService {
           blockers,
           upscaledFrom: null,
           musicOptions: musicOptions.map(toAssetDto),
+          sfxOptions: sfxOptions.map(toAssetDto),
           renderInProgress,
         },
         manifest: null,
@@ -499,7 +545,10 @@ export class RendersService {
       const durationMs = Math.round(Number(scene.durationSeconds) * 1000);
       const text = scene.voiceOverSegment.trim();
       const clip = scene.clip?.asset ?? null;
-      const voice = scene.voiceover?.asset ?? null;
+      const chosenVoice = scene.voiceover?.asset ?? null;
+      // P4 S5: with the voice layer off, no voice-over is needed or used.
+      const voice = options.voiceEnabled ? chosenVoice : null;
+      const offsetMs = options.voiceOffsetsMs.get(scene.id) ?? 0;
       const keyframe = scene.keyframe?.asset ?? null;
       planScenes.push({
         sceneId: scene.id,
@@ -507,8 +556,9 @@ export class RendersService {
         durationSeconds: durationMs / 1000,
         text,
         clip: clip ? toAssetDto(clip) : null,
-        voiceover: voice ? toAssetDto(voice) : null,
+        voiceover: chosenVoice ? toAssetDto(chosenVoice) : null,
         keyframe: keyframe ? toAssetDto(keyframe) : null,
+        clipHasAudio: clip ? hasAudio(clip.metadata) : false,
       });
       if (!clip) {
         block(
@@ -523,7 +573,7 @@ export class RendersService {
           scene.sceneNumber,
         );
       }
-      if (text && !voice) {
+      if (text && !voice && options.voiceEnabled) {
         block(
           'VOICEOVERS_INCOMPLETE',
           `Scene ${String(scene.sceneNumber)} has narration but no chosen voice-over.`,
@@ -531,10 +581,10 @@ export class RendersService {
         );
       }
       if (voice) {
-        if ((voice.durationMs ?? 0) > durationMs) {
+        if (offsetMs + (voice.durationMs ?? 0) > durationMs) {
           block(
             'VOICEOVER_EXCEEDS_SCENE',
-            `The voice-over of scene ${String(scene.sceneNumber)} (${((voice.durationMs ?? 0) / 1000).toFixed(1)} s) is longer than the scene (${(durationMs / 1000).toFixed(1)} s). Shorten the text or speed up the voice.`,
+            `The voice-over of scene ${String(scene.sceneNumber)} (${((voice.durationMs ?? 0) / 1000).toFixed(1)} s${offsetMs > 0 ? `, starting at ${(offsetMs / 1000).toFixed(1)} s` : ''}) is longer than the scene (${(durationMs / 1000).toFixed(1)} s). Shorten the text, speed up the voice or reduce the offset.`,
             scene.sceneNumber,
           );
         } else if (store && !(await exists(voice))) {
@@ -561,6 +611,7 @@ export class RendersService {
           clipModel:
             clip.generationJob?.model.modelKey ?? metaString(clip.metadata, 'model') ?? null,
           voiceoverModel: voice?.generationJob?.model.modelKey ?? null,
+          ...(options.mixed ? { clipHasAudio: hasAudio(clip.metadata) } : {}),
         });
       }
     }
@@ -576,10 +627,88 @@ export class RendersService {
         blockers,
         upscaledFrom: manifest ? upscaledFrom({ ...manifest, music: null }) : null,
         musicOptions: musicOptions.map(toAssetDto),
+        sfxOptions: sfxOptions.map(toAssetDto),
         renderInProgress,
       },
       manifest,
       item,
+    };
+  }
+
+  /**
+   * Resolves the requested audio layers (P4 S1–S4) against the plan: scene IDs become scene
+   * numbers, SFX get absolute start times and must be approved `sfx` uploads of the project.
+   */
+  private async audio(
+    projectId: string,
+    plan: Omit<RenderManifest, 'music'>,
+    request: NonNullable<CreateRenderRequest['audio']>,
+  ): Promise<RenderAudio> {
+    const starts = new Map<string, { sceneNumber: number; startMs: number; durationMs: number }>();
+    let at = 0;
+    for (const scene of plan.scenes) {
+      starts.set(scene.sceneId, {
+        sceneNumber: scene.sceneNumber,
+        startMs: at,
+        durationMs: scene.durationMs,
+      });
+      at += scene.durationMs;
+    }
+    const sfxInvalid = (message: string) =>
+      error(HttpStatus.UNPROCESSABLE_ENTITY, ApiErrorCode.SfxInvalid, message);
+    const sfxIds = [...new Set((request.sfx ?? []).map((x) => x.assetId))];
+    const sfxAssets = await this.prisma.client.asset.findMany({
+      where: { id: { in: sfxIds }, projectId },
+    });
+    const sfx = (request.sfx ?? []).map((x) => {
+      const asset = sfxAssets.find((a) => a.id === x.assetId);
+      if (
+        !asset ||
+        asset.assetType !== 'audio' ||
+        asset.sourceType !== 'upload' ||
+        asset.approvalStatus !== 'approved' ||
+        asset.archivedAt !== null ||
+        metaString(asset.metadata, 'purpose') !== 'sfx'
+      ) {
+        throw sfxInvalid('Sound effects must be approved sound-effect uploads of this project.');
+      }
+      const scene = starts.get(x.sceneId);
+      if (!scene) throw sfxInvalid('A sound effect names a scene that is not in the render.');
+      if (x.offsetMs >= scene.durationMs) {
+        throw sfxInvalid(
+          `A sound effect starts after the end of scene ${String(scene.sceneNumber)}.`,
+        );
+      }
+      return {
+        assetId: asset.id,
+        sceneNumber: scene.sceneNumber,
+        startMs: scene.startMs + x.offsetMs,
+        gainDb: x.gainDb ?? 0,
+        licenseNote: asset.sourceNote,
+      };
+    });
+    const scenes = (request.scenes ?? []).map((x) => {
+      const scene = starts.get(x.sceneId);
+      if (!scene) throw referenceNotFound('scene');
+      return {
+        sceneNumber: scene.sceneNumber,
+        voiceOffsetMs: x.voiceOffsetMs ?? 0,
+        muteMusic: x.muteMusic ?? false,
+      };
+    });
+    return {
+      voice: { enabled: request.voice?.enabled ?? true, gainDb: request.voice?.gainDb ?? 0 },
+      music: {
+        fadeInMs: request.music?.fadeInMs ?? 0,
+        fadeOutMs: request.music?.fadeOutMs ?? 1500,
+        ducking: request.music?.ducking ?? true,
+      },
+      clipAudio: {
+        enabled: request.clipAudio?.enabled ?? false,
+        gainDb: request.clipAudio?.gainDb ?? 0,
+      },
+      sfx: sfx.sort((a, b) => a.startMs - b.startMs || a.assetId.localeCompare(b.assetId)),
+      scenes: scenes.sort((a, b) => a.sceneNumber - b.sceneNumber),
     };
   }
 

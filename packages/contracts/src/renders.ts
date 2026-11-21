@@ -35,6 +35,8 @@ export const renderPlanSceneSchema = z
     clip: assetSchema.nullable(),
     voiceover: assetSchema.nullable(),
     keyframe: assetSchema.nullable(),
+    /** P4: the chosen clip has its own audio stream (mixed only with `audio.clipAudio`). */
+    clipHasAudio: z.boolean(),
   })
   .meta({ id: 'RenderPlanScene' });
 
@@ -50,6 +52,8 @@ export const renderPlanSchema = z
     upscaledFrom: z.string().nullable(),
     /** Approved music uploads of the project (licence note required at upload). */
     musicOptions: z.array(assetSchema),
+    /** P4: approved sound-effect uploads of the project. */
+    sfxOptions: z.array(assetSchema),
     /** A render job is queued or running for this item. */
     renderInProgress: z.boolean(),
   })
@@ -64,6 +68,54 @@ export const createRenderRequestSchema = z
         assetId: z.uuid(),
         /** Bed level under the voice (default −18 dB). */
         volumeDb: z.number().min(-40).max(0).optional(),
+      })
+      .optional(),
+    /**
+     * P4: configurable audio layers. Omitted: today's mix (voice-over + optional ducked music),
+     * and the render is reused exactly as before.
+     */
+    audio: z
+      .strictObject({
+        voice: z
+          .strictObject({
+            enabled: z.boolean().optional(),
+            gainDb: z.number().min(-20).max(12).optional(),
+          })
+          .optional(),
+        music: z
+          .strictObject({
+            fadeInMs: z.number().int().min(0).max(10_000).optional(),
+            fadeOutMs: z.number().int().min(0).max(10_000).optional(),
+            ducking: z.boolean().optional(),
+          })
+          .optional(),
+        clipAudio: z
+          .strictObject({
+            enabled: z.boolean(),
+            gainDb: z.number().min(-40).max(6).optional(),
+          })
+          .optional(),
+        sfx: z
+          .array(
+            z.strictObject({
+              assetId: z.uuid(),
+              sceneId: z.uuid(),
+              offsetMs: z.number().int().min(0).max(600_000),
+              gainDb: z.number().min(-40).max(6).optional(),
+            }),
+          )
+          .max(20)
+          .optional(),
+        scenes: z
+          .array(
+            z.strictObject({
+              sceneId: z.uuid(),
+              voiceOffsetMs: z.number().int().min(0).max(600_000).optional(),
+              muteMusic: z.boolean().optional(),
+            }),
+          )
+          .max(100)
+          .optional(),
       })
       .optional(),
     /** Render even when an identical render already succeeded. */

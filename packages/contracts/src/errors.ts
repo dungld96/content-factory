@@ -114,6 +114,8 @@ export const ApiErrorCode = {
   VoiceoversIncomplete: 'VOICEOVERS_INCOMPLETE',
   VoiceoverExceedsScene: 'VOICEOVER_EXCEEDS_SCENE',
   MusicInvalid: 'MUSIC_INVALID',
+  /** P4: a sound effect is not an approved `sfx` upload of the project, or is outside its scene. */
+  SfxInvalid: 'SFX_INVALID',
   RenderInProgress: 'RENDER_IN_PROGRESS',
   RenderNotApproved: 'RENDER_NOT_APPROVED',
   RenderNotReviewable: 'RENDER_NOT_REVIEWABLE',

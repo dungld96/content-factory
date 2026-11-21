@@ -512,3 +512,113 @@ describe('render, review and export', () => {
     expect(await statusOf(w.contentId)).toBe('asset_review');
   });
 });
+
+describe('audio layers (P4)', () => {
+  it('keeps a render without audio on render.v1 and records every layer of a mixed one', async () => {
+    const w = await readyWorld();
+    const plain = bodyOf<CreateRenderResponseDto>(
+      await as('editor', 'POST', `/content/${w.contentId}/renders`, { body: {} }),
+    );
+    const plainRow = await prisma.render.findUniqueOrThrow({ where: { id: plain.render.id } });
+    expect(plainRow.settings).toMatchObject({ renderer: 'render.v1' });
+    expect(plainRow.manifest).not.toHaveProperty('audio');
+    await as('editor', 'POST', `/production-runs/${plain.render.job.productionRunId}/cancel`);
+
+    const sfxId = randomUUID();
+    await prisma.asset.create({
+      data: {
+        id: sfxId,
+        projectId: w.projectId,
+        assetType: 'audio',
+        sourceType: 'upload',
+        mimeType: 'audio/mpeg',
+        ...(await stored(w.projectId, sfxId, 'audio/mpeg')),
+        sourceNote: 'Own recording',
+        metadata: { purpose: 'sfx' },
+        approvalStatus: 'approved',
+        reviewedById: ids['owner'] ?? '',
+        reviewedAt: new Date(),
+        createdById: ids['owner'] ?? '',
+      },
+    });
+    const plan = bodyOf<RenderPlanDto>(
+      await as('viewer', 'GET', `/content/${w.contentId}/render-plan`),
+    );
+    expect(plan.sfxOptions.map((a) => a.id)).toEqual([sfxId]);
+
+    const outside = await as('editor', 'POST', `/content/${w.contentId}/renders`, {
+      body: { audio: { sfx: [{ assetId: sfxId, sceneId: w.sceneId, offsetMs: 30_000 }] } },
+    });
+    expect([outside.status, codeOf(outside)]).toEqual([422, 'SFX_INVALID']);
+    const notSfx = await as('editor', 'POST', `/content/${w.contentId}/renders`, {
+      body: { audio: { sfx: [{ assetId: w.voiceId, sceneId: w.sceneId, offsetMs: 0 }] } },
+    });
+    expect([notSfx.status, codeOf(notSfx)]).toEqual([422, 'SFX_INVALID']);
+
+    const mixed = bodyOf<CreateRenderResponseDto>(
+      await as('editor', 'POST', `/content/${w.contentId}/renders`, {
+        body: {
+          audio: {
+            voice: { gainDb: 2 },
+            clipAudio: { enabled: true },
+            sfx: [{ assetId: sfxId, sceneId: w.sceneId, offsetMs: 1500, gainDb: -3 }],
+            scenes: [{ sceneId: w.sceneId, voiceOffsetMs: 500 }],
+          },
+        },
+      }),
+    );
+    const row = await prisma.render.findUniqueOrThrow({ where: { id: mixed.render.id } });
+    expect(row.settings).toMatchObject({ renderer: 'render.v2' });
+    expect(row.manifest).toMatchObject({
+      audio: {
+        voice: { enabled: true, gainDb: 2 },
+        clipAudio: { enabled: true, gainDb: 0 },
+        music: { fadeInMs: 0, fadeOutMs: 1500, ducking: true },
+        sfx: [
+          {
+            assetId: sfxId,
+            sceneNumber: 1,
+            startMs: 1500,
+            gainDb: -3,
+            licenseNote: 'Own recording',
+          },
+        ],
+        scenes: [{ sceneNumber: 1, voiceOffsetMs: 500, muteMusic: false }],
+      },
+    });
+    expect(row.executionKey).not.toBe(plainRow.executionKey);
+    await as('editor', 'POST', `/production-runs/${mixed.render.job.productionRunId}/cancel`);
+  });
+
+  it('renders without voice-overs when the voice layer is off', async () => {
+    const w = await approvedWorld();
+    const image = bodyOf<ImageGenerateResponseDto>(
+      await as('editor', 'POST', `/storyboards/${w.storyboardId}/images/generate`, { body: {} }),
+    ).jobs[0];
+    const keyframe = await simulateSceneJob(image?.id ?? '', 'image');
+    await as('editor', 'POST', `/assets/${keyframe}/approve`);
+    await as('editor', 'PUT', `/scenes/${w.sceneId}/keyframe`, { body: { assetId: keyframe } });
+    const video = bodyOf<VideoGenerateResponseDto>(
+      await as('editor', 'POST', `/storyboards/${w.storyboardId}/videos/generate`, {
+        body: { confirmedEstimateUsd: '0' },
+      }),
+    ).jobs[0];
+    const clipId = await simulateSceneJob(video?.id ?? '', 'video', 30_000);
+    await as('editor', 'POST', `/assets/${clipId}/approve`);
+    await as('editor', 'PUT', `/scenes/${w.sceneId}/clip`, { body: { assetId: clipId } });
+
+    const blocked = await as('editor', 'POST', `/content/${w.contentId}/renders`, { body: {} });
+    expect([blocked.status, codeOf(blocked)]).toEqual([409, 'VOICEOVERS_INCOMPLETE']);
+    const off = await as('editor', 'POST', `/content/${w.contentId}/renders`, {
+      body: { audio: { voice: { enabled: false } } },
+    });
+    expect(off.status).toBe(202);
+    const row = await prisma.render.findUniqueOrThrow({
+      where: { id: bodyOf<CreateRenderResponseDto>(off).render.id },
+    });
+    expect(row.manifest).toMatchObject({
+      scenes: [{ voiceoverAssetId: null, text: '' }],
+      audio: { voice: { enabled: false } },
+    });
+  });
+});

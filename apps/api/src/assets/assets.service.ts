@@ -255,11 +255,16 @@ export class AssetsService {
       if (!item) throw referenceNotFound('content item');
       if (item.archivedAt) throw archived('content item');
     }
-    if (query.assetType === 'audio' && query.purpose === 'music' && !query.licenseNote) {
+    if (
+      query.assetType === 'audio' &&
+      (query.purpose === 'music' || query.purpose === 'sfx') &&
+      !query.licenseNote
+    ) {
       throw new ApiError({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
         code: ApiErrorCode.LicenseNoteRequired,
-        message: 'Music needs a licence note: where it comes from and its terms of use.',
+        message:
+          'Music and sound effects need a licence note: where they come from and their terms of use.',
       });
     }
     const audio = query.assetType === 'audio';
@@ -405,7 +410,7 @@ export class AssetsService {
       includeArchived: boolean;
       assetType?: AssetType | undefined;
       contentItemId?: string | undefined;
-      purpose?: 'voiceover' | 'music' | undefined;
+      purpose?: 'voiceover' | 'music' | 'sfx' | undefined;
       approvalStatus?: AssetDto['approvalStatus'] | undefined;
       q?: string | undefined;
       collectionId?: string | undefined;

@@ -25,6 +25,7 @@ import {
   type MediaTools,
   type QcReport,
   type RenderOutputSpec,
+  type RenderAudioMix,
 } from '@acf/media';
 import { assetObjectKey, uuidv7, type ObjectStore, type StoredMimeType } from '@acf/storage';
 
@@ -94,6 +95,7 @@ export class RenderJobs {
           music: manifest.music
             ? { file: files.get(manifest.music.assetId) ?? '', volumeDb: manifest.music.volumeDb }
             : null,
+          audio: audioMix(manifest, files),
           scenes: manifest.scenes.map((s) => ({
             durationMs: s.durationMs,
             clipFile: files.get(s.clipAssetId) ?? '',
@@ -101,6 +103,14 @@ export class RenderJobs {
             voiceFile: s.voiceoverAssetId ? (files.get(s.voiceoverAssetId) ?? null) : null,
             voiceDurationMs: s.voiceoverDurationMs,
             text: s.text,
+            ...(manifest.audio
+              ? {
+                  clipHasAudio: s.clipHasAudio ?? false,
+                  voiceOffsetMs:
+                    manifest.audio.scenes.find((x) => x.sceneNumber === s.sceneNumber)
+                      ?.voiceOffsetMs ?? 0,
+                }
+              : {}),
           })),
           onStage: (stage) => jobs.recordProgress(job, stage),
         });
@@ -202,6 +212,7 @@ export class RenderJobs {
           if (s.voiceoverAssetId) link(s.voiceoverAssetId, 'voiceover');
         }
         if (manifest.music) link(manifest.music.assetId, 'music');
+        for (const x of manifest.audio?.sfx ?? []) link(x.assetId, 'sfx');
         if (keyframe) {
           inputs.push({
             projectId: job.projectId,
@@ -248,6 +259,7 @@ export class RenderJobs {
       if (s.voiceoverAssetId) ids.add(s.voiceoverAssetId);
     }
     if (manifest.music) ids.add(manifest.music.assetId);
+    for (const x of manifest.audio?.sfx ?? []) ids.add(x.assetId);
     const keyframe = manifest.scenes[0]?.keyframeAssetId;
     if (keyframe) ids.add(keyframe);
     const rows = await this.deps.prisma.asset.findMany({
@@ -304,4 +316,27 @@ function qcSummary(qc: QcReport): string {
     .filter((f) => f.severity === 'error')
     .map((f) => `${f.check}: ${f.message}`);
   return `the render failed quality control (${errors.join('; ')})`.slice(0, 480);
+}
+
+/** The P4 mix of a `render.v2` manifest; undefined for M6 manifests (today's fixed mix). */
+function audioMix(
+  manifest: RenderManifest,
+  files: ReadonlyMap<string, string>,
+): RenderAudioMix | undefined {
+  const audio = manifest.audio;
+  if (!audio) return undefined;
+  const muted = new Set(audio.scenes.filter((x) => x.muteMusic).map((x) => x.sceneNumber));
+  return {
+    voiceGainDb: audio.voice.gainDb,
+    clipAudio: audio.clipAudio.enabled ? { gainDb: audio.clipAudio.gainDb } : null,
+    musicFadeInMs: audio.music.fadeInMs,
+    musicFadeOutMs: audio.music.fadeOutMs,
+    musicDucking: audio.music.ducking,
+    musicMutedScenes: manifest.scenes.flatMap((s, i) => (muted.has(s.sceneNumber) ? [i] : [])),
+    sfx: audio.sfx.map((x) => ({
+      file: files.get(x.assetId) ?? '',
+      startMs: x.startMs,
+      gainDb: x.gainDb,
+    })),
+  };
 }

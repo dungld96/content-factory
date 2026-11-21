@@ -56,7 +56,9 @@ export const STREAMABLE_MEDIA_TYPES = [
 ] as const;
 
 /** What an uploaded audio file is for (M5 design §7.3). */
-export const audioPurposeSchema = z.enum(['voiceover', 'music']).meta({ id: 'AudioPurpose' });
+export const audioPurposeSchema = z
+  .enum(['voiceover', 'music', 'sfx'])
+  .meta({ id: 'AudioPurpose' });
 export type AudioPurpose = z.infer<typeof audioPurposeSchema>;
 
 /**
@@ -190,7 +192,7 @@ export const listAssetsQuerySchema = z.strictObject({
   assetType: assetTypeSchema.optional(),
   contentItemId: z.uuid().optional(),
   /** P2b L1: upload purpose (`metadata.purpose`). */
-  purpose: z.enum(['voiceover', 'music']).optional(),
+  purpose: audioPurposeSchema.optional(),
   approvalStatus: approvalStatusSchema.optional(),
   /** Case-insensitive substring of the file name or label. */
   q: z.string().trim().min(1).max(100).optional(),
