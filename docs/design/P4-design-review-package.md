@@ -126,3 +126,20 @@ render with the real FFmpeg (layered mix within −14 ± 1 LUFS, voice offset in
 self-test with a layered render; database integration **run** (302 passed, `sfx` role); API
 integration tests (audio layers, SFX validation, voice off) written, **not run** (the API suite
 needs S3 storage in the implementation session).
+
+## 11. Revision 2 — P4d: voice-over chosen with the brief (approved 2026-11-21)
+
+Owner decisions of 2026-11-21: voice-over on/off is chosen **per content item, before the
+voice-over stage**; off hides the stage and keeps the narration text in the script and storyboard;
+an all-off render keeps its silent AAC track.
+
+| Change                                                                                                                                                                                                                          | Where                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `content_items.voice_enabled` boolean, default true (migration `p4d_voice_enabled`)                                                                                                                                             | database                                               |
+| `PATCH /content/:id` accepts `voiceEnabled`; `ContentItem.voiceEnabled`                                                                                                                                                         | contracts, API                                         |
+| Voice-over estimate and generation refuse an item without voice: `409 VOICE_DISABLED` (no TTS job, estimate or reservation)                                                                                                     | `VoiceoversService.plan`                               |
+| The render plan of such an item never reports `VOICEOVERS_INCOMPLETE`; a render without an `audio` block gets one with the voice layer off (render.v2)                                                                          | `RendersService`                                       |
+| Web: an Audio plan switch under the brief; the Scenes board shows the voice-over column as "Off" and hides the Voice-over stage; the checklist and step bar count the stage as done; the render panel locks the voice layer off | `audio-plan.tsx`, `scene-board.ts`, `render-panel.tsx` |
+
+Tests: API integration (estimate/generate 409, plan without voice blockers, switch back on); web
+unit (board column "Off", scene done without voice-over).

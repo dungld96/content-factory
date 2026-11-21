@@ -78,7 +78,7 @@ function hasAudio(metadata: unknown): boolean {
 interface PlanResult {
   readonly dto: RenderPlanDto;
   readonly manifest: Omit<RenderManifest, 'music'> | null;
-  readonly item: { id: string; projectId: string; status: ContentStatus };
+  readonly item: { id: string; projectId: string; status: ContentStatus; voiceEnabled: boolean };
 }
 
 const RENDER_INCLUDE = {
@@ -132,8 +132,16 @@ export class RendersService {
       );
     }
     const music = request.music ? await this.music(plan.item.projectId, request.music) : null;
-    const audio = request.audio
-      ? await this.audio(plan.item.projectId, plan.manifest, request.audio)
+    // P4d: without voice-over the render always carries the audio block (voice off, render.v2).
+    const audioRequest =
+      request.audio ?? (plan.item.voiceEnabled ? undefined : { voice: { enabled: false } });
+    const audio = audioRequest
+      ? await this.audio(plan.item.projectId, plan.manifest, {
+          ...audioRequest,
+          ...(plan.item.voiceEnabled
+            ? {}
+            : { voice: { ...audioRequest.voice, enabled: false } }),
+        })
       : undefined;
     // P4 S2: without `audio`, the manifest and settings are exactly the M6 ones (same key).
     const manifest: RenderManifest = { ...plan.manifest, music, ...(audio ? { audio } : {}) };
@@ -464,6 +472,8 @@ export class RendersService {
     const item = await this.loadItem(contentId);
     await this.access.require(actor, item.projectId, role, { mutation: role === 'editor' });
     if (item.archivedAt) throw archived('content item');
+    // P4d: an item without voice-over never needs or uses one.
+    if (!item.voiceEnabled) options = { ...options, voiceEnabled: false, mixed: true };
     const blockers: Blocker[] = [];
     const block = (code: Blocker['code'], message: string, sceneNumber: number | null = null) => {
       blockers.push({ code, message, sceneNumber });
@@ -795,6 +805,7 @@ export class RendersService {
         archivedAt: true,
         approvedStoryboardVersionId: true,
         approvedRenderId: true,
+        voiceEnabled: true,
       },
     });
     if (!item) throw notFound('content item');

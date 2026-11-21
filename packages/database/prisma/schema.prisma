@@ -610,6 +610,8 @@ model ContentItem {
 
   /// Narration voice for TTS (M5 design §7.1); a voice profile of the same project.
   voiceProfileId     String?             @map("voice_profile_id") @db.Uuid
+  /// P4d: false = no voice-over for this item (no TTS jobs; renders without voice).
+  voiceEnabled       Boolean             @default(true) @map("voice_enabled")
   voiceProfile       VoiceProfile?       @relation(fields: [projectId, voiceProfileId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   /// M6 gate 5: the approved render (an approved render of this item; trigger AC017).
   approvedRenderId   String?             @map("approved_render_id") @db.Uuid

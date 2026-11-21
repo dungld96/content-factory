@@ -22,6 +22,8 @@ export function RenderAudioSection(props: {
   readonly state: AudioState;
   readonly hasMusic: boolean;
   readonly onChange: (next: AudioState) => void;
+  /** P4d: voice-over is off for the content item (Script & brief › Audio). */
+  readonly voiceLocked?: boolean;
 }) {
   const { plan, state } = props;
   const set = (patch: Partial<AudioState>) => {
@@ -38,11 +40,13 @@ export function RenderAudioSection(props: {
           <input
             type="checkbox"
             checked={state.voiceEnabled}
+            disabled={props.voiceLocked}
             onChange={(e) => {
               set({ voiceEnabled: e.target.checked });
             }}
           />
           Voice-over (no voice-over: no captions)
+          {props.voiceLocked ? ' · off for this content (Script & brief › Audio)' : ''}
         </label>
         <label className="field">
           Voice level (dB)

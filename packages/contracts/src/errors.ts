@@ -141,6 +141,9 @@ export const ApiErrorCode = {
   // --- P3d: delivered output ---
   /** The delivered file was already finished into an asset (`current.assetId`). */
   AlreadyFinished: 'ALREADY_FINISHED',
+  // --- P4d: audio plan per content item ---
+  /** Voice-over is switched off for this content item. */
+  VoiceDisabled: 'VOICE_DISABLED',
   /** An active collection of the project already has this name. */
   NameTaken: 'NAME_TAKEN',
 

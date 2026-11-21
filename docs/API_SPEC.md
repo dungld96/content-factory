@@ -245,7 +245,9 @@ Archive the content item (editor).
 ### `PATCH /content/:contentId`
 Update `title`, `channelId` (or `null`), `targetPlatform`, `targetDurationSeconds`,
 `aspectRatio`, `language`, `brief`, `voiceProfileId` (active profile of the same project, or
-`null`). `format` and `status` are not writable.
+`null`), `voiceEnabled` (P4d: `false` switches the voice-over off for the item: voice-over
+estimate and generation answer `409 VOICE_DISABLED`, the render plan never asks for voice-overs and
+renders carry the audio block with the voice layer off). `format` and `status` are not writable.
 
 ### Content masters
 

@@ -392,11 +392,20 @@ export class VoiceoversService {
         format: true,
         archivedAt: true,
         voiceProfileId: true,
+        voiceEnabled: true,
         approvedScriptVersionId: true,
         approvedStoryboardVersionId: true,
       },
     });
     if (item.archivedAt) throw archived('content item');
+    if (!item.voiceEnabled) {
+      // P4d: no TTS jobs, estimates or reservations for an item without voice-over.
+      throw error(
+        HttpStatus.CONFLICT,
+        ApiErrorCode.VoiceDisabled,
+        'Voice-over is switched off for this content item.',
+      );
+    }
     const gates = new Set<GateKey>();
     if (item.approvedScriptVersionId) gates.add('script_approved');
     if (item.approvedStoryboardVersionId === storyboard.id) gates.add('storyboard_approved');

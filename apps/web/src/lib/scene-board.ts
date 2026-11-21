@@ -99,6 +99,15 @@ function cell(
   return { ...base, state: 'todo', label: 'Not generated', sub: 'Ready to generate' };
 }
 
+const OFF_CELL: Cell = {
+  stage: 'voiceover',
+  state: 'none',
+  label: 'Off',
+  sub: 'No voice-over',
+  asset: null,
+  job: null,
+};
+
 function rowStatus(cells: readonly Cell[]): RowStatus {
   if (cells.some((c) => c.state === 'failed')) return 'failed';
   if (cells.some((c) => c.state === 'pick')) return 'needs';
@@ -120,6 +129,8 @@ export function buildSceneRows(
   images: StoryboardImagesDto | null,
   videos: StoryboardVideosDto | null,
   voiceovers: StoryboardVoiceoversDto | null,
+  /** P4d: voice-over switched off for the item: the column reads "Off". */
+  voiceEnabled = true,
 ): SceneRow[] {
   const ids = images?.scenes ?? videos?.scenes ?? voiceovers?.scenes ?? [];
   const rows = ids.map((s): SceneRow => {
@@ -130,7 +141,9 @@ export function buildSceneRows(
     const cells = [
       cell('keyframes', img, keyframe, null),
       cell('clips', vid, vid?.clip ?? null, keyframe ? null : 'Needs a keyframe'),
-      cell('voiceover', voc, voc?.voiceover ?? null, null, voc !== undefined && voc.text === ''),
+      voiceEnabled
+        ? cell('voiceover', voc, voc?.voiceover ?? null, null, voc !== undefined && voc.text === '')
+        : OFF_CELL,
     ] as const;
     const status = rowStatus(cells);
     const starts = cells

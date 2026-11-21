@@ -61,13 +61,19 @@ export function RenderPanel(props: {
   readonly renders: readonly RenderDto[];
   readonly cost: CostReportDto | null;
   readonly canEdit: boolean;
+  /** P4d: the content item's voice-over switch (off: the voice layer is off and locked). */
+  readonly voiceEnabled?: boolean;
 }) {
   const router = useRouter();
   const { plan, renders, canEdit } = props;
+  const contentVoice = props.voiceEnabled ?? true;
   const [burnIn, setBurnIn] = useState(true);
   const [musicId, setMusicId] = useState('');
   const [volume, setVolume] = useState(-18);
-  const [audio, setAudio] = useState<AudioState>(DEFAULT_AUDIO);
+  const [audio, setAudio] = useState<AudioState>({
+    ...DEFAULT_AUDIO,
+    voiceEnabled: contentVoice,
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // P4 S5: with the voice layer off, the voice-over blockers do not apply (the API re-checks).
@@ -146,6 +152,11 @@ export function RenderPanel(props: {
       )}
 
       {canEdit && (
+        <h3 className="render-step">
+          <span aria-hidden="true">1</span> Settings
+        </h3>
+      )}
+      {canEdit && (
         <div className="image-toolbar">
           <label className="checkbox">
             <input
@@ -188,14 +199,6 @@ export function RenderPanel(props: {
               />
             </label>
           )}
-          <button
-            type="button"
-            className="btn primary"
-            disabled={busy || !ready}
-            onClick={() => void render()}
-          >
-            <Icon name="render" /> Render video
-          </button>
         </div>
       )}
       {canEdit && plan.scenes.length > 0 && (
@@ -204,6 +207,7 @@ export function RenderPanel(props: {
           state={audio}
           hasMusic={musicId !== ''}
           onChange={setAudio}
+          voiceLocked={!contentVoice}
         />
       )}
       {canEdit && plan.musicOptions.length === 0 && (
@@ -212,12 +216,35 @@ export function RenderPanel(props: {
           it.
         </p>
       )}
+      {canEdit && (
+        <>
+          <h3 className="render-step">
+            <span aria-hidden="true">2</span> Render
+          </h3>
+          <div className="render-action">
+            <button
+              type="button"
+              className="btn primary"
+              disabled={busy || !ready}
+              onClick={() => void render()}
+            >
+              <Icon name="render" /> Render video
+            </button>
+            <span className="muted small-text">
+              Rendering is free: FFmpeg on the worker, about a minute.
+            </span>
+          </div>
+        </>
+      )}
       {error && (
         <p className="form-error" role="alert">
           {error}
         </p>
       )}
 
+      <h3 className="render-step">
+        <span aria-hidden="true">{canEdit ? '3' : '1'}</span> Review &amp; export
+      </h3>
       {renders.length === 0 ? (
         <div className="empty">No renders yet.</div>
       ) : (
@@ -336,10 +363,9 @@ function RenderCard(props: {
             </p>
             {warnings.length > 0 ? (
               <ul className="plain-list small-text" aria-label="QC warnings">
-                {warnings.map((w) => (
-                  <li key={`${w.check}-${w.message}`}>
-                    <Icon name="warning" /> {w.scene ? `Scene ${String(w.scene)}: ` : ''}
-                    {w.message}
+                {groupWarnings(warnings).map((g) => (
+                  <li key={g.key}>
+                    <Icon name="warning" /> {g.text}
                   </li>
                 ))}
               </ul>
@@ -458,4 +484,37 @@ function RenderCard(props: {
       )}
     </article>
   );
+}
+
+/**
+ * QC warnings of one kind in one line (UX review U5): "Frozen picture in scenes 1–5" instead of
+ * five identical lines. Warnings without a scene keep their own line.
+ */
+function groupWarnings(
+  warnings: readonly {
+    readonly check: string;
+    readonly message: string;
+    readonly scene?: number | null;
+  }[],
+): { key: string; text: string }[] {
+  const byCheck = new Map<string, { label: string; scenes: number[] }>();
+  const single: { key: string; text: string }[] = [];
+  for (const w of warnings) {
+    if (!w.scene) {
+      single.push({ key: `${w.check}-${w.message}`, text: w.message });
+      continue;
+    }
+    const label = w.message.replace(/\s+\d+(\.\d+)?[–-]\d+(\.\d+)?\s*s$/, '');
+    const entry = byCheck.get(w.check) ?? { label, scenes: [] };
+    entry.scenes.push(w.scene);
+    byCheck.set(w.check, entry);
+  }
+  const grouped = [...byCheck].map(([check, g]) => ({
+    key: check,
+    text:
+      g.scenes.length === 1
+        ? `Scene ${String(g.scenes[0])}: ${g.label}`
+        : `${g.label.charAt(0).toUpperCase()}${g.label.slice(1)} in scenes ${g.scenes.join(', ')}`,
+  }));
+  return [...grouped, ...single];
 }

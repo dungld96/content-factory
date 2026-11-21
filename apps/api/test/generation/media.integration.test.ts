@@ -854,3 +854,30 @@ describe('image listing shows image jobs only (UX review D1)', () => {
     expect(scenes[0]?.activeJob).toBeNull();
   });
 });
+
+describe('voice-over off for a content item (P4d)', () => {
+  it('refuses voice-over estimates and generation, and renders need no voice-over', async () => {
+    const w = await approvedWorld();
+    const patch = await as('editor', 'PATCH', `/content/${w.contentId}`, {
+      body: { voiceEnabled: false },
+    });
+    expect(patch.status).toBe(200);
+    expect(patch.json).toMatchObject({ voiceEnabled: false });
+
+    for (const path of ['estimate', 'generate']) {
+      const res = await as('editor', 'POST', `/storyboards/${w.storyboardId}/voiceovers/${path}`, {
+        body: {},
+      });
+      expect([res.status, codeOf(res)]).toEqual([409, 'VOICE_DISABLED']);
+    }
+    const plan = await as('viewer', 'GET', `/content/${w.contentId}/render-plan`);
+    expect(plan.status).toBe(200);
+    const codes = (plan.json as { blockers: { code: string }[] }).blockers.map((b) => b.code);
+    expect(codes).not.toContain('VOICEOVERS_INCOMPLETE');
+
+    expect(
+      (await as('editor', 'PATCH', `/content/${w.contentId}`, { body: { voiceEnabled: true } }))
+        .json,
+    ).toMatchObject({ voiceEnabled: true });
+  });
+});

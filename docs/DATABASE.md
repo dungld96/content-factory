@@ -51,7 +51,7 @@ approval (`AC010`).
 | Table | Purpose |
 |---|---|
 | `content_masters` | The shared idea: title, brief, `brief_revision` (grows with each brief change), language |
-| `content_items` | A variant of a master: format, duration, aspect ratio, language, its own brief copy, `master_brief_revision`, channel **or** `target_platform`, status, voice profile, and the gate pointers `approved_script_version_id`, `approved_storyboard_version_id`, `approved_render_id`. Never moves to another master (`AC014`) |
+| `content_items` | A variant of a master: format, duration, aspect ratio, language, its own brief copy, `master_brief_revision`, channel **or** `target_platform`, status, voice profile, `voice_enabled` (P4d, default true), and the gate pointers `approved_script_version_id`, `approved_storyboard_version_id`, `approved_render_id`. Never moves to another master (`AC014`) |
 | `script_versions` | Immutable scripts (with content plan); one review (`pending_review` → `approved`/`rejected`); source `generated` (job) or `edited` (base version, author) |
 | `storyboard_versions`, `storyboard_scenes`, `storyboard_scene_assets` | Immutable storyboards of a script version, their scenes and scene reference assets |
 

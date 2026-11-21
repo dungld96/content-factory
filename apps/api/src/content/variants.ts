@@ -62,6 +62,7 @@ export function toContentItemDto(c: ContentItemRow): ContentItemDto {
     approvedScriptVersionId: c.approvedScriptVersionId,
     approvedStoryboardVersionId: c.approvedStoryboardVersionId,
     voiceProfileId: c.voiceProfileId,
+    voiceEnabled: c.voiceEnabled,
     archivedAt: c.archivedAt?.toISOString() ?? null,
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),

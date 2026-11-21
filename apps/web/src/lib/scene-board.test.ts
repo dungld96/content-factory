@@ -179,4 +179,12 @@ describe('Scenes board (UX review U1)', () => {
     ).toMatchObject({ title: 'Review the script', tab: 'script' });
     expect(nextStep([{ label: 'Render & export', done: true, note: '' }], rows)).toBeNull();
   });
+
+  it('shows the voice-over column as Off when the item has no voice-over (P4d)', () => {
+    const f = fixture();
+    const rows = buildSceneRows(f.images, f.videos, f.voiceovers, false);
+    expect(rows.every((r) => r.cells[2].state === 'none' && r.cells[2].label === 'Off')).toBe(true);
+    // Scene 1 has a keyframe and a clip: done without a voice-over.
+    expect(rows.find((r) => r.sceneNumber === 1)?.status).toBe('done');
+  });
 });

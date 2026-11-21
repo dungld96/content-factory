@@ -45,6 +45,7 @@ import {
 } from './pipeline-controls';
 import { RenderPanel } from './render-panel';
 import { ResyncBriefButton } from './scene-images';
+import { AudioPlan } from './audio-plan';
 import { ScenesTab } from './scenes-tab';
 import { JobActivity } from './job-activity';
 import { WorkspaceTabs } from './workspace-tabs';
@@ -329,6 +330,8 @@ export default async function ContentPage({
   const keyframesDone = imageData?.keyframesComplete ?? false;
   const latestScriptJob = latestScript?.generationJobId === scriptJobId ? scriptJobData : null;
 
+  // P4d: with voice-over off, the voice-over stage is complete by definition.
+  const voiceDone = !content.voiceEnabled || (voiceData?.voiceoversComplete ?? false);
   const steps: Step[] = [
     {
       label: 'Brief',
@@ -366,10 +369,12 @@ export default async function ContentPage({
     },
     {
       label: 'Clips & voice',
-      done: (videoData?.clipsComplete ?? false) && (voiceData?.voiceoversComplete ?? false),
+      done: (videoData?.clipsComplete ?? false) && voiceDone,
       note: !videoData
         ? 'Locked'
-        : `${String(clipCount)} clip(s) · ${String(voiceCount)} voice-over(s)`,
+        : content.voiceEnabled
+          ? `${String(clipCount)} clip(s) · ${String(voiceCount)} voice-over(s)`
+          : `${String(clipCount)} clip(s) · no voice-over`,
     },
     {
       label: 'Export',
@@ -386,7 +391,7 @@ export default async function ContentPage({
                 : 'Locked',
     },
   ];
-  const mediaDone = (videoData?.clipsComplete ?? false) && (voiceData?.voiceoversComplete ?? false);
+  const mediaDone = (videoData?.clipsComplete ?? false) && voiceDone;
   const initialTab: TabId = !approvedScript
     ? 'script'
     : !content.approvedStoryboardVersionId
@@ -456,6 +461,7 @@ export default async function ContentPage({
           </div>
         )}
         <BriefCheck contentId={content.id} />
+        <AudioPlan contentId={content.id} voiceEnabled={content.voiceEnabled} canEdit={canEdit} />
       </div>
 
       {content.status === 'scripting' && (
@@ -725,6 +731,7 @@ export default async function ContentPage({
       videoModels={optionsOf(videoModels)}
       profiles={profileList}
       initialStage={initialStage}
+      voiceEnabled={content.voiceEnabled}
     />
   );
 
@@ -741,6 +748,7 @@ export default async function ContentPage({
           renders={renders}
           cost={costReport?.kind === 'ok' ? costReport.data : null}
           canEdit={canEdit}
+          voiceEnabled={content.voiceEnabled}
         />
       )}
     </section>
@@ -834,10 +842,12 @@ export default async function ContentPage({
     },
     {
       label: 'Voice-over selection',
-      done: voiceData?.voiceoversComplete ?? false,
-      note: voiceData
-        ? `${String(voiceCount)} of ${String(voiceScenes.length)} scenes chosen`
-        : 'Unlocks after storyboard approval',
+      done: voiceDone,
+      note: !content.voiceEnabled
+        ? 'Voice-over is off'
+        : voiceData
+          ? `${String(voiceCount)} of ${String(voiceScenes.length)} scenes chosen`
+          : 'Unlocks after storyboard approval',
     },
     {
       label: 'Render & export',
@@ -852,7 +862,7 @@ export default async function ContentPage({
               : 'Unlocks with every clip and voice-over',
     },
   ];
-  const sceneRows = buildSceneRows(imageData, videoData, voiceData);
+  const sceneRows = buildSceneRows(imageData, videoData, voiceData, content.voiceEnabled);
   const next = nextStep(checklist, sceneRows);
   const costs = [scriptJobData, storyboardJobData, ...imageJobs, ...clipJobs, ...voiceJobs].flatMap(
     (j) => (j ? [j.cost] : []),

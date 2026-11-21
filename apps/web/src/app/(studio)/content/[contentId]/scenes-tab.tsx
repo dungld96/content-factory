@@ -96,13 +96,16 @@ export function ScenesTab(props: {
   readonly videoModels: readonly ModelOption[];
   readonly profiles: readonly VoiceProfileDto[];
   readonly initialStage: Stage;
+  /** P4d: voice-over on for the item (off hides the voice-over stage). */
+  readonly voiceEnabled: boolean;
 }) {
-  const [stage, setStage] = useState<Stage>(props.initialStage);
+  const [chosenStage, setStage] = useState<Stage>(props.initialStage);
+  const stage: Stage = !props.voiceEnabled && chosenStage === 'voiceover' ? 'clips' : chosenStage;
   const [filter, setFilter] = useState<BoardFilter>('all');
   const [focus, setFocus] = useState<string | null>(null);
   const rows = useMemo(
-    () => buildSceneRows(props.images, props.videos, props.voiceovers),
-    [props.images, props.videos, props.voiceovers],
+    () => buildSceneRows(props.images, props.videos, props.voiceovers, props.voiceEnabled),
+    [props.images, props.videos, props.voiceovers, props.voiceEnabled],
   );
   const now = useTick();
 
@@ -276,7 +279,7 @@ export function ScenesTab(props: {
           aria-label="Scene stage"
           onKeyDown={onStageKey}
         >
-          {STAGES.map((s) => (
+          {STAGES.filter((s) => props.voiceEnabled || s.id !== 'voiceover').map((s) => (
             <button
               key={s.id}
               id={`stage-${s.id}`}
@@ -345,7 +348,7 @@ export function ScenesTab(props: {
           aria-labelledby="stage-voiceover"
           hidden={stage !== 'voiceover'}
         >
-          {props.voiceovers && (
+          {props.voiceovers && props.voiceEnabled && (
             <SceneVoiceoversPanel
               contentId={props.contentId}
               voiceovers={props.voiceovers}

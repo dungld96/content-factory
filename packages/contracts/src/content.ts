@@ -80,6 +80,8 @@ export const updateContentRequestSchema = createContentRequestSchema
   .extend({
     /** Voice profile of the same project for voice-overs (M5 §7.1); null clears it. */
     voiceProfileId: z.uuid().nullable(),
+    /** P4d: false skips the voice-over stage (no TTS cost); renders have no voice. */
+    voiceEnabled: z.boolean(),
   })
   .partial()
   .refine((value) => Object.keys(value).length > 0, { message: 'at least one field is required' })
@@ -112,6 +114,8 @@ export const contentItemSchema = z
     approvedStoryboardVersionId: z.uuid().nullable(),
     /** Voice profile used for voice-overs (M5). */
     voiceProfileId: z.uuid().nullable(),
+    /** P4d: whether this item has a voice-over at all. */
+    voiceEnabled: z.boolean(),
     archivedAt: isoDateTimeSchema.nullable(),
     createdAt: isoDateTimeSchema,
     updatedAt: isoDateTimeSchema,
