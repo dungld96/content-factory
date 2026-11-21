@@ -66,6 +66,31 @@ export interface RenderSceneInput {
   readonly voiceDurationMs: number | null;
   /** Narration text, for captions ('' = none). */
   readonly text: string;
+  /** P4: the voice-over starts this long after the scene start (default 0). */
+  readonly voiceOffsetMs?: number | undefined;
+  /** P4: the clip has an audio stream (used only when clip audio is mixed in). */
+  readonly clipHasAudio?: boolean | undefined;
+}
+
+/**
+ * P4 design S1: configurable layers. Absent: the M6 mix (voice + optional ducked music), with
+ * the same filter graph as before.
+ */
+export interface RenderAudioMix {
+  readonly voiceGainDb: number;
+  /** Mix each clip's own audio (silence for clips without), at this gain; null: drop it. */
+  readonly clipAudio: { readonly gainDb: number } | null;
+  readonly musicFadeInMs: number;
+  readonly musicFadeOutMs: number;
+  readonly musicDucking: boolean;
+  /** Scene indexes (0-based) where the music is silent. */
+  readonly musicMutedScenes: readonly number[];
+  readonly sfx: readonly {
+    readonly file: string;
+    /** From the start of the render. */
+    readonly startMs: number;
+    readonly gainDb: number;
+  }[];
 }
 
 export interface RenderMusicInput {
@@ -77,6 +102,8 @@ export interface RenderMusicInput {
 export interface RenderRequest {
   readonly scenes: readonly RenderSceneInput[];
   readonly music: RenderMusicInput | null;
+  /** P4: configurable audio layers (`render.v2`); absent for the M6 mix. */
+  readonly audio?: RenderAudioMix | undefined;
   readonly burnInCaptions: boolean;
   /** An empty directory for intermediate and output files. */
   readonly workDir: string;
@@ -142,14 +169,16 @@ export function planTimeline(scenes: readonly RenderSceneInput[]): {
   let at = 0;
   scenes.forEach((s, i) => {
     if (s.durationMs <= 0) throw new RenderInputError(`scene ${String(i + 1)} has no duration`);
-    if (s.voiceFile && (s.voiceDurationMs ?? 0) > s.durationMs + 50) {
+    const offset = s.voiceOffsetMs ?? 0;
+    if (offset < 0) throw new RenderInputError(`scene ${String(i + 1)}: negative voice offset`);
+    if (s.voiceFile && offset + (s.voiceDurationMs ?? 0) > s.durationMs + 50) {
       throw new RenderInputError(`scene ${String(i + 1)}: the voice-over is longer than the scene`);
     }
     startsMs.push(at);
     if (s.clipDurationMs < s.durationMs)
       heldFrames.push([at + s.clipDurationMs, at + s.durationMs]);
     if (s.voiceFile && s.voiceDurationMs) {
-      speechWindows.push([at, at + Math.min(s.voiceDurationMs, s.durationMs)]);
+      speechWindows.push([at + offset, at + Math.min(offset + s.voiceDurationMs, s.durationMs)]);
     }
     at += s.durationMs;
   });
@@ -223,7 +252,11 @@ export async function renderVideo(request: RenderRequest): Promise<RenderOutput>
     const d = sec(s.durationMs);
     if (s.voiceFile) {
       inputs.push('-i', s.voiceFile);
-      parts.push(`[${String(n)}:a]${fmt},atrim=duration=${d},apad=whole_dur=${d}[a${String(i)}]`);
+      const offset = s.voiceOffsetMs ?? 0;
+      const delay = offset > 0 ? `adelay=delays=${String(offset)}:all=1,` : '';
+      parts.push(
+        `[${String(n)}:a]${fmt},${delay}atrim=duration=${d},apad=whole_dur=${d}[a${String(i)}]`,
+      );
       n += 1;
     } else {
       parts.push(
@@ -246,10 +279,39 @@ export async function renderVideo(request: RenderRequest): Promise<RenderOutput>
     narration,
   ]);
 
-  // 4. Music bed ducked under the voice (X5).
+  // 4. Music bed ducked under the voice (X5); P4: configurable layers.
   await stage('mix');
   let mix = narration;
-  if (request.music) {
+  if (request.audio) {
+    const clipTrack = request.audio.clipAudio
+      ? await clipAudioTrack(ff, request.scenes, work, fmt, spec.sampleRate)
+      : null;
+    mix = path.join(work, 'mix.wav');
+    const graph = mixGraph({
+      audio: request.audio,
+      music: request.music,
+      totalMs: timeline.totalMs,
+      sceneStartsMs: timeline.startsMs,
+      sceneDurationsMs: request.scenes.map((sc) => sc.durationMs),
+      fmt,
+      clipTrack: clipTrack !== null,
+    });
+    await ff([
+      '-i',
+      narration,
+      ...(clipTrack ? ['-i', clipTrack] : []),
+      ...(request.music ? ['-i', request.music.file] : []),
+      ...request.audio.sfx.flatMap((x) => ['-i', x.file]),
+      '-filter_complex',
+      graph,
+      '-map',
+      '[mix]',
+      '-c:a',
+      'pcm_s16le',
+      '--',
+      mix,
+    ]);
+  } else if (request.music) {
     const total = timeline.totalMs;
     const fade = Math.min(1500, total / 2);
     mix = path.join(work, 'mix.wav');
@@ -288,9 +350,9 @@ export async function renderVideo(request: RenderRequest): Promise<RenderOutput>
   await stage('encode');
   const cues = buildCaptionCues(
     request.scenes.map((s, i) => ({
-      startMs: timeline.startsMs[i] ?? 0,
+      startMs: (timeline.startsMs[i] ?? 0) + (s.voiceOffsetMs ?? 0),
       text: s.voiceFile ? s.text : '',
-      speechMs: Math.min(s.voiceDurationMs ?? 0, s.durationMs),
+      speechMs: Math.min(s.voiceDurationMs ?? 0, s.durationMs - (s.voiceOffsetMs ?? 0)),
     })),
   );
   const srt = toSrt(cues);
@@ -447,4 +509,131 @@ export async function renderThumbnail(options: {
 export async function ffmpegVersion(tools: MediaTools = DEFAULT_MEDIA_TOOLS): Promise<string> {
   const { stdout } = await runTool(tools.ffmpegPath, ['-version'], tools.timeoutMs);
   return stdout.split('\n')[0]?.trim() ?? 'unknown';
+}
+
+/** Each scene's own clip audio, cut to the scene (silence when the clip has none), joined (P4). */
+async function clipAudioTrack(
+  ff: (args: string[]) => Promise<unknown>,
+  scenes: readonly RenderSceneInput[],
+  work: string,
+  fmt: string,
+  sampleRate: number,
+): Promise<string> {
+  const parts: string[] = [];
+  for (const [i, scene] of scenes.entries()) {
+    const d = sec(scene.durationMs);
+    const out = path.join(work, `clip-audio-${String(i)}.wav`);
+    await ff(
+      scene.clipHasAudio
+        ? [
+            '-i',
+            scene.clipFile,
+            '-vn',
+            '-af',
+            `${fmt},atrim=duration=${d},apad=whole_dur=${d}`,
+            '-t',
+            d,
+            '-c:a',
+            'pcm_s16le',
+            '--',
+            out,
+          ]
+        : [
+            '-f',
+            'lavfi',
+            '-i',
+            `anullsrc=r=${String(sampleRate)}:cl=stereo`,
+            '-t',
+            d,
+            '-c:a',
+            'pcm_s16le',
+            '--',
+            out,
+          ],
+    );
+    parts.push(out);
+  }
+  const joined = path.join(work, 'clip-audio.wav');
+  await ff([
+    ...parts.flatMap((p) => ['-i', p]),
+    '-filter_complex',
+    `${parts.map((_, i) => `[${String(i)}:a]`).join('')}concat=n=${String(parts.length)}:v=0:a=1[c]`,
+    '-map',
+    '[c]',
+    '-c:a',
+    'pcm_s16le',
+    '--',
+    joined,
+  ]);
+  return joined;
+}
+
+/**
+ * The P4 mix graph. Inputs, in order: narration, clip audio (when mixed), music (when set), then
+ * each sound effect. The narration is first, so `amix=duration=first` keeps the render's length.
+ */
+export function mixGraph(options: {
+  readonly audio: RenderAudioMix;
+  readonly music: RenderMusicInput | null;
+  readonly totalMs: number;
+  readonly sceneStartsMs: readonly number[];
+  readonly sceneDurationsMs: readonly number[];
+  readonly fmt: string;
+  readonly clipTrack: boolean;
+}): string {
+  const { audio, music, fmt } = options;
+  const db = (v: number) => `${v.toFixed(1)}dB`;
+  const parts: string[] = [];
+  const tracks: string[] = [];
+  let next = 1;
+  const duck = music !== null && audio.musicDucking;
+  const voiceGain = audio.voiceGainDb !== 0 ? `,volume=${db(audio.voiceGainDb)}` : '';
+  parts.push(
+    duck ? `[0:a]${fmt}${voiceGain},asplit=2[voice][key]` : `[0:a]${fmt}${voiceGain}[voice]`,
+  );
+  tracks.push('[voice]');
+  if (options.clipTrack && audio.clipAudio) {
+    parts.push(`[${String(next)}:a]${fmt},volume=${db(audio.clipAudio.gainDb)}[clip]`);
+    tracks.push('[clip]');
+    next += 1;
+  }
+  if (music) {
+    const total = options.totalMs;
+    const chain = [
+      `[${String(next)}:a]${fmt}`,
+      'aloop=loop=-1:size=2147483647',
+      `atrim=duration=${sec(total)}`,
+      `volume=${music.volumeDb.toFixed(1)}dB`,
+    ];
+    const fadeIn = Math.min(audio.musicFadeInMs, total / 2);
+    const fadeOut = Math.min(audio.musicFadeOutMs, total / 2);
+    if (fadeIn > 0) chain.push(`afade=t=in:st=0:d=${sec(fadeIn)}`);
+    if (fadeOut > 0) chain.push(`afade=t=out:st=${sec(total - fadeOut)}:d=${sec(fadeOut)}`);
+    for (const i of audio.musicMutedScenes) {
+      const start = options.sceneStartsMs[i];
+      const length = options.sceneDurationsMs[i];
+      if (start === undefined || length === undefined) continue;
+      chain.push(`volume=enable='between(t,${sec(start)},${sec(start + length)})':volume=0`);
+    }
+    parts.push(`${chain.join(',')}[${duck ? 'bedraw' : 'bed'}]`);
+    if (duck)
+      parts.push(
+        '[bedraw][key]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[bed]',
+      );
+    tracks.push('[bed]');
+    next += 1;
+  }
+  audio.sfx.forEach((x, k) => {
+    parts.push(
+      `[${String(next)}:a]${fmt},adelay=delays=${String(x.startMs)}:all=1,volume=${db(x.gainDb)}[sfx${String(k)}]`,
+    );
+    tracks.push(`[sfx${String(k)}]`);
+    next += 1;
+  });
+  parts.push(
+    tracks.length === 1
+      ? `${tracks[0] ?? '[voice]'}anull[mix]`
+      : `${tracks.join('')}amix=inputs=${String(tracks.length)}:duration=first:normalize=0[mix]`,
+  );
+  return parts.join(';');
 }

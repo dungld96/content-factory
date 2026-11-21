@@ -15,6 +15,8 @@ export const RENDER_QUEUE = 'generation-render';
 export const RENDER_JOB_LOCK_MS = 900_000;
 /** Bumped when the pipeline changes what identical inputs produce (part of the reuse key). */
 export const RENDERER_VERSION = 'render.v1';
+/** Renderer with configurable audio layers (P4 design S2); used only when `audio` is set. */
+export const RENDERER_VERSION_MIXED = 'render.v2';
 /** Music bed level under the voice by default (X5). */
 export const DEFAULT_MUSIC_VOLUME_DB = -18;
 
@@ -38,7 +40,43 @@ export const renderManifestSceneSchema = z.strictObject({
   /** Source models of the clip and voice-over (traceability in the package). */
   clipModel: z.string().nullable(),
   voiceoverModel: z.string().nullable(),
+  /** P4: the chosen clip has its own audio stream (from its probe metadata). */
+  clipHasAudio: z.boolean().optional(),
 });
+
+/** P4 S1–S4: the resolved audio layers of a `render.v2` render (absent: today's mix). */
+export const renderAudioSchema = z.strictObject({
+  voice: z.strictObject({ enabled: z.boolean(), gainDb: z.number().min(-20).max(12) }),
+  music: z.strictObject({
+    fadeInMs: z.number().int().min(0).max(10_000),
+    fadeOutMs: z.number().int().min(0).max(10_000),
+    ducking: z.boolean(),
+  }),
+  clipAudio: z.strictObject({ enabled: z.boolean(), gainDb: z.number().min(-40).max(6) }),
+  sfx: z
+    .array(
+      z.strictObject({
+        assetId: uuid,
+        sceneNumber: z.number().int().positive(),
+        /** From the start of the render. */
+        startMs: z.number().int().min(0),
+        gainDb: z.number().min(-40).max(6),
+        licenseNote: z.string().nullable(),
+      }),
+    )
+    .max(20),
+  /** Per scene (by number): voice-over offset from the scene start, music muted. */
+  scenes: z
+    .array(
+      z.strictObject({
+        sceneNumber: z.number().int().positive(),
+        voiceOffsetMs: z.number().int().min(0),
+        muteMusic: z.boolean(),
+      }),
+    )
+    .max(100),
+});
+export type RenderAudio = z.infer<typeof renderAudioSchema>;
 export type RenderManifestScene = z.infer<typeof renderManifestSceneSchema>;
 
 export const renderManifestSchema = z.strictObject({
@@ -51,11 +89,13 @@ export const renderManifestSchema = z.strictObject({
       licenseNote: z.string().nullable(),
     })
     .nullable(),
+  /** P4: configured audio layers; absent for renders made with today's fixed mix. */
+  audio: renderAudioSchema.optional(),
 });
 export type RenderManifest = z.infer<typeof renderManifestSchema>;
 
 export const renderSettingsSchema = z.strictObject({
-  renderer: z.literal(RENDERER_VERSION),
+  renderer: z.enum([RENDERER_VERSION, RENDERER_VERSION_MIXED]),
   output: z.strictObject({
     width: z.literal(1080),
     height: z.literal(1920),
@@ -80,10 +120,13 @@ export const renderSettingsSchema = z.strictObject({
 });
 export type RenderSettings = z.infer<typeof renderSettingsSchema>;
 
-/** The settings of a render (X3, X4, X8, X12). */
-export function renderSettings(burnInCaptions: boolean): RenderSettings {
+/**
+ * The settings of a render (X3, X4, X8, X12). `mixedAudio` (P4): the manifest has an `audio`
+ * block, rendered by `render.v2`; without it the settings are exactly the M6 ones.
+ */
+export function renderSettings(burnInCaptions: boolean, mixedAudio = false): RenderSettings {
   return {
-    renderer: RENDERER_VERSION,
+    renderer: mixedAudio ? RENDERER_VERSION_MIXED : RENDERER_VERSION,
     output: {
       width: 1080,
       height: 1920,

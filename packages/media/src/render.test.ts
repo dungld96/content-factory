@@ -13,7 +13,9 @@ import {
   RENDER_FONTS_DIR,
   RenderInputError,
   renderThumbnail,
+  mixGraph,
   renderVideo,
+  type RenderAudioMix,
   type RenderSceneInput,
 } from './render.js';
 import { runRenderSelfTest } from './selftest.js';
@@ -226,6 +228,123 @@ describe('renderVideo', () => {
   });
 });
 
+const LAYERS: RenderAudioMix = {
+  voiceGainDb: 0,
+  clipAudio: null,
+  musicFadeInMs: 0,
+  musicFadeOutMs: 1500,
+  musicDucking: true,
+  musicMutedScenes: [],
+  sfx: [],
+};
+
+describe('mixGraph (P4 S1)', () => {
+  const base = {
+    music: null,
+    totalMs: 5200,
+    sceneStartsMs: [0, 3000],
+    sceneDurationsMs: [3000, 2200],
+    fmt: 'aformat=sample_fmts=fltp',
+    clipTrack: false,
+  };
+
+  it('passes the voice through alone', () => {
+    expect(mixGraph({ ...base, audio: LAYERS })).toBe(
+      '[0:a]aformat=sample_fmts=fltp[voice];[voice]anull[mix]',
+    );
+  });
+
+  it('places clip audio, music (faded, muted in a scene, not ducked) and effects in input order', () => {
+    const graph = mixGraph({
+      ...base,
+      clipTrack: true,
+      music: { file: 'm.mp3', volumeDb: -18 },
+      audio: {
+        ...LAYERS,
+        voiceGainDb: 3,
+        clipAudio: { gainDb: -6 },
+        musicFadeInMs: 500,
+        musicDucking: false,
+        musicMutedScenes: [1],
+        sfx: [{ file: 'x.wav', startMs: 3500, gainDb: -3 }],
+      },
+    });
+    expect(graph).toContain('[0:a]aformat=sample_fmts=fltp,volume=3.0dB[voice]');
+    expect(graph).toContain('[1:a]aformat=sample_fmts=fltp,volume=-6.0dB[clip]');
+    expect(graph).toContain('afade=t=in:st=0:d=0.500');
+    expect(graph).toContain("volume=enable='between(t,3.000,5.200)':volume=0");
+    expect(graph).not.toContain('sidechaincompress');
+    expect(graph).toContain(
+      '[3:a]aformat=sample_fmts=fltp,adelay=delays=3500:all=1,volume=-3.0dB[sfx0]',
+    );
+    expect(graph).toContain(
+      '[voice][clip][bed][sfx0]amix=inputs=4:duration=first:normalize=0[mix]',
+    );
+  });
+});
+
+describe('renderVideo with audio layers (P4)', () => {
+  it('mixes clip audio, an effect and an offset voice-over, and still meets the loudness target', async () => {
+    await synthTone({ out: file('fx.mp3'), durationSec: 0.5, frequency: 880 });
+    await synthTone({ out: file('clip-tone.mp3'), durationSec: 3, frequency: 330 });
+    await runTool(
+      DEFAULT_MEDIA_TOOLS.ffmpegPath,
+      [
+        '-hide_banner',
+        '-nostdin',
+        '-y',
+        '-i',
+        file('720.mp4'),
+        '-i',
+        file('clip-tone.mp3'),
+        '-c:v',
+        'copy',
+        '-c:a',
+        'aac',
+        '-shortest',
+        '--',
+        file('720-audio.mp4'),
+      ],
+      60_000,
+    );
+    const [first, second] = scenes();
+    if (!first || !second) throw new Error('fixture');
+    const out = await renderVideo({
+      workDir: await fresh(),
+      scenes: [
+        { ...first, clipFile: file('720-audio.mp4'), clipHasAudio: true, voiceOffsetMs: 500 },
+        { ...second, clipHasAudio: false },
+      ],
+      music: null,
+      audio: {
+        ...LAYERS,
+        clipAudio: { gainDb: -6 },
+        sfx: [{ file: file('fx.mp3'), startMs: 3500, gainDb: 0 }],
+      },
+      burnInCaptions: false,
+    });
+    expect(out.speechWindows).toEqual([[500, 2500]]);
+    expect(out.srt).toContain('00:00:00,500 -->');
+    const probe = await probeFile(out.videoFile);
+    expect(Math.abs((probe.durationMs ?? 0) - 5200)).toBeLessThanOrEqual(100);
+    const { stderr } = await runTool(
+      DEFAULT_MEDIA_TOOLS.ffmpegPath,
+      ['-hide_banner', '-nostdin', '-i', out.videoFile, '-af', 'ebur128', '-f', 'null', '-'],
+      60_000,
+    );
+    const integrated = Number(
+      /I:\s+(-?[\d.]+) LUFS/.exec(stderr.slice(stderr.lastIndexOf('Summary:')))?.[1],
+    );
+    expect(Math.abs(integrated - DEFAULT_RENDER_SPEC.loudness.integrated)).toBeLessThanOrEqual(1);
+  }, 180_000);
+
+  it('refuses a voice-over that no longer fits its scene after the offset', () => {
+    const [first] = scenes();
+    if (!first) throw new Error('fixture');
+    expect(() => planTimeline([{ ...first, voiceOffsetMs: 1500 }])).toThrow(RenderInputError);
+  });
+});
+
 describe('renderThumbnail', () => {
   it('fits the keyframe into 1080×1920', async () => {
     await synthVideo({ out: file('frame.mp4'), width: 400, height: 400, durationSec: 1 });
@@ -255,6 +374,9 @@ describe('runRenderSelfTest', () => {
   it('passes with the local FFmpeg', async () => {
     const result = await runRenderSelfTest();
     expect(result.report.passed).toBe(true);
+    // Synthetic clips are still images: freeze warnings are expected; errors are not.
+    expect(result.layered.findings.filter((f) => f.severity === 'error')).toEqual([]);
+    expect(result.layered.passed).toBe(true);
     expect(result.ffmpeg).toMatch(/^ffmpeg version/);
-  }, 240_000);
+  }, 360_000);
 });

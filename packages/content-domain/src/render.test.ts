@@ -93,3 +93,51 @@ describe('render helpers', () => {
     expect(renderManifestSchema.safeParse({ ...manifest(), extra: 1 }).success).toBe(false);
   });
 });
+
+describe('audio layers (P4 S2)', () => {
+  const audio = {
+    voice: { enabled: true, gainDb: 0 },
+    music: { fadeInMs: 0, fadeOutMs: 1500, ducking: true },
+    clipAudio: { enabled: false, gainDb: 0 },
+    sfx: [],
+    scenes: [],
+  };
+
+  it('keeps the M6 renderer and settings when no audio is configured', () => {
+    expect(renderSettings(true)).toEqual(renderSettings(true, false));
+    expect(renderSettings(true).renderer).toBe('render.v1');
+    expect(renderSettings(true, true).renderer).toBe('render.v2');
+  });
+
+  it('parses M6 manifests unchanged and records every audio setting in the key', () => {
+    const m = manifest();
+    expect(renderManifestSchema.parse(m)).toEqual(m);
+    const plain = renderExecutionKey(m, renderSettings(true));
+    const mixed = renderExecutionKey({ ...m, audio }, renderSettings(true, true));
+    expect(mixed).not.toBe(plain);
+    const louder = renderExecutionKey(
+      { ...m, audio: { ...audio, voice: { enabled: true, gainDb: 3 } } },
+      renderSettings(true, true),
+    );
+    expect(louder).not.toBe(mixed);
+    const withSfx = renderExecutionKey(
+      {
+        ...m,
+        audio: {
+          ...audio,
+          sfx: [
+            {
+              assetId: '00000000-0000-7000-8000-0000000000e1',
+              sceneNumber: 1,
+              startMs: 500,
+              gainDb: 0,
+              licenseNote: 'own recording',
+            },
+          ],
+        },
+      },
+      renderSettings(true, true),
+    );
+    expect(withSfx).not.toBe(mixed);
+  });
+});

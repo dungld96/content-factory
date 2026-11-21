@@ -12,12 +12,17 @@ const tools = {
 
 try {
   const result = await runRenderSelfTest(tools);
-  const { report } = result;
   console.info(`${result.ffmpeg}\nrendered in ${String(result.elapsedMs)} ms`);
-  console.info(JSON.stringify(report.measured));
-  for (const f of report.findings) console.info(`${f.severity}: ${f.check}: ${f.message}`);
-  console.info(report.passed ? '✔ render self-test passed' : '✖ render self-test failed');
-  process.exitCode = report.passed ? 0 : 1;
+  for (const [name, report] of [
+    ['fixed mix (render.v1)', result.report],
+    ['audio layers (render.v2)', result.layered],
+  ] as const) {
+    console.info(`${name}: ${JSON.stringify(report.measured)}`);
+    for (const f of report.findings) console.info(`  ${f.severity}: ${f.check}: ${f.message}`);
+  }
+  const passed = result.report.passed && result.layered.passed;
+  console.info(passed ? '✔ render self-test passed' : '✖ render self-test failed');
+  process.exitCode = passed ? 0 : 1;
 } catch (error) {
   console.error(`✖ render self-test failed: ${error instanceof Error ? error.message : 'unknown'}`);
   process.exitCode = 1;
