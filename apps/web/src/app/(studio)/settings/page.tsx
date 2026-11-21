@@ -26,6 +26,7 @@ import { usableModels } from '@/lib/model-options';
 import { apiGetAll } from '@/lib/workspace';
 
 import { ActivityPanel, ModelsPanel, ProvidersPanel, RoutesPanel } from './ai-settings';
+import { ImportModelsPanel } from './model-admin';
 import { SectionSelect } from './section-select';
 
 export const metadata: Metadata = { title: 'Settings · Content Studio' };
@@ -364,7 +365,10 @@ async function AiSection(props: {
         </>
       )}
       {props.section === 'models' && (
-        <ModelsPanel models={modelList} providers={providerList} isOperator={props.isOperator} />
+        <>
+          {props.isOperator && <ImportModelsPanel />}
+          <ModelsPanel models={modelList} providers={providerList} isOperator={props.isOperator} />
+        </>
       )}
       {props.section === 'activity' && (
         <ActivityPanel events={events?.kind === 'ok' ? events.data.data : []} />

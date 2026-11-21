@@ -56,11 +56,14 @@ export interface ImportOutcome {
 export class RegistryAdminService {
   constructor(private readonly prisma: PrismaClient) {}
 
-  /** One `model_imported` event per model an import created or changed (CLI only). */
-  private async recordImports(outcomes: readonly ImportOutcome[]): Promise<void> {
+  /** One `model_imported` event per model an import created or changed (CLI or operator, P1d). */
+  private async recordImports(
+    outcomes: readonly ImportOutcome[],
+    by?: RegistryChangeBy,
+  ): Promise<void> {
     for (const o of outcomes) {
       if (o.action === 'created' || o.action === 'updated' || o.newPrices > 0) {
-        await this.record(this.prisma, undefined, 'model_imported', o.modelKey, null, {
+        await this.record(this.prisma, by, 'model_imported', o.modelKey, null, {
           action: o.action,
           newPrices: o.newPrices,
         });
@@ -244,16 +247,19 @@ export class RegistryAdminService {
     return { enabled: model.status === 'enabled' && model.provider.status === 'enabled' };
   }
 
-  async addPrice(input: {
-    providerKey: string;
-    modelKey: string;
-    metric: PriceMetric;
-    usdPerUnit: string;
-    source: AiPriceSource;
-    sourceUrl: string;
-    effectiveFrom?: Date;
-    minPromptTokens?: number;
-  }): Promise<string> {
+  async addPrice(
+    input: {
+      providerKey: string;
+      modelKey: string;
+      metric: PriceMetric;
+      usdPerUnit: string;
+      source: AiPriceSource;
+      sourceUrl: string;
+      effectiveFrom?: Date;
+      minPromptTokens?: number;
+    },
+    by?: RegistryChangeBy,
+  ): Promise<string> {
     const model = await this.prisma.aiModel.findFirst({
       where: { modelKey: input.modelKey, provider: { key: input.providerKey } },
       select: { id: true },
@@ -282,19 +288,12 @@ export class RegistryAdminService {
         },
         select: { id: true },
       });
-      await this.record(
-        tx,
-        undefined,
-        'price_added',
-        `${input.providerKey}/${input.modelKey}`,
-        null,
-        {
-          priceId: row.id,
-          metric: input.metric,
-          usdPerUnit: input.usdPerUnit.trim(),
-          source: input.source,
-        },
-      );
+      await this.record(tx, by, 'price_added', `${input.providerKey}/${input.modelKey}`, null, {
+        priceId: row.id,
+        metric: input.metric,
+        usdPerUnit: input.usdPerUnit.trim(),
+        source: input.source,
+      });
       return row.id;
     });
   }
@@ -306,7 +305,7 @@ export class RegistryAdminService {
    */
   async applyOpenRouterImport(
     plan: readonly ImportPlanEntry[],
-    options: { tier?: AiQualityTier; sourceUrl: string; now?: Date },
+    options: { tier?: AiQualityTier; sourceUrl: string; now?: Date; by?: RegistryChangeBy },
   ): Promise<ImportOutcome[]> {
     const now = options.now ?? new Date();
     const provider = await this.prisma.aiProvider.upsert({
@@ -330,7 +329,7 @@ export class RegistryAdminService {
         await this.importModel(provider.id, entry.model, options.tier, options.sourceUrl, now),
       );
     }
-    await this.recordImports(outcomes);
+    await this.recordImports(outcomes, options.by);
     return outcomes;
   }
 
@@ -428,7 +427,12 @@ export class RegistryAdminService {
    */
   async applyOpenRouterImageImport(
     plan: readonly ImagePlanEntry[],
-    options: { tier?: AiQualityTier; sourceUrl: (modelKey: string) => string; now?: Date },
+    options: {
+      tier?: AiQualityTier;
+      sourceUrl: (modelKey: string) => string;
+      now?: Date;
+      by?: RegistryChangeBy;
+    },
   ): Promise<ImportOutcome[]> {
     const now = options.now ?? new Date();
     const provider = await this.prisma.aiProvider.upsert({
@@ -458,7 +462,7 @@ export class RegistryAdminService {
         ),
       );
     }
-    await this.recordImports(outcomes);
+    await this.recordImports(outcomes, options.by);
     return outcomes;
   }
 
@@ -544,7 +548,12 @@ export class RegistryAdminService {
    */
   async applyOpenRouterMediaImport(
     plan: readonly MediaPlanEntry[],
-    options: { tier?: AiQualityTier; sourceUrl: (modelKey: string) => string; now?: Date },
+    options: {
+      tier?: AiQualityTier;
+      sourceUrl: (modelKey: string) => string;
+      now?: Date;
+      by?: RegistryChangeBy;
+    },
   ): Promise<ImportOutcome[]> {
     const now = options.now ?? new Date();
     const provider = await this.prisma.aiProvider.upsert({
@@ -567,7 +576,7 @@ export class RegistryAdminService {
           : { modelKey: entry.modelKey, action: 'refused', newPrices: 0, detail: [entry.reason] },
       );
     }
-    await this.recordImports(outcomes);
+    await this.recordImports(outcomes, options.by);
     return outcomes;
   }
 

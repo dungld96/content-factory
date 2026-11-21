@@ -138,9 +138,7 @@ export class RendersService {
     const audio = audioRequest
       ? await this.audio(plan.item.projectId, plan.manifest, {
           ...audioRequest,
-          ...(plan.item.voiceEnabled
-            ? {}
-            : { voice: { ...audioRequest.voice, enabled: false } }),
+          ...(plan.item.voiceEnabled ? {} : { voice: { ...audioRequest.voice, enabled: false } }),
         })
       : undefined;
     // P4 S2: without `audio`, the manifest and settings are exactly the M6 ones (same key).

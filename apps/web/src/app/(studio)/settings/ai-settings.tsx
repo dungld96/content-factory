@@ -13,6 +13,8 @@ import type {
 } from '@acf/contracts';
 
 import { LocalTime } from '@/components/local-time';
+
+import { AddPriceButton } from './model-admin';
 import { Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { actionLabel, changeSummary, keyStatus, routeReadiness } from '@/lib/ai-settings-view';
@@ -559,6 +561,7 @@ export function ModelsPanel(props: {
                               <option value="basic">Schema: basic</option>
                             </select>
                           )}
+                          <AddPriceButton model={m} />
                         </div>
                       </td>
                     )}

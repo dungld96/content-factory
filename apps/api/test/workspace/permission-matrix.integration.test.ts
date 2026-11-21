@@ -193,6 +193,24 @@ const ROWS: Record<string, Row> = {
     body: () => ({ status: 'enabled' }),
     expect: [401, 403, 403, 403, 403],
   },
+  // P1d: operators only (nobody is an operator in this matrix).
+  'POST /ai/models/import': {
+    method: 'POST',
+    path: () => '/ai/models/import',
+    body: () => ({ catalog: 'llm', modelKeys: ['acme/model'], apply: false }),
+    expect: [401, 403, 403, 403, 403],
+  },
+  'POST /ai/models/:modelId/prices': {
+    method: 'POST',
+    path: (_f, ids) => `/ai/models/${ids['aiModel'] ?? ''}/prices`,
+    body: () => ({
+      metric: 'request',
+      usdPerUnit: '0.001',
+      source: 'manual_estimate',
+      sourceUrl: 'https://example.com/pricing',
+    }),
+    expect: [401, 403, 403, 403, 403],
+  },
   'GET /ai/registry-events': {
     method: 'GET',
     path: () => '/ai/registry-events',

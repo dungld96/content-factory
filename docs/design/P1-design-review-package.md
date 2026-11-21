@@ -161,3 +161,19 @@ cards with status, credentials and Test connection; a routes table that says why
 status filter and prices in readable units (per 1M tokens, per image, per second, per megapixel,
 per 1M characters, computed exactly from the stored per-unit decimals); and a readable change log.
 The price DTO gains `variant` (additive) so resolution/audio tiers are labelled.
+
+## 11. Revision 2 — P1d: model import and prices in Settings (approved 2026-11-21)
+
+Owner decisions of 2026-11-21: the API key stays in the environment (O2 unchanged); importing
+models and adding prices move from the CLI into Settings, for operators.
+
+| Change                                                                                                                                                                                                       | Where                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| `POST /ai/models/import` (preview or apply) and `POST /ai/models/:modelId/prices`, operators only (`requireOperator`)                                                                                        | `RegistrySettingsService`, `registry.controller.ts` |
+| The planners and writers are the CLI's (`planOpenRouter*Import`, `RegistryAdminService.apply*`/`addPrice`); writes now carry the operator (`RegistryChangeBy`), so events record `source: api` and the actor | `registry-admin.service.ts`                         |
+| Settings › Models: "Import from OpenRouter" (catalog, keys, tier, Preview → Import) and "Add price" per model                                                                                                | `settings/model-admin.tsx`                          |
+
+Unchanged: new models start disabled; prices are append-only; enabling a model and routing stay
+separate decisions (O4, O5). Tests: API integration against a local catalog stand-in (preview
+writes nothing; apply creates a disabled model with prices and an `api` event; price append;
+`403` for non-operators; `502` without a catalog) and permission-matrix rows.

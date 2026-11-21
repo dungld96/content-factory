@@ -80,7 +80,10 @@ test('owner: overview, search, filters, pipeline board, masters and asset lineag
 
   // Renders (M6) are listed with their lineage: the local renderer, no provider cost.
   await page.getByLabel('Asset type').selectOption({ label: 'Renders' });
-  await assets.getByRole('button').first().click();
+  // Wait for the filtered list before clicking (the previous list is still on screen briefly).
+  const render = assets.getByRole('button', { name: /^\d+ s\s*Render\b|^Render\b/ });
+  await expect(render).toHaveCount(1);
+  await render.click();
   await expect(lineage).toContainText('local/ffmpeg-render');
   await expect(lineage).toContainText('Job cost$0');
 });

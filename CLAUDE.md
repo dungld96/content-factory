@@ -150,6 +150,15 @@ integration/E2E verification pending (package §10). Operators: `OPERATOR_EMAILS
 (`docs/design/P4-design-review-package.md`; S1–S7); slices P4a–P4c implemented, API
 integration/E2E verification pending (package §9). Renders without `audio` stay `render.v1`.
 
+**2026-11-21 follow-ups (owner: "decide by recommendation until done"):**
+P3d — keep paid media when a later step fails (`docs/design/P3d-design-review-package.md`; tool
+check before paying, delivered output stored before validation, finish without a new charge);
+UX review U1–U8 (`docs/design/UX-review-package.md`; Scenes board, Next step, phone shell,
+foundations, `lucide-react` icons); P4d — voice-over on/off per content item (P4 package §11);
+P2c — picker uploads into the Library (P2b package §11); P1d — model import and prices in
+Settings (P1 package §11). All implemented; unit, integration and E2E suites pass except the
+backup drill, which fails on the local SeaweedFS running out of volumes (environment).
+
 Open items:
 - Off-server backups wait for the backup destination (rclone remote).
 - The paid image benchmark (G2) waits for an OpenRouter API key.

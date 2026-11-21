@@ -3,6 +3,12 @@ import type { ApiEnv } from '@acf/config';
 import type { z } from 'zod';
 
 import {
+  addAiModelPriceRequestSchema,
+  importAiModelsRequestSchema,
+  importAiModelsResponseSchema,
+  type AddAiModelPriceRequest,
+  type ImportAiModelsRequest,
+  type ImportAiModelsResponseDto,
   aiModelDetailSchema,
   aiProviderKeyCheckSchema,
   aiProviderKeyParamsSchema,
@@ -166,6 +172,40 @@ export class RegistryController {
     @ValidBody() body: UpdateAiModelRequest,
   ): Promise<AiModelDto> {
     return this.settings.updateModel(actor, params.modelId, body);
+  }
+
+  @Post('models/import')
+  @HttpCode(200)
+  @Endpoint({
+    summary: 'Preview or apply an OpenRouter catalog import (operators; public catalog, no cost)',
+    tags: ['ai'],
+    body: importAiModelsRequestSchema,
+    responses: { 200: { description: 'Plan or outcome', schema: importAiModelsResponseSchema } },
+    errors: [400, 401, 403, 422, 502],
+  })
+  importModels(
+    @CurrentActor() actor: Actor,
+    @ValidBody() body: ImportAiModelsRequest,
+  ): Promise<ImportAiModelsResponseDto> {
+    return this.settings.importModels(actor, body);
+  }
+
+  @Post('models/:modelId/prices')
+  @HttpCode(201)
+  @Endpoint({
+    summary: 'Append a price to a model (operators; earlier prices are never changed)',
+    tags: ['ai'],
+    params: aiModelIdParamsSchema,
+    body: addAiModelPriceRequestSchema,
+    responses: { 201: { description: 'The model with its prices', schema: aiModelSchema } },
+    errors: [400, 401, 403, 404, 422],
+  })
+  addPrice(
+    @CurrentActor() actor: Actor,
+    @ValidParams() params: z.infer<typeof aiModelIdParamsSchema>,
+    @ValidBody() body: AddAiModelPriceRequest,
+  ): Promise<AiModelDto> {
+    return this.settings.addPrice(actor, params.modelId, body);
   }
 
   @Get('registry-events')

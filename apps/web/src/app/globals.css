@@ -3306,3 +3306,22 @@ img.board-thumb {
   gap: 10px;
   margin-bottom: 12px;
 }
+
+/* P1d: model import in Settings. */
+.import-form {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) 180px;
+  gap: 12px;
+  align-items: start;
+}
+
+.import-result li {
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+@media (width <= 760px) {
+  .import-form {
+    grid-template-columns: 1fr;
+  }
+}

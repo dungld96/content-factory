@@ -144,6 +144,9 @@ export const ApiErrorCode = {
   // --- P4d: audio plan per content item ---
   /** Voice-over is switched off for this content item. */
   VoiceDisabled: 'VOICE_DISABLED',
+  // --- P1d: model import ---
+  /** The OpenRouter catalog could not be read. */
+  CatalogUnavailable: 'CATALOG_UNAVAILABLE',
   /** An active collection of the project already has this name. */
   NameTaken: 'NAME_TAKEN',
 

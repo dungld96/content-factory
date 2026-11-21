@@ -7,7 +7,10 @@ import {
   type AiProviderKeyCheckDto,
   type AiProviderDto,
   type AiRouteDto,
+  type AddAiModelPriceRequest,
   type AiTask,
+  type ImportAiModelsRequest,
+  type ImportAiModelsResponseDto,
   type SetAiRouteRequest,
   type UpdateAiModelRequest,
   type UpdateAiProviderRequest,
@@ -22,7 +25,20 @@ import { notFound } from '../../common/domain-errors.js';
 import { API_ENV } from '../../config/api-config.module.js';
 import { PrismaService } from '../../infrastructure/prisma.service.js';
 import { KEY_CHECKS } from '../ai.tokens.js';
-import { RegistryAdminError, RegistryAdminService } from './registry-admin.service.js';
+import { catalogUrl, planOpenRouterImport } from '../providers/openrouter-catalog.js';
+import {
+  imageEndpointsUrl,
+  planOpenRouterImageImport,
+} from '../providers/openrouter-image-catalog.js';
+import {
+  planOpenRouterTtsImport,
+  planOpenRouterVideoImport,
+} from '../providers/openrouter-media-catalog.js';
+import {
+  RegistryAdminError,
+  RegistryAdminService,
+  type ImportOutcome,
+} from './registry-admin.service.js';
 import { RegistryService } from './registry.service.js';
 
 /** The capability a task's model must have. */
@@ -166,6 +182,179 @@ export class RegistrySettingsService {
       };
     }
     return { providerKey, ...(await check()), checkedAt };
+  }
+
+  /**
+   * P1d: previews or applies an OpenRouter catalog import (operators), through the same planning
+   * and writing code as `pnpm ai:registry model import-openrouter*`. Reads only the public
+   * catalog (no key, no cost). New models are created disabled; prices are appended.
+   */
+  async importModels(
+    actor: Actor,
+    input: ImportAiModelsRequest,
+  ): Promise<ImportAiModelsResponseDto> {
+    requireOperator(this.env, actor);
+    const baseUrl = this.env.OPENROUTER_BASE_URL;
+    const keys = [...new Set(input.modelKeys)];
+    const by = { actorId: actor.userId };
+    const tier = input.tier ? { tier: input.tier } : {};
+    type Preview = {
+      modelKey: string;
+      ok: boolean;
+      summary: string | null;
+      warnings: string[];
+      reason: string | null;
+    };
+    let previews: Preview[];
+    let apply: () => Promise<ImportOutcome[]>;
+    try {
+      switch (input.catalog) {
+        case 'llm': {
+          const plan = await planOpenRouterImport(baseUrl, keys);
+          previews = plan.map((e) =>
+            e.ok
+              ? {
+                  modelKey: e.modelKey,
+                  ok: true,
+                  summary: `${e.model.prices.map((p) => `${p.metric}${p.minPromptTokens ? `≥${String(p.minPromptTokens)}` : ''} = ${p.sourceValue}`).join(', ')}; parameters: ${e.model.supportedParameters.join(', ')}`,
+                  warnings: [...e.model.warnings],
+                  reason: null,
+                }
+              : { modelKey: e.modelKey, ok: false, summary: null, warnings: [], reason: e.reason },
+          );
+          apply = () =>
+            this.admin.applyOpenRouterImport(plan, { ...tier, sourceUrl: catalogUrl(baseUrl), by });
+          break;
+        }
+        case 'image': {
+          const plan = await planOpenRouterImageImport(baseUrl, keys);
+          previews = plan.map((e) =>
+            e.ok
+              ? {
+                  modelKey: e.modelKey,
+                  ok: true,
+                  summary: `${e.model.prices.map((p) => `${p.metric}${p.variant ? ` [${p.variant}]` : ''} = ${p.sourceValue}`).join(', ')}; up to ${String(e.model.constraints.maxImages)} image(s), ${String(e.model.constraints.maxReferences)} reference(s); ratios ${e.model.constraints.aspectRatios.join(', ')}`,
+                  warnings: [...e.model.warnings],
+                  reason: null,
+                }
+              : { modelKey: e.modelKey, ok: false, summary: null, warnings: [], reason: e.reason },
+          );
+          apply = () =>
+            this.admin.applyOpenRouterImageImport(plan, {
+              ...tier,
+              sourceUrl: (key) => imageEndpointsUrl(baseUrl, key),
+              by,
+            });
+          break;
+        }
+        case 'video':
+        case 'tts': {
+          const video = input.catalog === 'video';
+          const plan = video
+            ? await planOpenRouterVideoImport(baseUrl, keys)
+            : await planOpenRouterTtsImport(baseUrl, keys);
+          previews = plan.map((e) => {
+            if (!e.ok) {
+              return {
+                modelKey: e.modelKey,
+                ok: false,
+                summary: null,
+                warnings: [],
+                reason: e.reason,
+              };
+            }
+            const c = e.model.constraints;
+            const prices =
+              e.model.prices
+                .map(
+                  (p) =>
+                    `${p.metric}${p.variant ? ` [${p.variant}]` : ''} = ${p.unitPrice.toString()}`,
+                )
+                .join(', ') || 'no published prices';
+            const limits =
+              c.kind === 'video'
+                ? `durations ${c.durations.join(', ')} s; resolutions ${c.resolutions.join(', ')}`
+                : `${String(c.voices.length)} voice(s); ${c.mp3 ? 'MP3' : 'PCM only'}`;
+            return {
+              modelKey: e.modelKey,
+              ok: true,
+              summary: `${prices}; ${limits}`,
+              warnings: [...e.model.warnings],
+              reason: null,
+            };
+          });
+          const base = baseUrl.replace(/\/+$/, '');
+          apply = () =>
+            this.admin.applyOpenRouterMediaImport(plan, {
+              ...tier,
+              sourceUrl: () =>
+                video ? `${base}/videos/models` : `${base}/models?output_modalities=speech`,
+              by,
+            });
+          break;
+        }
+      }
+    } catch (error) {
+      throw new ApiError({
+        status: HttpStatus.BAD_GATEWAY,
+        code: ApiErrorCode.CatalogUnavailable,
+        message: `The OpenRouter catalog could not be read: ${error instanceof Error ? error.message : 'unknown error'}`,
+      });
+    }
+    if (!input.apply) {
+      return {
+        applied: false,
+        entries: previews.map((p) => ({ ...p, action: null, newPrices: null, detail: [] })),
+      };
+    }
+    let outcomes: ImportOutcome[] = [];
+    await this.wrap(async () => {
+      outcomes = await apply();
+    });
+    return {
+      applied: true,
+      entries: previews.map((p) => {
+        const o = outcomes.find((x) => x.modelKey === p.modelKey);
+        return {
+          ...p,
+          action: o?.action ?? null,
+          newPrices: o?.newPrices ?? null,
+          detail: o ? [...o.detail] : [],
+        };
+      }),
+    };
+  }
+
+  /** P1d: appends a price row to a model (operators); existing rows are never changed. */
+  async addPrice(
+    actor: Actor,
+    modelId: string,
+    input: AddAiModelPriceRequest,
+  ): Promise<AiModelDto> {
+    requireOperator(this.env, actor);
+    const model = await this.prisma.client.aiModel.findUnique({
+      where: { id: modelId },
+      include: { provider: { select: { key: true } } },
+    });
+    if (!model) throw notFound('model');
+    await this.wrap(async () => {
+      await this.admin.addPrice(
+        {
+          providerKey: model.provider.key,
+          modelKey: model.modelKey,
+          metric: input.metric,
+          usdPerUnit: input.usdPerUnit,
+          source: input.source,
+          sourceUrl: input.sourceUrl,
+          ...(input.effectiveFrom ? { effectiveFrom: new Date(input.effectiveFrom) } : {}),
+          ...(input.minPromptTokens === undefined
+            ? {}
+            : { minPromptTokens: input.minPromptTokens }),
+        },
+        { actorId: actor.userId },
+      );
+    });
+    return aiModelSchema.parse(await this.registry.getModel(modelId));
   }
 
   /** Registry rule violations (unknown provider, not a text model) become `422`. */

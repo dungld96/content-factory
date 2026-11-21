@@ -533,6 +533,8 @@ in USD (`unitPriceUsd`), never a JSON number (ADR-0012).
 | `PUT /ai/routes/:task` (operator) | `{ modelKey, providerKey?, zeroDataRetention? }`; only an enabled model of an enabled, configured provider with the task's capability, else `422 MODEL_NOT_ROUTABLE`. Applies to new requests |
 | `PATCH /ai/providers/:providerKey` (operator) | `{ status }` |
 | `PATCH /ai/models/:modelId` (operator) | `{ status?, schemaMode? }` (`schemaMode` for text models only) |
+| `POST /ai/models/import` (operator, P1d) | `{ catalog: llm\|image\|video\|tts, modelKeys (1–10, author/slug), tier?, apply }`. Reads OpenRouter's public catalog (no key, no cost) through the CLI's planners. `apply: false` previews (`entries[].summary`, `warnings`, `reason`); `apply: true` creates new models **disabled**, appends changed prices and records `model_imported` events (`source: api`). `502 CATALOG_UNAVAILABLE` when the catalog cannot be read |
+| `POST /ai/models/:modelId/prices` (operator, P1d) | `{ metric, usdPerUnit (decimal string), source, sourceUrl, effectiveFrom?, minPromptTokens? }` → `201` the model with its active prices. Appends a row (earlier rows never change); `price_added` event |
 | `POST /ai/providers/:providerKey/test` (operator) | Free credential check: `result` `valid` / `rejected` / `unreachable` / `not_configured`, with `limitRemaining`, `usage`, `isFreeTier` when the provider reports them. Never a paid call; never the key |
 | `GET /ai/registry-events` (operator) | The audit, newest first, paged: `source` (`api`/`cli`), `actor`, `action`, `target`, `before`, `after` |
 

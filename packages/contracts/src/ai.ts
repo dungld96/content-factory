@@ -240,3 +240,61 @@ export const aiProviderKeyCheckSchema = z
   })
   .meta({ id: 'AiProviderKeyCheck' });
 export type AiProviderKeyCheckDto = z.infer<typeof aiProviderKeyCheckSchema>;
+
+// --- P1d: model import and prices over HTTP (operators) ---------------------------------------
+
+export const importAiModelsRequestSchema = z
+  .strictObject({
+    /** Which OpenRouter catalog to read. */
+    catalog: z.enum(['llm', 'image', 'video', 'tts']),
+    modelKeys: z
+      .array(
+        z
+          .string()
+          .trim()
+          .regex(/^[a-z0-9._-]+\/[a-z0-9._:-]+$/i, 'author/slug'),
+      )
+      .min(1)
+      .max(10),
+    /** Required for models not in the registry yet. */
+    tier: aiQualityTierSchema.optional(),
+    /** false = preview only (nothing written); true = write models and new price rows. */
+    apply: z.boolean(),
+  })
+  .meta({ id: 'ImportAiModelsRequest' });
+export type ImportAiModelsRequest = z.output<typeof importAiModelsRequestSchema>;
+
+export const importAiModelsResponseSchema = z
+  .object({
+    applied: z.boolean(),
+    entries: z.array(
+      z.object({
+        modelKey: z.string(),
+        /** The catalog has the model with usable data. */
+        ok: z.boolean(),
+        /** What the import would record (prices, parameters or media limits). */
+        summary: z.string().nullable(),
+        warnings: z.array(z.string()),
+        /** Why the catalog entry cannot be imported. */
+        reason: z.string().nullable(),
+        /** Set when applied. */
+        action: z.enum(['created', 'updated', 'unchanged', 'refused']).nullable(),
+        newPrices: z.number().int().nullable(),
+        detail: z.array(z.string()),
+      }),
+    ),
+  })
+  .meta({ id: 'ImportAiModelsResponse' });
+export type ImportAiModelsResponseDto = z.infer<typeof importAiModelsResponseSchema>;
+
+export const addAiModelPriceRequestSchema = z
+  .strictObject({
+    metric: aiPriceMetricSchema,
+    usdPerUnit: usdAmountSchema,
+    source: z.enum(['official_api', 'official_page', 'manual_estimate']),
+    sourceUrl: z.url().max(500),
+    effectiveFrom: z.iso.datetime().optional(),
+    minPromptTokens: z.number().int().min(0).optional(),
+  })
+  .meta({ id: 'AddAiModelPriceRequest' });
+export type AddAiModelPriceRequest = z.output<typeof addAiModelPriceRequestSchema>;
