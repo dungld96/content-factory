@@ -3265,3 +3265,44 @@ img.board-thumb {
   display: flex;
   flex-direction: column;
 }
+
+/* UX review U6: clip posters and readable file types in the Library. */
+.asset-visual {
+  position: relative;
+}
+
+.asset-poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #0f141d;
+  pointer-events: none;
+}
+
+.asset-badge {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(15 20 29 / 75%);
+  color: #fff;
+  font-size: 12px;
+}
+
+.asset-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.picker-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 12px;
+}

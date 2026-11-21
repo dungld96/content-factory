@@ -141,3 +141,22 @@ Verification: lint, typecheck, format, build and unit tests pass; database integ
 (301 passed, incl. collections, drift and grants); API integration tests (filters, scene
 references, collections, permission matrix) written, **not run** (the API suite needs S3 storage in
 the implementation session).
+
+## 11. Revision 2 — P2c: the picker can add to the Library (approved 2026-11-21)
+
+Owner decision of 2026-11-21: **L2 is reversed**. The asset picker keeps choosing existing
+Library assets and now also:
+
+- filters by **collection** (the existing `collectionId` filter) and, for multi-select pickers,
+  offers **Choose all in {collection}**;
+- offers **Add to Library** for reference images: files go through the normal upload endpoint
+  (`POST /projects/:id/assets/upload`, same validation, `assetType: reference`, pending review)
+  and, when a collection is open, are added to it (`PUT /collections/:id/assets/:assetId`). The new
+  assets are selected at once. A failed collection link keeps the upload and says so.
+
+The Library stays the single source of truth: an upload from the picker is an ordinary Library
+asset, bound to production only by its ID (L4 unchanged). No API change.
+
+Also (UX review U6): clips in the Library show a frame of the clip as their poster, file types
+read "Subtitles (SRT)" instead of `application/x-subrip`, and the project filter adds the slug when
+two projects share a name.

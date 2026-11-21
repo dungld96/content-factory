@@ -105,7 +105,12 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
             name: 'project',
             label: 'Project',
             allLabel: 'All projects',
-            options: projects.data.items.map((p) => ({ value: p.id, label: p.name })),
+            // Two projects can share a name: add the slug then (UX review F13).
+            options: projects.data.items.map((p, _, all) => ({
+              value: p.id,
+              label:
+                all.filter((x) => x.name === p.name).length > 1 ? `${p.name} (${p.slug})` : p.name,
+            })),
           },
           ...(selectedProject
             ? [

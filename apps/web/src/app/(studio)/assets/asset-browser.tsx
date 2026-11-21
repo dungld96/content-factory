@@ -14,6 +14,7 @@ import type {
   LineageResponse,
 } from '@acf/contracts';
 
+import { mediaTypeLabel } from '@/lib/media-labels';
 import { Icon } from '@/components/icon';
 import { LocalTime } from '@/components/local-time';
 import { ApprovalPill, Pill } from '@/components/status-pill';
@@ -410,7 +411,7 @@ function LineagePanel({
           </dd>
           <dt>File</dt>
           <dd>
-            {asset.mimeType} · {formatBytes(asset.sizeBytes)}
+            {mediaTypeLabel(asset.mimeType)} · {formatBytes(asset.sizeBytes)}
             {asset.width && asset.height ? ` · ${String(asset.width)}×${String(asset.height)}` : ''}
           </dd>
           <dt>Checksum</dt>
@@ -551,13 +552,27 @@ export function AssetBrowser({
                   {isImage(asset) ? (
                     // eslint-disable-next-line @next/next/no-img-element -- authenticated API stream
                     <img src={assetContentUrl(asset.id)} alt={name} loading="lazy" />
+                  ) : asset.mimeType.startsWith('video/') ? (
+                    // A frame of the clip as its poster (UX review U6); no sound, no controls.
+                    <>
+                      <video
+                        className="asset-poster"
+                        src={`${assetContentUrl(asset.id)}#t=0.5`}
+                        preload="metadata"
+                        muted
+                        playsInline
+                        aria-hidden="true"
+                        tabIndex={-1}
+                      />
+                      <span className="asset-badge">
+                        <Icon name="play" size={12} />
+                        {asset.durationMs ? ` ${formatSeconds(asset.durationMs)}` : ''}
+                      </span>
+                    </>
                   ) : (
-                    <span>
-                      {asset.mimeType.startsWith('video/')
-                        ? '▶ Clip'
-                        : asset.mimeType.startsWith('audio/')
-                          ? '♪ Audio'
-                          : asset.mimeType}
+                    <span className="asset-kind">
+                      <Icon name={asset.mimeType.startsWith('audio/') ? 'music' : 'content'} />
+                      {mediaTypeLabel(asset.mimeType)}
                       {asset.durationMs ? ` · ${formatSeconds(asset.durationMs)}` : ''}
                     </span>
                   )}

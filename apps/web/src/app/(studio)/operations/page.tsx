@@ -17,6 +17,16 @@ import { ReservationActions } from './reservation-actions';
 export const metadata: Metadata = { title: 'Operations · Content Studio' };
 export const dynamic = 'force-dynamic';
 
+/** What each BullMQ queue carries (UX review U6). */
+const QUEUE_LABEL: Readonly<Record<string, string>> = {
+  generation: 'Scripts and storyboards',
+  'generation-images': 'Keyframes',
+  'generation-video': 'Clips',
+  'generation-audio': 'Voice-overs',
+  'generation-render': 'Renders',
+  'generation-dlq': 'Dead letters (failed after all retries)',
+};
+
 const CIRCUIT_TONE = { closed: 'green', half_open: 'amber', open: 'red' } as const;
 const CIRCUIT_LABEL = { closed: 'Closed', half_open: 'Trying again', open: 'Open' } as const;
 
@@ -40,6 +50,8 @@ export default async function OperationsPage() {
     .filter((j) => j.status === 'succeeded')
     .reduce((n, j) => n + j.count, 0);
   const openCircuits = s.circuits.filter((c) => c.state !== 'closed');
+  const queuedNow = (s.queues ?? []).reduce((n, q) => n + q.waiting + q.active + q.delayed, 0);
+  const queuesBusy = s.queues === null || queuedNow > 0 || s.queues.some((q) => q.failed > 0);
 
   return (
     <div className="stack">
@@ -77,41 +89,6 @@ export default async function OperationsPage() {
           <div className="stat-value">{s.heldReservations.length}</div>
           <div className="stat-foot">outcome unknown: needs an owner</div>
         </div>
-      </section>
-
-      <section className="card card-pad">
-        <h2>Queues</h2>
-        {s.queues === null ? (
-          <p className="notice error" role="alert">
-            The queue server did not answer. Work already queued is kept in the database and
-            resumed.
-          </p>
-        ) : (
-          <div className="table-wrap">
-            <table className="table" aria-label="Queues">
-              <thead>
-                <tr>
-                  <th scope="col">Queue</th>
-                  <th scope="col">Waiting</th>
-                  <th scope="col">Active</th>
-                  <th scope="col">Delayed</th>
-                  <th scope="col">Failed / dead-lettered</th>
-                </tr>
-              </thead>
-              <tbody>
-                {s.queues.map((q) => (
-                  <tr key={q.queue}>
-                    <td>{q.queue}</td>
-                    <td>{q.waiting}</td>
-                    <td>{q.active}</td>
-                    <td>{q.delayed}</td>
-                    <td>{q.failed}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </section>
 
       <section className="card card-pad">
@@ -188,6 +165,55 @@ export default async function OperationsPage() {
         )}
       </section>
 
+      <section className="card card-pad">
+        <details open={queuesBusy}>
+          <summary>
+            <h2 style={{ display: 'inline' }}>Queues</h2>{' '}
+            <span className="muted small-text">
+              {s.queues === null
+                ? 'queue server not answering'
+                : queuesBusy
+                  ? `${String(queuedNow)} waiting or running`
+                  : 'all idle'}
+            </span>
+          </summary>
+          {s.queues === null ? (
+            <p className="notice error" role="alert">
+              The queue server did not answer. Work already queued is kept in the database and
+              resumed.
+            </p>
+          ) : (
+            <div className="table-wrap">
+              <table className="table" aria-label="Queues">
+                <thead>
+                  <tr>
+                    <th scope="col">Queue</th>
+                    <th scope="col">Waiting</th>
+                    <th scope="col">Active</th>
+                    <th scope="col">Delayed</th>
+                    <th scope="col">Failed / dead-lettered</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {s.queues.map((q) => (
+                    <tr key={q.queue}>
+                      <td>
+                        {QUEUE_LABEL[q.queue] ?? q.queue}
+                        <br />
+                        <code className="muted small-text">{q.queue}</code>
+                      </td>
+                      <td>{q.waiting}</td>
+                      <td>{q.active}</td>
+                      <td>{q.delayed}</td>
+                      <td>{q.failed}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </details>
+      </section>
       <section className="card card-pad">
         <h2>Providers</h2>
         {s.circuits.length === 0 ? (
