@@ -163,6 +163,8 @@ describe('session guard', () => {
       memberships: [
         { projectId: PROJECT, projectSlug: 'ngan-khanh', projectName: 'Ngân Khánh', role: 'owner' },
       ],
+      // P1 O1: not in OPERATOR_EMAILS.
+      isOperator: false,
     });
   });
 
