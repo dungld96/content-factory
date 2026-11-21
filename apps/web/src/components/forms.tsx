@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, type ReactNode, type SyntheticEvent } from 'react';
+import { useEffect, useState, type ReactNode, type SyntheticEvent } from 'react';
 
 import type {
   AssetDto,
@@ -9,10 +9,12 @@ import type {
   ContentItemDto,
   ContentMasterDetailDto,
   ContentMasterDto,
+  Page,
   ProjectDto,
+  VersionedEntityDto,
 } from '@acf/contracts';
 
-import { mutate, uploadImage, type MutationResult } from '@/lib/api-client';
+import { fetchJson, mutate, uploadImage, type MutationResult } from '@/lib/api-client';
 import { PLATFORM_OPTIONS } from '@/lib/format';
 
 import { Modal } from './modal';
@@ -497,6 +499,60 @@ function BriefFields(props: { readonly brief?: ContentBrief }) {
 }
 
 const BRIEF_OPTIONAL = ['audience', 'tone', 'objective'] as const;
+const BRIEF_BRAND = ['characterId', 'environmentId'] as const;
+
+/**
+ * Character and environment of the brief (P2b L4): entities of the project with an approved
+ * master. Storyboards pin the master version they use, so a later version never changes them.
+ */
+function BrandSelects(props: { readonly projectId: string; readonly brief?: ContentBrief }) {
+  const [options, setOptions] = useState<{
+    characters: VersionedEntityDto[];
+    environments: VersionedEntityDto[];
+  } | null>(null);
+  useEffect(() => {
+    let live = true;
+    void Promise.all([
+      fetchJson<Page<VersionedEntityDto>>(`/projects/${props.projectId}/characters?limit=100`),
+      fetchJson<Page<VersionedEntityDto>>(`/projects/${props.projectId}/environments?limit=100`),
+    ]).then(([c, e]) => {
+      if (!live) return;
+      const ready = (list: Page<VersionedEntityDto> | null) =>
+        (list?.data ?? []).filter((x) => x.master !== null);
+      setOptions({ characters: ready(c), environments: ready(e) });
+    });
+    return () => {
+      live = false;
+    };
+  }, [props.projectId]);
+  if (!options) return null;
+  return (
+    <div className="form-row">
+      <label className="field">
+        Character <small>(optional)</small>
+        <select name="characterId" defaultValue={props.brief?.characterId ?? ''}>
+          <option value="">None</option>
+          {options.characters.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name} (v{c.master?.version})
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        Environment <small>(optional)</small>
+        <select name="environmentId" defaultValue={props.brief?.environmentId ?? ''}>
+          <option value="">None</option>
+          {options.environments.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.name} (v{e.master?.version})
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
 
 function NewMasterForm(props: {
   readonly projects: readonly ProjectOption[];
@@ -572,16 +628,28 @@ function EditMasterForm(props: {
   async function save(event: SubmitEvent_) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    // Fields this form does not show (notes, sources, character…) are kept as they are.
+    // Fields this form does not show (notes, sources) are kept as they are.
+    const shown: readonly string[] = [...BRIEF_OPTIONAL, ...BRIEF_BRAND];
     const kept = Object.fromEntries(
-      Object.entries(master.brief).filter(
-        ([key]) => !(BRIEF_OPTIONAL as readonly string[]).includes(key),
-      ),
+      Object.entries(master.brief).filter(([key]) => !shown.includes(key)),
     );
+    // Without the brand lists loaded, keep the stored character/environment.
+    const brand = form.has('characterId')
+      ? optionalBrief(form, BRIEF_BRAND)
+      : Object.fromEntries(
+          Object.entries(master.brief).filter(([key]) =>
+            (BRIEF_BRAND as readonly string[]).includes(key),
+          ),
+        );
     const saved = await run(() =>
       mutate<ContentMasterDto>('PATCH', `/content-masters/${master.id}`, {
         title: field(form, 'title'),
-        brief: { ...kept, topic: field(form, 'topic'), ...optionalBrief(form, BRIEF_OPTIONAL) },
+        brief: {
+          ...kept,
+          topic: field(form, 'topic'),
+          ...optionalBrief(form, BRIEF_OPTIONAL),
+          ...brand,
+        },
       }),
     );
     if (saved) {
@@ -598,6 +666,7 @@ function EditMasterForm(props: {
         <input name="title" required maxLength={200} defaultValue={master.title} />
       </label>
       <BriefFields brief={master.brief} />
+      <BrandSelects projectId={master.projectId} brief={master.brief} />
       <FormError error={error} />
       <Actions busy={busy} submit="Save brief" onCancel={props.onDone} />
     </form>

@@ -11,6 +11,7 @@ import type {
   StoryboardSceneDto,
 } from '@acf/contracts';
 
+import { AssetPicker } from '@/components/asset-picker';
 import { CancelRunButton } from '@/components/cancel-run';
 import { Modal } from '@/components/modal';
 import { ModelSelect, type ModelOption } from '@/components/model-select';
@@ -398,6 +399,66 @@ export function SceneEditor({ scene }: { readonly scene: StoryboardSceneDto }) {
           <EditorActions busy={busy} onCancel={close} />
         </form>
       </Modal>
+    </>
+  );
+}
+
+const REFERENCE_TYPES = ['reference', 'image'] as const;
+
+/**
+ * Scene reference assets chosen from the Library (P2b L4). Saving creates a new storyboard
+ * version with the chosen asset IDs; the current version keeps its references.
+ */
+export function SceneReferencesButton(props: {
+  readonly scene: StoryboardSceneDto;
+  readonly projectId: string;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const current = props.scene.requiredReferenceAssetIds;
+
+  async function save(assetIds: string[]) {
+    setOpen(false);
+    if (assetIds.length === current.length && assetIds.every((id) => current.includes(id))) return;
+    const r = await mutate('PATCH', `/scenes/${props.scene.id}`, {
+      requiredReferenceAssetIds: assetIds,
+    });
+    if (!r.ok) {
+      setError(errorText(r));
+      return;
+    }
+    setError(null);
+    toast('References saved as a new storyboard version.');
+    router.refresh();
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="btn small ghost"
+        onClick={() => {
+          setOpen(true);
+        }}
+      >
+        References ({current.length})
+      </button>
+      {open && (
+        <AssetPicker
+          projectId={props.projectId}
+          open
+          multiple
+          title={`References for scene ${String(props.scene.sceneNumber)}`}
+          types={REFERENCE_TYPES}
+          selected={current}
+          onClose={() => {
+            setOpen(false);
+          }}
+          onDone={(ids) => void save(ids)}
+        />
+      )}
+      <ErrorText error={error} />
     </>
   );
 }

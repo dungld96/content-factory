@@ -133,6 +133,9 @@ export const ApiErrorCode = {
   // --- P1: operator settings ---
   /** The model cannot serve the task: capability missing, or model/provider disabled or unconfigured. */
   ModelNotRoutable: 'MODEL_NOT_ROUTABLE',
+  // --- P2b: bindings to Library assets ---
+  /** A scene reference is not an active, non-rejected reference or image of the project. */
+  ReferenceInvalid: 'REFERENCE_INVALID',
 
   // --- R0: content masters and variants (ADR-0015) ---
   /** The format cannot be published on the target platform. */

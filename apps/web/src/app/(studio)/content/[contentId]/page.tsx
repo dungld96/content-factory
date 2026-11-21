@@ -38,6 +38,7 @@ import {
   GenerateButton,
   ReviewButtons,
   SceneEditor,
+  SceneReferencesButton,
   ScriptEditor,
 } from './pipeline-controls';
 import { RenderPanel } from './render-panel';
@@ -650,6 +651,7 @@ export default async function ContentPage({
                 <div className="scene-foot">
                   <span className="tag">{scene.cameraMovement}</span>
                   {canEdit && <SceneEditor scene={scene} />}
+                  {canEdit && <SceneReferencesButton scene={scene} projectId={content.projectId} />}
                 </div>
               </div>
             </li>

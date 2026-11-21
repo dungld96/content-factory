@@ -498,6 +498,42 @@ describe('versions, review and gates', () => {
     expect(staleApprove.json).toMatchObject({ error: { code: 'STALE_STORYBOARD' } });
   });
 
+  it('binds scene references to Library assets by ID and checks them (P2b L4)', async () => {
+    const { f, scriptId } = await scriptedFixture();
+    expect((await as('editor', 'POST', `/scripts/${scriptId}/approve`)).status).toBe(200);
+    const sbJob = generateResponseSchema.parse(
+      (await as('editor', 'POST', `/scripts/${scriptId}/storyboards/generate`, { body: {} })).json,
+    );
+    const sbId = await completeJob(sbJob.job.id);
+    const sb = storyboardVersionDetailSchema.parse(
+      (await as('viewer', 'GET', `/storyboards/${sbId}`)).json,
+    );
+    const sceneId = sb.scenes[0]?.id ?? '';
+    const ok = await as('editor', 'PATCH', `/scenes/${sceneId}`, {
+      body: { requiredReferenceAssetIds: [f.assetId] },
+    });
+    expect(ok.status).toBe(201);
+    const v2 = storyboardVersionDetailSchema.parse(ok.json);
+    expect(v2.scenes[0]?.requiredReferenceAssetIds).toEqual([f.assetId]);
+    // The earlier version keeps its references.
+    expect(
+      storyboardVersionDetailSchema.parse((await as('viewer', 'GET', `/storyboards/${sbId}`)).json)
+        .scenes[0]?.requiredReferenceAssetIds,
+    ).toEqual([]);
+
+    await prisma.asset.update({
+      where: { id: f.spareAssetId },
+      data: { approvalStatus: 'rejected' },
+    });
+    const rejected = await as('editor', 'PATCH', `/scenes/${v2.scenes[0]?.id ?? ''}`, {
+      body: { requiredReferenceAssetIds: [f.spareAssetId] },
+    });
+    expect([rejected.status, (rejected.json as { error: { code: string } }).error.code]).toEqual([
+      422,
+      'REFERENCE_INVALID',
+    ]);
+  });
+
   it('rejects with a note and keeps the version for history', async () => {
     const { scriptId } = await scriptedFixture();
     const res = await as('editor', 'POST', `/scripts/${scriptId}/reject`, {

@@ -157,6 +157,44 @@ export class ArtifactsService {
   }
 
   /** A new storyboard version with one scene changed and the others copied (Q2). */
+  /**
+   * Scene references chosen in the editor (P2b L4) must be Library assets of the item's project
+   * that can be used: active, a reference or image, not rejected.
+   */
+  private async checkSceneReferences(
+    projectId: string,
+    assetIds: readonly string[],
+  ): Promise<void> {
+    if (assetIds.length === 0) return;
+    const rows = await this.prisma.client.asset.findMany({
+      where: { id: { in: [...assetIds] }, projectId },
+      select: { id: true, assetType: true, archivedAt: true, approvalStatus: true },
+    });
+    const problems = assetIds.flatMap((id, i) => {
+      const a = rows.find((r) => r.id === id);
+      const why = !a
+        ? 'is not an asset of this project'
+        : a.archivedAt
+          ? 'is archived'
+          : a.assetType !== 'reference' && a.assetType !== 'image'
+            ? 'is not a reference image or image'
+            : a.approvalStatus === 'rejected'
+              ? 'was rejected'
+              : null;
+      return why
+        ? [{ path: `body.requiredReferenceAssetIds.${String(i)}`, message: `${id} ${why}` }]
+        : [];
+    });
+    if (problems.length > 0) {
+      throw new ApiError({
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        code: ApiErrorCode.ReferenceInvalid,
+        message: 'Scene references must be active reference images or images of this project.',
+        details: problems,
+      });
+    }
+  }
+
   async editScene(
     actor: Actor,
     sceneId: string,
@@ -179,6 +217,9 @@ export class ArtifactsService {
         return s.id === sceneId ? { ...dto, ...changes, sceneNumber: s.sceneNumber } : dto;
       }),
     });
+    if (changes.requiredReferenceAssetIds !== undefined) {
+      await this.checkSceneReferences(item.projectId, changes.requiredReferenceAssetIds);
+    }
     const ids = (pick: (s: StoryboardContent['scenes'][number]) => (string | null)[]) => [
       ...new Set(content.scenes.flatMap(pick).filter((x): x is string => x !== null)),
     ];
