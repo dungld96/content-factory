@@ -19,7 +19,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { readonly children: ReactNode }) {
   return (
     <html lang="en" className={`${dmSans.variable} ${manrope.variable}`}>
-      <body>{children}</body>
+      {/* Browser extensions (e.g. ColorZilla's cz-shortcut-listen) add attributes to <body> before
+          React hydrates; this silences that one-level attribute mismatch only, not the children. */}
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }
