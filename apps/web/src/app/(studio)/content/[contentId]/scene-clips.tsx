@@ -18,7 +18,7 @@ import { ApprovalPill, Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { mutate } from '@/lib/api-client';
 import { assetContentUrl } from '@/lib/asset-url';
-import { DeliveredOutputActions } from '@/components/delivered-output';
+import { DeliveredOutputActions, JobErrorDetail } from '@/components/delivered-output';
 import { formatSeconds, jobErrorText } from '@/lib/format';
 import { formatUsd } from '@/lib/money';
 
@@ -331,15 +331,16 @@ function JobLine(props: {
   if (!job) return null;
   const running = job.status === 'running' && progress?.providerStatus !== null;
   return (
-    <p role="status">
+    // A div, not a p: the delivered-output preview opens a dialog with block content.
+    <div role="status" className="job-line">
       Clip job {job.status}
       {job.status === 'running' && progress
         ? progress.providerStatus
           ? ` · provider: ${progress.providerStatus} · ${String(progress.pollCount)} check(s)`
           : ' · submitting'
         : ''}
-      {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}{' '}
-      <DeliveredOutputActions job={job} canEdit={props.canEdit} />
+      {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}
+      <JobErrorDetail job={job} /> <DeliveredOutputActions job={job} canEdit={props.canEdit} />
       {props.canEdit && running && (
         <>
           {' '}
@@ -355,7 +356,7 @@ function JobLine(props: {
           </button>
         </>
       )}
-    </p>
+    </div>
   );
 }
 

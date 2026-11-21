@@ -45,7 +45,9 @@ describe('job error codes (P3 W3, W5)', () => {
     };
     expect(isFinishable(job)).toBe(true);
     expect(isFinishable({ ...job, deliveredAt: null })).toBe(false);
+    // P3d revision 2: a stored but refused output can be checked again; an unstored one cannot.
     expect(isFinishable({ ...job, errorCode: 'OUTPUT_INVALID' })).toBe(false);
+    expect(isFinishable({ ...job, errorCode: 'OUTPUT_INVALID', stagedAssetId: 'a' })).toBe(true);
     expect(isFinishable({ ...job, kind: 'image_generation' })).toBe(false);
     expect(isFinishable({ ...job, status: 'canceled' })).toBe(false);
     expect(DOUBLE_CHARGE_CODES.has('OUTPUT_NOT_STORED')).toBe(true);

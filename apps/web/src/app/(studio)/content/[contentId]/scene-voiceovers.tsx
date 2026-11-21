@@ -18,7 +18,7 @@ import { ApprovalPill, Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { mutate } from '@/lib/api-client';
 import { assetContentUrl } from '@/lib/asset-url';
-import { DeliveredOutputActions } from '@/components/delivered-output';
+import { DeliveredOutputActions, JobErrorDetail } from '@/components/delivered-output';
 import { formatSeconds, jobErrorText } from '@/lib/format';
 import { formatUsd } from '@/lib/money';
 
@@ -239,12 +239,13 @@ export function SceneVoiceoversPanel(props: {
                       {String(scene.durationSeconds)} s
                     </p>
                     {job && (
-                      <p role="status">
+                      <div role="status" className="job-line">
                         Voice-over job {job.status}
                         {job.attempt > 1 ? ` (attempt ${String(job.attempt)})` : ''}
-                        {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}{' '}
+                        {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}
+                        <JobErrorDetail job={job} />{' '}
                         <DeliveredOutputActions job={job} canEdit={canEdit} />
-                      </p>
+                      </div>
                     )}
                   </div>
                   {canEdit && scene.text !== '' && profile && (

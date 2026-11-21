@@ -41,7 +41,11 @@ export function DeliveredOutputActions(props: {
       {props.canEdit && job.finishable && (
         <ResumeRunButton
           runId={job.productionRunId}
-          label="Finish – no new charge"
+          label={
+            job.errorCode === 'OUTPUT_INVALID'
+              ? 'Check again – no new charge'
+              : 'Finish – no new charge'
+          }
           className="btn small primary"
         />
       )}
@@ -51,9 +55,15 @@ export function DeliveredOutputActions(props: {
           setOpen(false);
         }}
         title={`Delivered ${what}`}
-        description={`Paid for and kept, not checked yet. ${
-          job.finishable ? 'Finish stores it without a new charge.' : ''
-        }`}
+        description={
+          job.errorCode === 'OUTPUT_INVALID'
+            ? `Paid for and kept, but it failed validation${
+                job.errorMessage ? `: ${job.errorMessage}` : ''
+              }.`
+            : `Paid for and kept, not checked yet. ${
+                job.finishable ? 'Finish stores it without a new charge.' : ''
+              }`
+        }
       >
         {open &&
           (isClip ? (
@@ -70,4 +80,14 @@ export function DeliveredOutputActions(props: {
       </Modal>
     </span>
   );
+}
+
+/**
+ * Why a delivered clip or voice-over was refused (e.g. "480×864 does not match the requested
+ * aspect ratio"): the worker's own message, shown only for OUTPUT_INVALID.
+ */
+export function JobErrorDetail(props: { readonly job: GenerationJobDto }) {
+  const { job } = props;
+  if (job.errorCode !== 'OUTPUT_INVALID' || !job.errorMessage) return null;
+  return <span className="muted small-text"> ({job.errorMessage})</span>;
 }

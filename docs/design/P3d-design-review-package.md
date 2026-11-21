@@ -228,3 +228,20 @@ paid call), and it ships without a migration.
 | API integration (`media`, `operations`, permission matrix) | Pass: preview (type, `nosniff`, range, outsider 404), Resume creates one finish job without reservation, second Resume 409, 410 after finishing                                                                                                                                         |
 | Database integration                                       | Pass: delivery write-once, staged record complete, media kinds only                                                                                                                                                                                                                     |
 | E2E                                                        | Not added: the E2E worker uses the real FFmpeg; the finish flow is covered end to end by the worker and API integration tests above                                                                                                                                                     |
+
+## Revision 2 — check a refused clip again (2026-11-21)
+
+Owner report: every 480p clip of `x-ai/grok-imagine-video-1.5-lite` ended `OUTPUT_INVALID` although
+it played. Encoders round sizes to multiples of 16, so a 9:16 clip at 480p is 480×864 — 1.2 % off
+9:16, above the 1 % tolerance. Decisions (by recommendation):
+
+- Clip aspect tolerance 2.5 % (`ASPECT_TOLERANCE`, `packages/media`); the render fits each clip
+  into the frame, so a rounded clip gets a sliver of padding. Landscape and square clips stay
+  refused.
+- §5 changes: `OUTPUT_INVALID` is finishable when the delivered file was **stored**
+  (`staged_asset_id` set). The finish job validates the stored file with the current rules and
+  never calls the provider; a file that is still invalid fails again at no cost. The button reads
+  **Check again – no new charge**.
+- The scene clip and voice-over lines show the worker's validation message for `OUTPUT_INVALID`
+  (e.g. "480×864 does not match the requested aspect ratio"), and are `div`s: the delivered-output
+  preview dialog inside a `p` was invalid HTML (hydration error).

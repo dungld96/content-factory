@@ -652,6 +652,7 @@ describe('delivered output (P3d R3, R7)', () => {
   /** A clip job that was delivered and stored, then failed because FFprobe was missing. */
   async function deliveredClipJob(
     w: World,
+    errorCode = 'MEDIA_TOOLS_MISSING',
   ): Promise<{ jobId: string; runId: string; bytes: Uint8Array; assetId: string }> {
     const model = await prisma.aiModel.findFirstOrThrow({
       where: { mediaConstraints: { path: ['kind'], equals: 'video' }, provider: { key: 'mock' } },
@@ -714,7 +715,7 @@ describe('delivered output (P3d R3, R7)', () => {
         staged_object_key = '${key}', staged_sha256 = '${digest}', staged_mime_type = 'video/mp4'
         WHERE id = '${job.id}';
       UPDATE generation_jobs SET status = 'failed', active_key = NULL, completed_at = now(),
-        error_code = 'MEDIA_TOOLS_MISSING', error_message = 'x' WHERE id = '${job.id}';
+        error_code = '${errorCode}', error_message = 'x' WHERE id = '${job.id}';
       UPDATE production_runs SET status = 'failed', completed_at = now() WHERE id = '${job.productionRunId}';
       UPDATE content_items SET status = 'asset_review' WHERE id = '${w.contentId}';
       COMMIT;`);
@@ -768,6 +769,23 @@ describe('delivered output (P3d R3, R7)', () => {
     await simulateSuccessWithId(finish?.id ?? '', d.assetId);
     const gone = await as('viewer', 'GET', `/generation-jobs/${d.jobId}/delivered-output`);
     expect([gone.status, codeOf(gone)]).toEqual([410, 'ALREADY_FINISHED']);
+  });
+
+  it('checks a stored clip refused by validation again, without a new charge (P3d rev. 2)', async () => {
+    const w = await approvedWorld();
+    const d = await deliveredClipJob(w, 'OUTPUT_INVALID');
+    expect((await as('viewer', 'GET', `/generation-jobs/${d.jobId}`)).json).toMatchObject({
+      finishable: true,
+    });
+    const res = await as('editor', 'POST', `/production-runs/${d.runId}/resume`, { body: {} });
+    expect(res.status).toBe(202);
+    const resumed = bodyOf<ResumeRunResponseDto>(res);
+    expect(resumed.skipped).toEqual([
+      { jobId: d.jobId, sceneId: w.sceneId, reason: 'finished_without_charge' },
+    ]);
+    const finish = resumed.run?.jobs[0];
+    expect(finish).toMatchObject({ recoverFromJobId: d.jobId, status: 'queued' });
+    expect(await prisma.budgetReservation.count({ where: { jobId: finish?.id ?? '' } })).toBe(0);
   });
 
   it('answers 404 for a job without a delivered file', async () => {

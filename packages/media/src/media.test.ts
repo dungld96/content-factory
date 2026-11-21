@@ -102,6 +102,20 @@ describe('with FFmpeg', () => {
     expect(video.sha256Hex).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it('accepts encoder rounding at 480p (480×864 for 9:16) but not a square clip', async () => {
+    const rounded = path.join(dir, 'rounded.mp4');
+    await synthVideo({ out: rounded, width: 480, height: 864, durationSec: 1 });
+    await expect(inspectVideoFile(rounded, null, { aspectRatio: 9 / 16 })).resolves.toMatchObject({
+      width: 480,
+      height: 864,
+    });
+    const square = path.join(dir, 'square.mp4');
+    await synthVideo({ out: square, width: 480, height: 480, durationSec: 1 });
+    await expect(inspectVideoFile(square, null, { aspectRatio: 9 / 16 })).rejects.toMatchObject({
+      code: 'MEDIA_INVALID',
+    });
+  });
+
   it('rejects a clip with the wrong aspect ratio or too short', async () => {
     const out = path.join(dir, 'wide.mp4');
     await synthVideo({ out, width: 640, height: 360, durationSec: 1 });

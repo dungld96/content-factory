@@ -96,20 +96,28 @@ export const FINISHABLE_CODES: ReadonlySet<string> = new Set<JobErrorCode>([
   'INTERNAL_ERROR',
 ]);
 
-/** Whether a failed job can be finished without calling the provider again (P3d R3). */
+/**
+ * Whether a failed job can be finished without calling the provider again (P3d R3). P3d revision
+ * 2: a stored output refused by validation (`OUTPUT_INVALID`) can be checked again, since the
+ * rules can change (e.g. the aspect tolerance); a file that is still invalid fails again at no cost.
+ */
 export function isFinishable(job: {
   readonly kind: string;
   readonly status: string;
   readonly errorCode: string | null;
   readonly deliveredAt: Date | string | null;
+  readonly stagedAssetId?: string | null;
 }): boolean {
-  return (
-    job.status === 'failed' &&
-    (job.kind === 'video_generation' || job.kind === 'tts_generation') &&
-    job.deliveredAt !== null &&
-    job.errorCode !== null &&
-    FINISHABLE_CODES.has(job.errorCode)
-  );
+  if (
+    job.status !== 'failed' ||
+    (job.kind !== 'video_generation' && job.kind !== 'tts_generation') ||
+    job.deliveredAt === null ||
+    job.errorCode === null
+  ) {
+    return false;
+  }
+  if (job.errorCode === 'OUTPUT_INVALID') return (job.stagedAssetId ?? null) !== null;
+  return FINISHABLE_CODES.has(job.errorCode);
 }
 
 const CODES: ReadonlySet<string> = new Set(JOB_ERROR_CODES);

@@ -188,8 +188,15 @@ export async function inspectAudio(
 
 export const ACCEPTED_VIDEO_CODECS = ['h264', 'hevc', 'vp9', 'av1'] as const;
 
+/**
+ * Relative aspect-ratio tolerance for generated clips. Encoders round sizes to multiples of 16, so a
+ * 9:16 clip at 480p arrives as 480×864 (1.2 % off); the render fits each clip into the frame, so
+ * that leaves a sliver of padding, not a wrong video. A landscape or square clip stays refused.
+ */
+export const ASPECT_TOLERANCE = 0.025;
+
 export interface VideoExpectations {
-  /** Width/height the clip must match within 1 % (e.g. 9/16). */
+  /** Width/height the clip must match within `ASPECT_TOLERANCE` (e.g. 9/16). */
   readonly aspectRatio?: number;
   /** Minimum duration: shorter clips are rejected (e.g. 90 % of the requested seconds). */
   readonly minDurationMs?: number;
@@ -267,7 +274,7 @@ export async function inspectVideoFile(
   }
   if (expect.aspectRatio !== undefined) {
     const ratio = first.width / first.height;
-    if (Math.abs(ratio - expect.aspectRatio) / expect.aspectRatio > 0.01) {
+    if (Math.abs(ratio - expect.aspectRatio) / expect.aspectRatio > ASPECT_TOLERANCE) {
       throw new MediaValidationError(
         'MEDIA_INVALID',
         `${String(first.width)}×${String(first.height)} does not match the requested aspect ratio`,
