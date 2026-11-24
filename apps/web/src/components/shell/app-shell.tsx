@@ -37,7 +37,7 @@ export function AppShell(props: { readonly sidebar: ReactNode; readonly children
   }, [open]);
 
   return (
-    <div className={open ? 'app nav-open' : 'app'}>
+    <div className={open ? 'app ds nav-open' : 'app ds'}>
       <button
         type="button"
         className="menu-button"
@@ -50,7 +50,7 @@ export function AppShell(props: { readonly sidebar: ReactNode; readonly children
       >
         <Icon name={open ? 'cancel' : 'menu'} size={22} />
       </button>
-      <aside className="sidebar" id="studio-sidebar">
+      <aside className="sidebar side" id="studio-sidebar">
         {props.sidebar}
       </aside>
       {open && (

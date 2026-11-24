@@ -135,6 +135,7 @@ test('owner: project settings and a new project', async ({ page }) => {
 
 test('owner: switches the interface to Vietnamese and back (R-D6)', async ({ page }) => {
   await signIn(page);
+  await page.getByRole('button', { name: /Account menu/ }).click();
   const switcher = page.getByRole('group', { name: 'Interface language' });
   await switcher.getByRole('button', { name: 'VI' }).click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'vi');

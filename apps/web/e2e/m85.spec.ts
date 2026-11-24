@@ -36,13 +36,14 @@ test('owner: picks a model and approves an earlier script version', async ({ pag
   projectUrl = page.url();
 
   await page
-    .getByRole('button', { name: /New content/ })
+    .getByRole('main')
+    .getByRole('link', { name: /New content/ })
     .first()
     .click();
   const content = page.getByRole('form', { name: 'New content' });
   await content.locator('[name=title]').fill('Phin coffee tips');
   await content.locator('[name=topic]').fill('Three tips for better phin coffee at home');
-  await content.getByRole('button', { name: 'Create draft' }).click();
+  await content.getByRole('button', { name: 'Save as draft' }).click();
   await page.waitForURL(/\/content\/[0-9a-f-]{36}/);
   contentUrl = page.url();
 

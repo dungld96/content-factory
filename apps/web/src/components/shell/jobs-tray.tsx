@@ -64,7 +64,7 @@ export function JobsTray() {
     <div className="jobs-tray" ref={panel}>
       <button
         type="button"
-        className={live.active.length > 0 ? 'jobs-button busy' : 'jobs-button'}
+        className={live.active.length > 0 ? 'jobs-pill busy' : 'jobs-pill'}
         aria-expanded={open}
         aria-controls="jobs-panel"
         aria-label={label}
@@ -73,9 +73,8 @@ export function JobsTray() {
           setOpen((v) => !v);
         }}
       >
-        <Icon name="operations" size={16} />
-        <span className="jobs-word">{t('jobs.button')}</span>
-        {live.active.length > 0 && <span className="jobs-count">{live.active.length}</span>}
+        <span className={running.length > 0 ? 'dot pulse' : 'dot'} aria-hidden="true" />
+        <span className="jobs-word">{t('jobs.pill', { count: running.length })}</span>
       </button>
       <span className="sr-only" aria-live="polite">
         {label}

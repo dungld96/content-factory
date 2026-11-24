@@ -50,6 +50,7 @@ test('login → project list → logout', async ({ page, context }) => {
   await page.reload();
   await expect(projects.getByRole('heading', { name: 'Demo Studio' })).toBeVisible();
 
+  await page.getByRole('button', { name: /Account menu/ }).click();
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/login$/);
   expect((await context.cookies()).some((c) => c.name === 'acf_sid')).toBe(false);
@@ -66,6 +67,7 @@ test('sign out works after a reload (CSRF token re-fetched)', async ({ page }) =
   await page.goto('/projects');
   await expect(page.getByRole('list', { name: 'Your projects' })).toContainText('Viewer');
   await page.reload(); // drops the in-memory CSRF token
+  await page.getByRole('button', { name: /Account menu/ }).click();
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.goto('/projects');

@@ -53,12 +53,12 @@ test('editor: new content → master page → add a variant; upload a reference 
   await page.getByRole('link', { name: 'Demo Studio' }).click();
 
   // Create content: the API creates its master and the item as the first variant.
-  await page.getByRole('button', { name: 'New content' }).click();
+  await page.getByRole('main').getByRole('link', { name: 'New content' }).click();
   const form = page.getByRole('form', { name: 'New content' });
   await form.getByLabel('Title').fill('Standing desk tips');
   await form.getByLabel('Topic').fill('Three tips for using a standing desk');
   await form.getByLabel('Platform').selectOption('tiktok');
-  await form.getByRole('button', { name: 'Create' }).click();
+  await form.getByRole('button', { name: 'Save as draft' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Standing desk tips' })).toBeVisible();
   await expect(page.getByLabel('Content master')).toContainText('for TikTok');
 

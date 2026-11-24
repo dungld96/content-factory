@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, type ReactNode, type SyntheticEvent } from 'react';
 
@@ -206,98 +207,24 @@ function specBody(form: FormData) {
 
 // --- Content -------------------------------------------------------------------------------
 
-function NewContentForm(props: {
-  readonly projects: readonly ProjectOption[];
-  readonly projectId: string;
-  readonly showProject: boolean;
-  readonly onCancel: () => void;
-}) {
-  const t = useT();
-  const router = useRouter();
-  const [projectId, setProjectId] = useState(props.projectId);
-  const { busy, error, run } = useSubmit();
-  const project = props.projects.find((p) => p.id === projectId);
-
-  async function create(event: SubmitEvent_) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const created = await run(() =>
-      mutate<ContentItemDto>('POST', `/projects/${projectId}/content`, {
-        title: field(form, 'title'),
-        ...specBody(form),
-        brief: { topic: field(form, 'topic'), ...optionalBrief(form, ['audience', 'tone']) },
-      }),
-    );
-    if (created) router.push(`/content/${created.id}`);
-  }
-
-  return (
-    <form className="form" aria-label={t('form.newContentLabel')} onSubmit={(e) => void create(e)}>
-      {props.showProject && (
-        <ProjectSelect projects={props.projects} value={projectId} onChange={setProjectId} />
-      )}
-      <label className="field">
-        {t('form.title')}
-        <input name="title" required maxLength={200} placeholder={t('form.titlePlaceholder')} />
-      </label>
-      <label className="field">
-        {t('form.topic')}
-        <textarea
-          name="topic"
-          required
-          maxLength={500}
-          rows={3}
-          placeholder={t('form.topicPlaceholder')}
-        />
-      </label>
-      <div className="form-row">
-        <label className="field">
-          {t('form.audience')} <small>{t('form.optional')}</small>
-          <input name="audience" maxLength={500} />
-        </label>
-        <label className="field">
-          {t('form.tone')} <small>{t('form.optional')}</small>
-          <input name="tone" maxLength={200} />
-        </label>
-      </div>
-      {/* Key: the language default follows the chosen project. */}
-      <SpecFields key={projectId} language={project?.defaultLanguage ?? 'en'} />
-      <FormError error={error} />
-      <Actions busy={busy} submit={t('form.createDraft')} onCancel={props.onCancel} />
-    </form>
-  );
-}
-
-/** Creates a content item and its content master (R0), then opens it. */
+/**
+ * Opens the New content page (redesign canvas: a full page, not a dialog). `projectId`
+ * preselects the project; `projects` only decides whether the caller may create anything.
+ */
 export function NewContentButton(props: {
   readonly projects: readonly ProjectOption[];
-  /** Fixes the project (project page); otherwise the form offers a picker. */
   readonly projectId?: string;
   readonly label?: string;
 }) {
   const t = useT();
-  const first = props.projectId ?? props.projects[0]?.id;
-  if (!first) return null;
+  if (props.projects.length === 0) return null;
+  const href = props.projectId
+    ? `/productions/new?project=${encodeURIComponent(props.projectId)}`
+    : '/productions/new';
   return (
-    <ModalButton
-      className="btn primary"
-      label={
-        <>
-          <span aria-hidden="true">＋</span> {props.label ?? t('form.newContent')}
-        </>
-      }
-      title={t('form.newContentTitle')}
-      description={t('form.newContentDesc')}
-    >
-      {(close) => (
-        <NewContentForm
-          projects={props.projects}
-          projectId={first}
-          showProject={props.projectId === undefined}
-          onCancel={close}
-        />
-      )}
-    </ModalButton>
+    <Link className="btn primary" href={href}>
+      <Icon name="plus" /> {props.label ?? t('form.newContent')}
+    </Link>
   );
 }
 

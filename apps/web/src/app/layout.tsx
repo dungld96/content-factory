@@ -4,9 +4,12 @@ import type { ReactNode } from 'react';
 
 import { I18nProvider } from '@/components/i18n-provider';
 import { getLocale, getT } from '@/lib/i18n/server';
+import { getTheme } from '@/lib/theme';
 
 import './globals.css';
 import './redesign.css';
+import './ds.css';
+import './shell.css';
 
 // Self-hosted at build time by next/font: the browser never contacts Google. Be Vietnam Pro
 // replaces DM Sans, which has no Vietnamese subset (redesign R-D6).
@@ -26,9 +29,13 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function RootLayout({ children }: { readonly children: ReactNode }) {
-  const locale = await getLocale();
+  const [locale, theme] = await Promise.all([getLocale(), getTheme()]);
   return (
-    <html lang={locale} className={`${beVietnam.variable} ${manrope.variable}`}>
+    <html
+      lang={locale}
+      className={`${beVietnam.variable} ${manrope.variable}`}
+      {...(theme ? { 'data-theme': theme } : {})}
+    >
       {/* Browser extensions (e.g. ColorZilla's cz-shortcut-listen) add attributes to <body> before
           React hydrates; this silences that one-level attribute mismatch only, not the children. */}
       <body suppressHydrationWarning>

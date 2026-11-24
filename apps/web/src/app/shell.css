@@ -1,0 +1,705 @@
+/*
+ * Studio shell and page layouts of the redesign canvas, on top of ds.css (the canvas design
+ * system). Values come from the canvas stylesheet; the sidebar stays fixed and becomes a drawer
+ * below 760 px (UX review U4).
+ */
+
+/* --- Sidebar ------------------------------------------------------------------------------- */
+.ds .side {
+  width: 248px;
+  background: var(--nav);
+  color: var(--nav-text);
+  padding: 18px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ds .side .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 16px;
+  color: #fff;
+  font: 800 15px var(--font-display);
+  text-decoration: none;
+}
+
+.ds .side .brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--accent);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  box-shadow: none;
+}
+
+.ds .proj-switch-wrap {
+  position: relative;
+  margin: 0 4px 14px;
+}
+
+.ds .proj-switch {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--nav-2);
+  border: 1px solid var(--nav-line);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ds .proj-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds .sw {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: #d9a441;
+  display: grid;
+  place-items: center;
+  color: #121826;
+  font-size: 10px;
+  font-weight: 800;
+  flex: none;
+}
+
+.ds .proj-switch-wrap .menu-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+}
+
+.ds .menu-pop .mi {
+  text-decoration: none;
+}
+
+.ds .menu-pop a.mi:hover {
+  background: var(--sunken);
+}
+
+.ds .side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ds .side .nav-label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--nav-muted);
+  padding: 14px 10px 6px;
+  margin: 0;
+}
+
+.ds .side .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--nav-text);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+.ds .side .nav-item:hover {
+  background: var(--nav-2);
+  color: #fff;
+}
+
+.ds .side .nav-item.on {
+  background: var(--nav-2);
+  color: #fff;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.ds .side .nav-item .icon {
+  color: inherit;
+}
+
+.ds .side .nav-item .count {
+  margin-left: auto;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: #f2b860;
+  color: #2a1a00;
+  font-size: 12px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.ds .side .nav-item .count.plain {
+  background: var(--nav-2);
+  color: var(--nav-text);
+  border: 1px solid var(--nav-line);
+}
+
+.ds .side-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 4px 0;
+  border-top: 1px solid var(--nav-line);
+}
+
+.ds .spend-mini {
+  padding: 10px;
+  border-radius: var(--r-md);
+  background: var(--nav-2);
+  font-size: 12px;
+  color: var(--nav-text);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-decoration: none;
+}
+
+.ds .spend-mini b {
+  color: #fff;
+  font-size: 13px;
+}
+
+.ds .spend-mini .meter {
+  background: var(--nav-line);
+  height: 5px;
+}
+
+.ds .spend-mini .meter > i.spent {
+  background: #c3cad7;
+}
+
+.ds .me-wrap {
+  position: relative;
+}
+
+.ds .me {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  color: #fff;
+}
+
+.ds .me-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ds .me-button:hover {
+  background: var(--nav-2);
+}
+
+.ds .me-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds .side .avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #3b4a63;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 12px;
+  flex: none;
+}
+
+.ds .theme-toggle {
+  color: var(--nav-text);
+}
+
+.ds .theme-toggle:hover {
+  color: #fff;
+  background: var(--nav-2);
+}
+
+.ds .account-pop {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+}
+
+.ds .account-pop .signout {
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  padding: 0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* --- Main column and topbar ----------------------------------------------------------------- */
+.ds .main {
+  margin-left: 248px;
+  width: calc(100% - 248px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.ds .topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  height: auto;
+  padding: 10px 28px;
+  row-gap: 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.ds .crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.ds .crumbs a {
+  color: var(--accent-ink);
+}
+
+.ds .crumbs b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ds .topbar-slot:empty {
+  display: none;
+}
+
+.ds .topbar-slot {
+  gap: 12px;
+}
+
+.ds .cmdk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  width: 300px;
+  max-width: 100%;
+  padding: 0 8px 0 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.ds .cmdk input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+}
+
+.ds .cmdk input::placeholder {
+  color: var(--muted);
+}
+
+.ds .cmdk input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.ds .jobs-tray {
+  position: relative;
+}
+
+.ds .jobs-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.ds .jobs-pill .dot {
+  color: var(--line-strong);
+}
+
+.ds .jobs-pill.busy .dot {
+  color: var(--info);
+}
+
+.ds .content {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1360px;
+  width: 100%;
+  margin: 0;
+}
+
+.ds .content > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Page heading (canvas `.page-head`); older pages use `.page-heading`. */
+.ds .page-head,
+.ds .page-heading {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+.ds .page-heading {
+  justify-content: space-between;
+}
+
+.ds .page-head h1,
+.ds .page-heading h1 {
+  font: 800 28px/36px var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.ds .page-head p,
+.ds .page-heading p {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 4px 0 0;
+}
+
+.ds .idx {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border-radius: 6px;
+  padding: 2px 7px;
+}
+
+.ds .btn .icon {
+  flex: none;
+}
+
+.ds a.btn {
+  color: var(--text);
+}
+
+.ds a.btn.primary {
+  color: var(--on-accent);
+}
+
+.ds select.input {
+  appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23586377' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  cursor: pointer;
+}
+
+.ds .input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.ds .seg button {
+  cursor: pointer;
+}
+
+.ds .switch {
+  cursor: pointer;
+}
+
+.ds .switch.on::after {
+  left: 19px;
+}
+
+.ds .kv dd.unknown {
+  color: var(--review);
+}
+
+/* --- New content (canvas "New content") ------------------------------------------------------ */
+.ds .brief-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.ds .brief-main {
+  flex: 999 1 560px;
+  min-width: 0;
+  gap: 16px;
+}
+
+.ds .brief-side {
+  flex: 1 1 320px;
+  min-width: 0;
+  gap: 16px;
+  position: sticky;
+  top: 80px;
+}
+
+.ds .brief-section {
+  gap: 14px;
+}
+
+.ds .fgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 14px;
+}
+
+.ds .select-wrap {
+  position: relative;
+  display: block;
+}
+
+.ds .select-wrap .sw {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  font-size: 9px;
+  pointer-events: none;
+}
+
+.ds .select-wrap select.input {
+  width: 100%;
+  padding-left: 40px;
+}
+
+.ds .brief-photos {
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.ds .photo {
+  width: 84px;
+  height: 84px;
+  border-radius: 10px;
+  position: relative;
+  flex: none;
+}
+
+.ds .photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.ds .photo .rm {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  padding: 0;
+  cursor: pointer;
+}
+
+.ds .photo.add {
+  border: 1.5px dashed var(--line-strong);
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ds .photo.add .col {
+  align-items: center;
+  gap: 4px;
+}
+
+.ds .audio-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+.ds .audio-row.on {
+  background: var(--surface-2);
+}
+
+.ds .audio-text {
+  gap: 2px;
+  flex: 1 1 240px;
+}
+
+.ds .audio-profile {
+  flex: 1 1 220px;
+}
+
+.ds .check-list {
+  list-style: none;
+  margin: 0;
+  gap: 10px;
+}
+
+.ds .check-list li {
+  align-items: flex-start;
+}
+
+.ds .check-ic {
+  display: inline-grid;
+  flex: none;
+  margin-top: 1px;
+}
+
+.ds .check-ic.ok {
+  color: var(--success);
+}
+
+.ds .check-ic.review {
+  color: var(--review);
+}
+
+.ds .check-ic.danger {
+  color: var(--danger);
+}
+
+.ds .cost-body {
+  gap: 12px;
+}
+
+.ds .cost-body .kv {
+  margin: 0;
+}
+
+.ds .cost-total {
+  font-size: 18px;
+}
+
+.ds .submit-col {
+  gap: 8px;
+}
+
+.ds .submit-col .btn {
+  width: 100%;
+}
+
+.ds .submit-note {
+  text-align: center;
+}
+
+/* --- Phone ---------------------------------------------------------------------------------- */
+@media (width <= 1100px) {
+  .ds .side {
+    width: 215px;
+  }
+
+  .ds .main {
+    margin-left: 215px;
+    width: calc(100% - 215px);
+  }
+}
+
+@media (width <= 760px) {
+  .ds .side {
+    width: min(300px, 86vw);
+  }
+
+  .ds .main {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .ds .topbar {
+    padding: 8px 16px 8px 64px;
+  }
+
+  .ds .topbar .cmdk {
+    width: 100%;
+    order: 5;
+  }
+
+  .ds .topbar-new span {
+    display: none;
+  }
+
+  .ds .content {
+    padding: 20px 16px 96px;
+  }
+
+  .ds .brief-side {
+    position: static;
+  }
+}
+
+.ds .brief-section .field > span .hint {
+  display: block;
+  margin-top: 2px;
+}

@@ -51,21 +51,22 @@ export async function SidebarSpend() {
   const used = percent(spend.spentUsd, spend.limitUsd);
   const held = Math.min(100 - used, percent(spend.reservedUsd, spend.limitUsd));
   return (
-    <Link className="spend-meter" href="/costs" aria-label={t('nav.spendLabel')}>
-      <span className="spend-row">
-        <span>{t('nav.spend', { month })}</span>
-        <b>{formatUsd(spend.spentUsd)}</b>
+    <Link className="spend-mini" href="/costs" aria-label={t('nav.spendLabel')}>
+      <span className="row">
+        {t('nav.spend', { month })}
+        <span className="spacer" />
+        <b className="num">{formatUsd(spend.spentUsd)}</b>
       </span>
-      <span className="spend-bar" aria-hidden="true">
-        <span className="spend-used" style={{ width: `${String(used)}%` }} />
-        <span className="spend-held" style={{ width: `${String(held)}%` }} />
+      <span className="meter" aria-hidden="true">
+        <i className="spent" style={{ width: `${String(used)}%` }} />
+        <i className="reserved" style={{ width: `${String(held)}%` }} />
       </span>
-      <small>
+      <span>
         {t('nav.spendOf', {
           limit: formatUsd(spend.limitUsd),
           reserved: formatUsd(spend.reservedUsd),
         })}
-      </small>
+      </span>
     </Link>
   );
 }

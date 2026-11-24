@@ -3,16 +3,16 @@ import { redirect } from 'next/navigation';
 import { Suspense, type ReactNode } from 'react';
 
 import { Icon } from '@/components/icon';
-import { LanguageSwitch } from '@/components/language-switch';
 import { AppShell } from '@/components/shell/app-shell';
-import { LogoutButton } from '@/components/shell/logout-button';
 import { SidebarNav } from '@/components/shell/sidebar-nav';
+import { AccountMenu, ProjectSwitch, ThemeToggle } from '@/components/shell/sidebar-parts';
 import { SidebarNavWithCounts, SidebarSpend } from '@/components/shell/sidebar-status';
 import { Topbar } from '@/components/shell/topbar';
 import { Toaster } from '@/components/toast';
 import { initials } from '@/lib/format';
 import { getT } from '@/lib/i18n/server';
 import { getMe } from '@/lib/me';
+import { getTheme } from '@/lib/theme';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,53 +36,38 @@ export default async function StudioLayout({ children }: { readonly children: Re
     );
   }
   const { user, memberships } = me.data;
-  const owned = memberships.filter((m) => m.role === 'owner').length;
 
+  const theme = await getTheme();
   return (
     <AppShell
       sidebar={
         <>
           <Link href="/" className="brand" aria-label={t('app.home')}>
             <span className="brand-mark" aria-hidden="true">
-              <Icon name="generate" size={18} />
+              <Icon name="generate" size={16} />
             </span>
-            <span className="brand-copy">
-              <span className="brand-name">{t('app.brandName')}</span>
-              <span className="brand-sub">{t('app.brandSub')}</span>
-            </span>
+            {t('app.brandName')}
           </Link>
-          <div className="workspace-switch">
-            <span className="workspace-icon" aria-hidden="true">
-              W
-            </span>
-            <span className="workspace-copy">
-              <b>{t('nav.myWorkspace')}</b>
-              <span>
-                {t('nav.workspaceSummary', { count: memberships.length })} ·{' '}
-                {t('nav.ownedSummary', { count: owned })}
-              </span>
-            </span>
-          </div>
+          <ProjectSwitch
+            projects={memberships.map((m) => ({ id: m.projectId, name: m.projectName }))}
+          />
           <Suspense fallback={<SidebarNav />}>
             <SidebarNavWithCounts />
           </Suspense>
-          <div className="sidebar-bottom">
+          <div className="side-foot">
             <Suspense fallback={null}>
               <SidebarSpend />
             </Suspense>
-            <div className="profile">
-              <span className="avatar" aria-hidden="true">
-                {initials(user.displayName)}
-              </span>
-              <span className="profile-copy">
-                <b>{user.displayName}</b>
-                <small>{user.email}</small>
-              </span>
-            </div>
-            <div className="profile-tools">
-              <LanguageSwitch signedIn />
-              <LogoutButton />
-            </div>
+            <AccountMenu
+              name={user.displayName}
+              email={user.email}
+              avatar={
+                <span className="avatar" aria-hidden="true">
+                  {initials(user.displayName)}
+                </span>
+              }
+              theme={<ThemeToggle initial={theme} />}
+            />
           </div>
         </>
       }

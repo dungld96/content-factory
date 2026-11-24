@@ -34,7 +34,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: 'work',
     label: 'nav.productions',
     short: 'nav.productions',
-    icon: 'content',
+    icon: 'film',
     match: (p) => p.startsWith('/productions') || isContentWorkspace(p) || p.startsWith('/masters'),
   },
   {
@@ -42,7 +42,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: 'work',
     label: 'nav.projects',
     short: 'nav.projects',
-    icon: 'projects',
+    icon: 'folder',
     match: (p) => p.startsWith('/projects'),
   },
   {
@@ -50,7 +50,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: 'resources',
     label: 'nav.library',
     short: 'nav.library',
-    icon: 'assets',
+    icon: 'image',
     match: (p) => p.startsWith('/assets'),
   },
   {
@@ -74,7 +74,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     group: 'control',
     label: 'nav.settings',
     short: 'nav.settings',
-    icon: 'settings',
+    icon: 'sliders',
     match: (p) => p.startsWith('/settings'),
   },
 ];

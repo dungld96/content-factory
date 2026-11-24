@@ -77,7 +77,10 @@ test('operations page: queues, failures, providers and budgets', async ({ page }
     .getByRole('link', { name: 'Operations' })
     .click();
   await expect(page.getByRole('heading', { level: 1, name: 'Operations' })).toBeVisible();
-  await expect(page.getByRole('table', { name: 'Queues' })).toContainText('generation-dlq');
+  // The queue table is folded away while every queue is idle (e.g. right after Redis starts).
+  const queues = page.getByRole('table', { name: 'Queues' });
+  if (!(await queues.isVisible())) await page.locator('summary', { hasText: 'Queues' }).click();
+  await expect(queues).toContainText('generation-dlq');
   await expect(page.getByRole('heading', { name: 'Held reservations' })).toBeVisible();
   await expect(page.getByRole('list', { name: 'Project budgets' })).toContainText('Demo Studio');
 });
