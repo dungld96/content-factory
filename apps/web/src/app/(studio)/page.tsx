@@ -61,7 +61,9 @@ export default async function TodoPage() {
         ? formatUsd(item.detail ?? '0')
         : (item.detail ?? '');
     const text = t(item.reason, { detail });
-    return item.kind === 'failed' && item.detail ? `${text}: ${jobErrorText(item.detail, locale)}` : text;
+    return item.kind === 'failed' && item.detail
+      ? `${text}: ${jobErrorText(item.detail, locale)}`
+      : text;
   };
 
   return (

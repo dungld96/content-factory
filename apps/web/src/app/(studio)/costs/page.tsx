@@ -75,9 +75,7 @@ export default async function CostsPage() {
         <div className="card stat">
           <div className="stat-top">{t('costs.total')}</div>
           <div className="stat-value">{formatUsd(total)}</div>
-          <div className="stat-foot">
-            {t('costs.totalFoot', { calls, count: loaded.length })}
-          </div>
+          <div className="stat-foot">{t('costs.totalFoot', { calls, count: loaded.length })}</div>
         </div>
         <div className="card stat">
           <div className="stat-top">{t('costs.limits')}</div>
@@ -122,7 +120,9 @@ export default async function CostsPage() {
               </thead>
               <tbody>
                 {rows.map(({ membership: m, budget: b, costs: c }) => {
-                  const used = b ? percent(addUsd(b.spentUsd, b.reservedUsd, b.heldUsd), b.monthly.limitUsd) : 0;
+                  const used = b
+                    ? percent(addUsd(b.spentUsd, b.reservedUsd, b.heldUsd), b.monthly.limitUsd)
+                    : 0;
                   return (
                     <tr key={m.projectId}>
                       <td className="table-title">

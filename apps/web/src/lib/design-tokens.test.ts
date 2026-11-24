@@ -3,7 +3,6 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-
 // UX review U3: readable text sizes and contrast, checked on the stylesheet itself.
 const css = readFileSync(path.join(import.meta.dirname, '../app/globals.css'), 'utf8');
 

@@ -50,7 +50,9 @@ export default async function StatusPage() {
                       <td className="table-title">{name}</td>
                       <td>
                         <Pill tone={check.status === 'ok' ? 'green' : 'red'}>
-                          {check.status === 'ok' ? t('sys.okShort') : (check.error ?? t('sys.error'))}
+                          {check.status === 'ok'
+                            ? t('sys.okShort')
+                            : (check.error ?? t('sys.error'))}
                         </Pill>
                       </td>
                       <td>{check.latencyMs} ms</td>

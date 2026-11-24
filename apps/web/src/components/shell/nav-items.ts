@@ -15,7 +15,13 @@ const isContentWorkspace = (path: string) => /^\/content\/[^/]+/.test(path);
 
 /** The seven task-based destinations (redesign R-D1, R-D2), in menu order. */
 export const NAV_ITEMS: readonly NavItem[] = [
-  { href: '/', label: 'nav.todo', short: 'nav.todoShort', icon: 'todoList', match: (p) => p === '/' },
+  {
+    href: '/',
+    label: 'nav.todo',
+    short: 'nav.todoShort',
+    icon: 'todoList',
+    match: (p) => p === '/',
+  },
   {
     href: '/productions',
     label: 'nav.productions',
@@ -37,7 +43,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
     icon: 'assets',
     match: (p) => p.startsWith('/assets'),
   },
-  { href: '/costs', label: 'nav.costs', short: 'nav.costs', icon: 'costs', match: (p) => p.startsWith('/costs') },
+  {
+    href: '/costs',
+    label: 'nav.costs',
+    short: 'nav.costs',
+    icon: 'costs',
+    match: (p) => p.startsWith('/costs'),
+  },
   {
     href: '/operations',
     label: 'nav.operations',
@@ -63,6 +75,8 @@ export const BOTTOM_ITEMS: readonly NavItem[] = NAV_ITEMS.filter((item) =>
 export function sectionOf(path: string): MessageKey {
   if (isContentWorkspace(path)) return 'nav.workspaceSection';
   if (path.startsWith('/masters')) return 'nav.masters';
-  return NAV_ITEMS.find((item) => item.href !== '/' && item.match(path))?.label ??
-    (path === '/' ? 'nav.todo' : 'nav.workspace');
+  return (
+    NAV_ITEMS.find((item) => item.href !== '/' && item.match(path))?.label ??
+    (path === '/' ? 'nav.todo' : 'nav.workspace')
+  );
 }

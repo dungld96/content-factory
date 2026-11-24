@@ -15,8 +15,7 @@ export function routeReadiness(route: AiRouteDto, providers: readonly AiProvider
   if (!route.provider.configured) {
     return {
       ready: false,
-      reason:
-        provider?.kind === 'mock' ? 'ai.reason.testOnly' : 'ai.reason.noKey',
+      reason: provider?.kind === 'mock' ? 'ai.reason.testOnly' : 'ai.reason.noKey',
     };
   }
   if (route.model.status !== 'enabled') return { ready: false, reason: 'ai.reason.modelDisabled' };

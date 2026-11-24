@@ -1,6 +1,13 @@
 'use client';
 
 import { csrfToken, forgetCsrfToken } from './csrf-client';
+import { isLocale, translator, type Translate } from './i18n';
+
+/** The page's interface language (`<html lang>`, set by the root layout, R-D6). */
+function pageT(): Translate {
+  const lang = typeof document === 'undefined' ? 'en' : document.documentElement.lang;
+  return translator(isLocale(lang) ? lang : 'en');
+}
 
 export interface MutationResult<T> {
   readonly ok: boolean;
@@ -18,14 +25,14 @@ export interface MutationResult<T> {
 
 /** The error to show for a failed request: the message plus each named problem (M8.5 Q6). */
 export function errorText(r: MutationResult<unknown>): string {
-  const base = r.message ?? `Request failed (HTTP ${String(r.status)})`;
+  const base = r.message ?? pageT()('form.requestFailed', { status: r.status });
   const details = (r.details ?? []).map((d) => d.message).filter((m) => m.length > 0);
   return details.length > 0 ? `${base} ${details.join('; ')}.` : base;
 }
 
 /** Asks before spending above a soft budget (M7 §3), with the browser's confirmation dialog. */
 function confirmOverBudget(message: string): boolean {
-  return typeof window !== 'undefined' && window.confirm(`${message}\n\nProceed anyway?`);
+  return typeof window !== 'undefined' && window.confirm(`${message}\n\n${pageT()('api.proceed')}`);
 }
 
 /**
@@ -54,7 +61,7 @@ export async function mutate<T>(
   if (
     first.code === 'BUDGET_CONFIRMATION_REQUIRED' &&
     (body === undefined || plain) &&
-    confirmOverBudget(first.message ?? 'This request exceeds a soft budget.')
+    confirmOverBudget(first.message ?? pageT()('api.softBudget'))
   ) {
     return send<T>(
       method,
@@ -100,7 +107,7 @@ async function send<T>(
       ...(!res.ok && error?.current !== undefined ? { current: error.current } : {}),
     };
   } catch {
-    return { ok: false, status: 0, data: null, message: 'The server could not be reached.' };
+    return { ok: false, status: 0, data: null, message: pageT()('login.unreachable') };
   }
 }
 
@@ -150,7 +157,7 @@ export async function uploadImage<T>(
       message: !res.ok && typeof error?.message === 'string' ? error.message : null,
     };
   } catch {
-    return { ok: false, status: 0, data: null, message: 'The server could not be reached.' };
+    return { ok: false, status: 0, data: null, message: pageT()('login.unreachable') };
   }
 }
 

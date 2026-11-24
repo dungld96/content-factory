@@ -6,6 +6,7 @@ import { useEffect, useRef, useSyncExternalStore, type SyntheticEvent } from 're
 import { useT } from '@/components/i18n-provider';
 import { Icon } from '@/components/icon';
 
+import { JobsTray } from './jobs-tray';
 import { sectionOf } from './nav-items';
 
 const noSubscription = (): (() => void) => () => undefined;
@@ -68,6 +69,7 @@ export function Topbar() {
         />
         <kbd aria-hidden="true">{shortcut}</kbd>
       </form>
+      <JobsTray />
     </header>
   );
 }

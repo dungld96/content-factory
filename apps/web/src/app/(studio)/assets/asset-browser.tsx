@@ -113,11 +113,7 @@ function AssetActions({
     const r = await mutate(method, path, body);
     setBusy(false);
     if (!r.ok) {
-      setError(
-        r.code && IN_USE_CODES.has(r.code)
-          ? t('library.inUse')
-          : errorText(r),
-      );
+      setError(r.code && IN_USE_CODES.has(r.code) ? t('library.inUse') : errorText(r));
       return;
     }
     toast(done);
@@ -393,11 +389,7 @@ function LineagePanel({
   const locale = useLocale();
   const provenance = useProvenance(asset);
   return (
-    <section
-      className="card card-pad"
-      style={{ marginTop: 18 }}
-      aria-label={t('library.lineage')}
-    >
+    <section className="card card-pad" style={{ marginTop: 18 }} aria-label={t('library.lineage')}>
       <div className="section-head">
         <div>
           <h2>{t('library.lineage')}</h2>

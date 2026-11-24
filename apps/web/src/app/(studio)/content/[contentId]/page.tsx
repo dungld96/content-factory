@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 
 import type {
   AiModelDto,
+  BudgetDto,
   AiProviderList,
   CostReportDto,
   RenderListDto,
@@ -23,20 +24,25 @@ import type {
   StoryboardVersionDto,
 } from '@acf/contracts';
 
-import { Icon } from '@/components/icon';
 import { ProductPhotos } from '@/components/product-photos';
-import { buildSceneRows, nextStep } from '@/lib/scene-board';
 import { RelativeTime } from '@/components/local-time';
+import { ReviewPanel } from '@/components/review/review-panel';
+import { TextDiff } from '@/components/review/text-diff';
 import { ContentStatusPill, Pill, VersionPill } from '@/components/status-pill';
+import { apiGet } from '@/lib/api-server';
 import { assetContentUrl } from '@/lib/asset-url';
-import { isGenerating } from '@/lib/content-status';
-import { FORMAT_LABEL, jobErrorText, platformLabel, wordCount } from '@/lib/format';
+import { formatLabel, jobErrorText, platformLabel, wordCount } from '@/lib/format';
+import type { Locale, Translate } from '@/lib/i18n';
+import { getLocale, getT } from '@/lib/i18n/server';
 import { usableModels } from '@/lib/model-options';
 import { addUsd, formatUsd, sumJobCosts } from '@/lib/money';
-import { apiGet } from '@/lib/api-server';
+import { buildSceneRows, nextStep } from '@/lib/scene-board';
 
+import { AudioPlan } from './audio-plan';
+import { HistoryDrawer } from './history-drawer';
+import { JobActivity } from './job-activity';
+import { LiveRefresh } from './live-refresh';
 import {
-  AutoRefresh,
   BriefCheck,
   GenerateButton,
   ReviewButtons,
@@ -46,99 +52,48 @@ import {
 } from './pipeline-controls';
 import { RenderPanel } from './render-panel';
 import { ResyncBriefButton } from './scene-images';
-import { AudioPlan } from './audio-plan';
 import { ScenesTab } from './scenes-tab';
-import { JobActivity } from './job-activity';
-import { WorkspaceTabs } from './workspace-tabs';
+import { StageRail, type StageState, type WorkspaceStage } from './stage-rail';
 
-export const metadata: Metadata = { title: 'Content · Content Studio' };
 export const dynamic = 'force-dynamic';
 
-type TabId = 'script' | 'storyboard' | 'scenes' | 'render' | 'activity';
-
-interface Step {
-  readonly label: string;
-  readonly done: boolean;
-  readonly note: string;
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('ws.pageTitle') };
 }
 
-function Workflow({ steps }: { readonly steps: readonly Step[] }) {
-  const current = steps.findIndex((s) => !s.done);
-  const doneCount = steps.filter((s) => s.done).length;
-  const now = steps[current];
-  return (
-    <>
-      {/* Phones (UX review U4): one line and a progress bar instead of six steps. */}
-      <div className="card workflow-compact" aria-hidden="true">
-        <b>
-          {now
-            ? `Step ${String(current + 1)} of ${String(steps.length)} · ${now.label}`
-            : 'All steps done'}
-        </b>
-        <span className="muted small-text">{now?.note ?? 'Exported'}</span>
-        <span className="bar-track">
-          <span
-            className="bar-fill"
-            style={{ display: 'block', width: `${String((doneCount / steps.length) * 100)}%` }}
-          />
-        </span>
-      </div>
-      <ol className="card workflow" aria-label="Production steps">
-        {steps.map((step, i) => {
-          const state = step.done ? 'done' : i === current ? 'current' : '';
-          return (
-            <li key={step.label} style={{ display: 'contents' }}>
-              {i > 0 && <span className="step-line" aria-hidden="true" />}
-              <span
-                className={`step ${state}`}
-                aria-current={state === 'current' ? 'step' : undefined}
-              >
-                <span className="step-circle" aria-hidden="true">
-                  {step.done ? <Icon name="check" size={14} /> : i + 1}
-                </span>
-                <span>
-                  <b>{step.label}</b>
-                  <small>{step.note}</small>
-                </span>
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-    </>
-  );
-}
+type TabId = 'script' | 'storyboard' | 'scenes' | 'render';
 
-function CostBox({ costs }: { readonly costs: readonly JobCostDto[] }) {
+function CostBox({ costs, t }: { readonly costs: readonly JobCostDto[]; readonly t: Translate }) {
   if (costs.length === 0) {
     return (
       <div className="cost-box">
-        <span>Cost of the latest generation jobs</span>
+        <span>{t('ws.costTitle')}</span>
         <strong>—</strong>
-        <small>No generation job has run yet.</small>
+        <small>{t('ws.costNone')}</small>
       </div>
     );
   }
   const total = sumJobCosts(costs);
   const known = addUsd(total.reportedUsd, total.estimatedUsd);
   return (
-    <div className="cost-box" aria-label="Generation cost">
-      <span>Cost of the latest generation jobs</span>
+    <div className="cost-box" aria-label={t('ws.cost')}>
+      <span>{t('ws.costTitle')}</span>
       <strong>
         {formatUsd(known)}
         {total.unknownCalls > 0 ? ' +' : ''}
       </strong>
       <small>
-        Reported {formatUsd(total.reportedUsd)} · estimated {formatUsd(total.estimatedUsd)} ·{' '}
-        {total.calls} call{total.calls === 1 ? '' : 's'}
+        {t('ws.costParts', {
+          reported: formatUsd(total.reportedUsd),
+          estimated: formatUsd(total.estimatedUsd),
+          calls: total.calls,
+        })}
       </small>
       {total.unknownCalls > 0 && (
-        <small className="unknown">
-          {total.unknownCalls} call{total.unknownCalls === 1 ? '' : 's'} of unknown cost (not
-          included)
-        </small>
+        <small className="unknown">{t('ws.costUnknown', { count: total.unknownCalls })}</small>
       )}
-      <small>Earlier runs and regenerations are not included.</small>
+      <small>{t('ws.costNote')}</small>
     </div>
   );
 }
@@ -149,47 +104,54 @@ interface ActivityEvent {
   readonly detail: string;
 }
 
+interface SceneJobs {
+  readonly sceneNumber: number;
+  readonly activeJob: GenerationJobDto | null;
+  readonly lastJob: GenerationJobDto | null;
+}
+
 function activityOf(
+  t: Translate,
+  locale: Locale,
   scripts: readonly ScriptVersionDto[],
   storyboards: readonly StoryboardVersionDto[],
-  images: StoryboardImagesDto | null,
-  media: readonly { kind: string; scenes: readonly SceneJobs[] }[] = [],
+  media: readonly { kind: 'image' | 'clip' | 'voice'; scenes: readonly SceneJobs[] }[],
 ): ActivityEvent[] {
   const events: ActivityEvent[] = [];
-  const review = (kind: string, v: ScriptVersionDto | StoryboardVersionDto) => {
+  const source = (s: 'generated' | 'edited') =>
+    t(s === 'generated' ? 'ws.ev.generated' : 'ws.ev.edited');
+  const review = (
+    key: 'ws.ev.script' | 'ws.ev.storyboard',
+    v: ScriptVersionDto | StoryboardVersionDto,
+  ) => {
     if (v.reviewedAt && v.status !== 'pending_review') {
       events.push({
         at: v.reviewedAt,
-        title: `${kind} v${String(v.version)} ${v.status === 'approved' ? 'approved' : 'rejected'}`,
-        detail: v.reviewNote ? `Review note: ${v.reviewNote}` : 'Review decision recorded',
+        title: t(key, {
+          version: v.version,
+          action: t(v.status === 'approved' ? 'ws.ev.approved' : 'ws.ev.rejected'),
+        }),
+        detail: v.reviewNote
+          ? t('ws.ev.reviewNote', { note: v.reviewNote })
+          : t('ws.ev.reviewRecorded'),
       });
     }
   };
   for (const s of scripts) {
     events.push({
       at: s.createdAt,
-      title: `Script v${String(s.version)} ${s.source === 'generated' ? 'generated' : 'edited'}`,
-      detail: s.basedOnVersionId ? 'Based on an earlier version' : s.content.title,
+      title: t('ws.ev.script', { version: s.version, action: source(s.source) }),
+      detail: s.basedOnVersionId ? t('ws.ev.basedOnEarlier') : s.content.title,
     });
-    review('Script', s);
+    review('ws.ev.script', s);
   }
   for (const b of storyboards) {
     events.push({
       at: b.createdAt,
-      title: `Storyboard v${String(b.version)} ${b.source === 'generated' ? 'generated' : 'edited'}`,
-      detail: `${String(b.totalDurationSeconds)}s${b.stale ? ' · based on an older script' : ''}`,
+      title: t('ws.ev.storyboard', { version: b.version, action: source(b.source) }),
+      detail: `${String(b.totalDurationSeconds)}s${b.stale ? ` ${t('ws.ev.olderScript')}` : ''}`,
     });
-    review('Storyboard', b);
-  }
-  for (const scene of images?.scenes ?? []) {
-    const job = scene.activeJob ?? scene.lastJob;
-    if (job) {
-      events.push({
-        at: job.completedAt ?? job.startedAt ?? job.queuedAt,
-        title: `Scene ${String(scene.sceneNumber)} image job ${job.status}`,
-        detail: `${job.modelKey}${job.errorCode ? ` · ${jobErrorText(job.errorCode)}` : ''}`,
-      });
-    }
+    review('ws.ev.storyboard', b);
   }
   for (const { kind, scenes } of media) {
     for (const scene of scenes) {
@@ -197,19 +159,17 @@ function activityOf(
       if (job) {
         events.push({
           at: job.completedAt ?? job.startedAt ?? job.queuedAt,
-          title: `Scene ${String(scene.sceneNumber)} ${kind} job ${job.status}`,
-          detail: `${job.modelKey}${job.errorCode ? ` · ${jobErrorText(job.errorCode)}` : ''}`,
+          title: t('ws.ev.sceneJob', {
+            number: scene.sceneNumber,
+            kind: t(`ws.ev.kind.${kind}`),
+            status: t(`state.${job.status}`),
+          }),
+          detail: `${job.modelKey}${job.errorCode ? ` · ${jobErrorText(job.errorCode, locale)}` : ''}`,
         });
       }
     }
   }
   return events.sort((a, b) => b.at.localeCompare(a.at));
-}
-
-interface SceneJobs {
-  readonly sceneNumber: number;
-  readonly activeJob: GenerationJobDto | null;
-  readonly lastJob: GenerationJobDto | null;
 }
 
 const jobsOf = (scenes: readonly SceneJobs[] | undefined): GenerationJobDto[] =>
@@ -218,11 +178,11 @@ const jobsOf = (scenes: readonly SceneJobs[] | undefined): GenerationJobDto[] =>
     return job ? [job] : [];
   });
 
-const STATUS_TEXT: Readonly<Record<'pending_review' | 'approved' | 'rejected', string>> = {
-  pending_review: 'Pending review',
-  approved: 'Approved',
-  rejected: 'Rejected',
-};
+const VERSION_TEXT = {
+  pending_review: 'version.pending_review',
+  approved: 'version.approved',
+  rejected: 'version.rejected',
+} as const;
 
 export default async function ContentPage({
   params,
@@ -230,13 +190,17 @@ export default async function ContentPage({
   readonly params: Promise<{ contentId: string }>;
 }) {
   const { contentId } = await params;
-  const item = await apiGet<ContentItemDto>(`/content/${contentId}`);
+  const [item, t, locale] = await Promise.all([
+    apiGet<ContentItemDto>(`/content/${contentId}`),
+    getT(),
+    getLocale(),
+  ]);
   if (item.kind === 'unauthenticated') redirect('/login');
   if (item.kind === 'error') {
     if (item.status === 404) notFound();
     return (
       <section className="card notice error" role="alert">
-        The content item could not be loaded.
+        {t('ws.loadError')}
       </section>
     );
   }
@@ -257,6 +221,7 @@ export default async function ContentPage({
     renderList,
     textModels,
     providers,
+    budget,
   ] = await Promise.all([
     apiGet<ProjectDto>(`/projects/${content.projectId}`),
     apiGet<Page<ScriptVersionDto>>(`/content/${contentId}/scripts?limit=20`),
@@ -278,6 +243,7 @@ export default async function ContentPage({
     apiGet<RenderListDto>(`/content/${contentId}/renders`),
     apiGet<Page<AiModelDto>>('/ai/models?capability=llm&status=enabled&limit=100'),
     apiGet<AiProviderList>('/ai/providers'),
+    apiGet<BudgetDto>(`/projects/${content.projectId}/budget`),
   ]);
   const plan = renderPlan.kind === 'ok' ? renderPlan.data : null;
   const renders = renderList.kind === 'ok' ? renderList.data.items : [];
@@ -288,6 +254,8 @@ export default async function ContentPage({
       : null;
   const approvedRender = renders.find((r) => r.isApproved);
   const providerList = providers.kind === 'ok' ? providers.data.data : [];
+  // R-D4: the effective cost-confirmation threshold of this project ($1 when unknown).
+  const threshold = budget.kind === 'ok' ? budget.data.effectiveConfirmThresholdUsd : '1';
   const optionsOf = (list: typeof imageModels) =>
     list.kind === 'ok'
       ? usableModels(list.data.data, providerList).map((m) => ({
@@ -300,6 +268,7 @@ export default async function ContentPage({
   const scriptList = scripts.kind === 'ok' ? scripts.data.data : [];
   const storyboardList = storyboards.kind === 'ok' ? storyboards.data.data : [];
   const latestScript = scriptList[0];
+  const previousScript = scriptList[1];
   const approvedScript = scriptList.find((s) => s.isApproved);
   const latestStoryboardId = storyboardList[0]?.id;
   const scriptJobId = scriptList.find((s) => s.generationJobId)?.generationJobId;
@@ -324,8 +293,8 @@ export default async function ContentPage({
   const clipCount = videoData?.scenes.filter((s) => s.clip !== null).length ?? 0;
   const voiceScenes = voiceData?.scenes.filter((s) => s.text !== '') ?? [];
   const voiceCount = voiceScenes.filter((s) => s.voiceover !== null).length;
-  const projectName = project.kind === 'ok' ? project.data.name : 'Project';
-  const masterTitle = master.kind === 'ok' ? master.data.title : 'its content master';
+  const projectName = project.kind === 'ok' ? project.data.name : t('table.project');
+  const masterTitle = master.kind === 'ok' ? master.data.title : t('ws.theMaster');
   const keyframeCount = imageData?.scenes.filter((s) => s.keyframe !== null).length ?? 0;
   const sceneCount = imageData?.scenes.length ?? board?.scenes.length ?? 0;
   const keyframesDone = imageData?.keyframesComplete ?? false;
@@ -333,66 +302,9 @@ export default async function ContentPage({
 
   // P4d: with voice-over off, the voice-over stage is complete by definition.
   const voiceDone = !content.voiceEnabled || (voiceData?.voiceoversComplete ?? false);
-  const steps: Step[] = [
-    {
-      label: 'Brief',
-      done: scriptList.length > 0,
-      note: scriptList.length > 0 ? 'Used for a script' : 'Ready to generate',
-    },
-    {
-      label: 'Script',
-      done: approvedScript !== undefined,
-      note: approvedScript
-        ? `v${String(approvedScript.version)} approved`
-        : content.status === 'scripting'
-          ? 'Generating…'
-          : latestScript?.status === 'pending_review'
-            ? 'Review required'
-            : 'Not started',
-    },
-    {
-      label: 'Storyboard',
-      done: content.approvedStoryboardVersionId !== null,
-      note: content.approvedStoryboardVersionId
-        ? 'Approved'
-        : !approvedScript
-          ? 'Locked'
-          : content.status === 'storyboarding'
-            ? 'Generating…'
-            : board?.status === 'pending_review'
-              ? 'Review required'
-              : 'Not started',
-    },
-    {
-      label: 'Keyframes',
-      done: keyframesDone,
-      note: !imageData ? 'Locked' : `${String(keyframeCount)} of ${String(sceneCount)} scenes`,
-    },
-    {
-      label: 'Clips & voice',
-      done: (videoData?.clipsComplete ?? false) && voiceDone,
-      note: !videoData
-        ? 'Locked'
-        : content.voiceEnabled
-          ? `${String(clipCount)} clip(s) · ${String(voiceCount)} voice-over(s)`
-          : `${String(clipCount)} clip(s) · no voice-over`,
-    },
-    {
-      label: 'Export',
-      done: content.status === 'exported',
-      note:
-        content.status === 'exported'
-          ? 'Exported'
-          : approvedRender
-            ? 'Approved, ready to export'
-            : renders.length > 0
-              ? 'Render review'
-              : plan?.blockers.length === 0
-                ? 'Ready to render'
-                : 'Locked',
-    },
-  ];
   const mediaDone = (videoData?.clipsComplete ?? false) && voiceDone;
+  const sceneRows = buildSceneRows(imageData, videoData, voiceData, content.voiceEnabled, t);
+  const doneScenes = sceneRows.filter((r) => r.status === 'done').length;
   const initialTab: TabId = !approvedScript
     ? 'script'
     : !content.approvedStoryboardVersionId
@@ -406,55 +318,120 @@ export default async function ContentPage({
       ? imageData.scenes.flatMap((s) => (s.keyframe ? [[s.sceneId, s.keyframe] as const] : []))
       : [],
   );
+  const sourceText = (s: 'generated' | 'edited') =>
+    t(s === 'generated' ? 'ws.script.generated' : 'ws.script.edited');
+
+  // --- Review checklists (R-D3): items with an automatic check that passed start ticked.
+  const targetWords = Math.round(content.targetDurationSeconds * 2.6);
+  const scriptChecks = latestScript
+    ? (() => {
+        const words = wordCount(latestScript.content.voiceOver);
+        const claims = latestScript.content.claimsRequiringVerification;
+        return [
+          {
+            id: 'length',
+            label: t('check.script.length', { words, seconds: content.targetDurationSeconds }),
+            auto: Math.abs(words - targetWords) <= Math.max(8, targetWords * 0.25),
+          },
+          { id: 'hook', label: t('check.script.hook') },
+          { id: 'brief', label: t('check.script.brief') },
+          ...(claims.length === 0
+            ? [{ id: 'claims', label: t('check.script.noClaims'), auto: true }]
+            : claims.map((c, n) => ({
+                id: `claim-${String(n)}`,
+                label: t('check.script.claim', { claim: c.claim }),
+              }))),
+          {
+            id: 'cta',
+            label: t('check.script.cta'),
+            auto: latestScript.content.callToAction !== '',
+          },
+        ];
+      })()
+    : [];
+  const boardChecks = board
+    ? [
+        {
+          id: 'duration',
+          label: t('check.board.duration', {
+            total: board.totalDurationSeconds,
+            target: content.targetDurationSeconds,
+          }),
+          auto: Math.abs(board.totalDurationSeconds - content.targetDurationSeconds) <= 2,
+        },
+        { id: 'flow', label: t('check.board.flow') },
+        { id: 'prompts', label: t('check.board.prompts') },
+        { id: 'brand', label: t('check.board.brand') },
+      ]
+    : [];
 
   const scriptPanel = (
     <article
       className="card work-card"
-      aria-label={latestScript ? `Script version ${String(latestScript.version)}` : 'Script'}
+      aria-label={
+        latestScript ? t('ws.script.label', { version: latestScript.version }) : t('ws.script.none')
+      }
     >
       <div className="section-head">
         <div>
-          <h2>{latestScript ? `Script review · ${latestScript.content.title}` : 'Script'}</h2>
+          <h2>
+            {latestScript
+              ? t('ws.script.title', { title: latestScript.content.title })
+              : t('ws.script.none')}
+          </h2>
           <p>
             {latestScript ? (
               <>
-                Version {latestScript.version} ·{' '}
-                {latestScript.source === 'generated' ? 'Generated' : 'Edited'}
-                {latestScriptJob ? ` by ${latestScriptJob.modelKey}` : ''} ·{' '}
-                <RelativeTime iso={latestScript.createdAt} />
+                {t('ws.script.meta', {
+                  version: latestScript.version,
+                  source: sourceText(latestScript.source),
+                })}
+                {latestScriptJob
+                  ? ` ${t('ws.script.by', { model: latestScriptJob.modelKey })}`
+                  : ''}{' '}
+                · <RelativeTime iso={latestScript.createdAt} />
               </>
             ) : (
-              'Generate a script from the brief.'
+              t('ws.script.empty')
             )}
           </p>
         </div>
         {latestScript && (
           <span className="actions">
             <VersionPill status={latestScript.status} />
-            {latestScript.isApproved && <Pill tone="green">In use</Pill>}
+            {latestScript.isApproved && <Pill tone="green">{t('ws.inUse')}</Pill>}
           </span>
         )}
       </div>
 
       <div className="brief-box">
-        <span className="box-label">Content brief</span>
+        <span className="box-label">{t('ws.brief')}</span>
         <p>{content.brief.topic}</p>
         <div className="tags">
           {content.brief.audience && (
-            <span className="tag">Audience · {content.brief.audience}</span>
+            <span className="tag">{t('ws.brief.audience', { value: content.brief.audience })}</span>
           )}
-          {content.brief.tone && <span className="tag">Tone · {content.brief.tone}</span>}
+          {content.brief.tone && (
+            <span className="tag">{t('ws.brief.tone', { value: content.brief.tone })}</span>
+          )}
           {content.brief.objective && (
-            <span className="tag">Objective · {content.brief.objective}</span>
+            <span className="tag">
+              {t('ws.brief.objective', { value: content.brief.objective })}
+            </span>
           )}
-          <span className="tag">{content.targetDurationSeconds} sec</span>
+          <span className="tag">
+            {t('ws.brief.seconds', { count: content.targetDurationSeconds })}
+          </span>
           <span className="tag">{content.aspectRatio}</span>
           <span className="tag">{content.language.toUpperCase()}</span>
         </div>
-        <p className="brief-meta" aria-label="Content master">
-          Variant of <Link href={`/masters/${content.contentMasterId}`}>{masterTitle}</Link>
-          {content.targetPlatform ? ` · for ${platformLabel(content.targetPlatform)}` : ''}{' '}
-          {content.masterBriefStale && <Pill tone="amber">Master brief changed</Pill>}
+        <p className="brief-meta" aria-label={t('ws.masterLabel')}>
+          {t('ws.variantOf')}{' '}
+          <Link href={`/masters/${content.contentMasterId}`}>{masterTitle}</Link>
+          {content.targetPlatform
+            ? ` ${t('ws.forPlatform', { platform: platformLabel(t, content.targetPlatform) })}`
+            : ''}{' '}
+          {content.masterBriefStale && <Pill tone="amber">{t('ws.masterChanged')}</Pill>}
         </p>
         {canEdit && content.masterBriefStale && (
           <div className="review-actions">
@@ -466,7 +443,7 @@ export default async function ContentPage({
           brief={content.brief}
           endpoint={`/content/${content.id}`}
           canEdit={canEdit}
-          savedText="Product photos saved. Generate or regenerate keyframes to use them."
+          savedText={t('ws.photosSaved')}
         />
         <BriefCheck contentId={content.id} />
         <AudioPlan contentId={content.id} voiceEnabled={content.voiceEnabled} canEdit={canEdit} />
@@ -474,7 +451,7 @@ export default async function ContentPage({
 
       {content.status === 'scripting' && (
         <p className="notice" role="status">
-          Generating a script…
+          {t('ws.generatingScript')}
         </p>
       )}
 
@@ -482,36 +459,45 @@ export default async function ContentPage({
         <>
           <div className="script-block">
             <div className="script-block-head">
-              <h3>Creative direction</h3>
+              <h3>{t('ws.direction')}</h3>
             </div>
             <p>
-              <span className="script-label">Angle</span>
+              <span className="script-label">{t('ws.angle')}</span>
               {latestScript.content.plan.angle}
             </p>
             <p>
-              <span className="script-label">Hook</span>“{latestScript.content.hook}”
+              <span className="script-label">{t('ws.hook')}</span>“{latestScript.content.hook}”
             </p>
           </div>
           <div className="script-block">
             <div className="script-block-head">
-              <h3>Voice-over script</h3>
+              <h3>{t('ws.voiceScript')}</h3>
             </div>
             <p>“{latestScript.content.voiceOver}”</p>
             <p className="muted small-text">
-              {wordCount(latestScript.content.voiceOver)} words · target{' '}
-              {content.targetDurationSeconds} seconds
+              {t('ws.words', {
+                count: wordCount(latestScript.content.voiceOver),
+                seconds: content.targetDurationSeconds,
+              })}
             </p>
+            {previousScript && (
+              <TextDiff
+                before={previousScript.content.voiceOver}
+                after={latestScript.content.voiceOver}
+                version={previousScript.version}
+              />
+            )}
           </div>
           <div className="script-block">
             <div className="script-block-head">
-              <h3>Call to action</h3>
+              <h3>{t('ws.cta')}</h3>
             </div>
             <p>“{latestScript.content.callToAction}”</p>
           </div>
           {latestScript.content.claimsRequiringVerification.length > 0 && (
             <div className="script-block">
               <div className="script-block-head">
-                <h3>Claims to verify</h3>
+                <h3>{t('ws.claims')}</h3>
               </div>
               <ul>
                 {latestScript.content.claimsRequiringVerification.map((c) => (
@@ -523,22 +509,30 @@ export default async function ContentPage({
             </div>
           )}
           {latestScript.reviewNote && (
-            <p className="muted small-text">Review note: {latestScript.reviewNote}</p>
+            <p className="muted small-text">
+              {t('ws.reviewNote', { note: latestScript.reviewNote })}
+            </p>
           )}
         </>
       ) : (
-        <div className="empty">No script yet.</div>
+        <div className="empty">{t('ws.noScript')}</div>
       )}
 
+      {canEdit && latestScript?.status === 'pending_review' && (
+        <ReviewPanel
+          kind="scripts"
+          id={latestScript.id}
+          what={t('review.what.script')}
+          gate={t('review.gate', { number: 1, name: t('ws.check.scriptApproval') })}
+          items={scriptChecks}
+        />
+      )}
       {canEdit && (
         <div className="review-actions">
-          {latestScript?.status === 'pending_review' && (
-            <ReviewButtons kind="scripts" id={latestScript.id} label="script" />
-          )}
           {latestScript && <ScriptEditor script={latestScript} />}
           <GenerateButton
             path={`/content/${content.id}/scripts/generate`}
-            label={latestScript ? 'Regenerate script' : 'Generate script'}
+            label={latestScript ? t('ws.regenerateScript') : t('ws.generateScript')}
             again={latestScript !== undefined}
             primary={!latestScript}
             models={optionsOf(textModels)}
@@ -548,17 +542,17 @@ export default async function ContentPage({
 
       {scriptList.length > 1 && (
         <details className="earlier-versions">
-          <summary>Earlier versions ({scriptList.length - 1})</summary>
-          <ul className="plain-list" aria-label="Earlier script versions">
+          <summary>{t('ws.earlier', { count: scriptList.length - 1 })}</summary>
+          <ul className="plain-list" aria-label={t('ws.earlierScripts')}>
             {scriptList.slice(1).map((v) => (
-              <li key={v.id} aria-label={`Script version ${String(v.version)}`}>
+              <li key={v.id} aria-label={t('ws.script.label', { version: v.version })}>
                 <p className="small-text">
-                  <b>Version {v.version}</b> · {v.source === 'edited' ? 'Edited' : 'Generated'} ·{' '}
-                  {v.isApproved ? 'Approved, in use' : STATUS_TEXT[v.status]} ·{' '}
-                  {v.content.voiceOver.trim().split(/\s+/).length} words
+                  <b>{t('ws.version', { version: v.version })}</b> · {sourceText(v.source)} ·{' '}
+                  {v.isApproved ? t('ws.approvedInUse') : t(VERSION_TEXT[v.status])} ·{' '}
+                  {t('ws.wordsShort', { count: wordCount(v.content.voiceOver) })}
                 </p>
                 <p className="small-text">
-                  <b>Hook:</b> “{v.content.hook}”
+                  <b>{t('ws.hookLine')}</b> “{v.content.hook}”
                 </p>
                 <p className="small-text muted">“{v.content.voiceOver}”</p>
                 {canEdit && v.status === 'pending_review' && (
@@ -566,7 +560,7 @@ export default async function ContentPage({
                     <ReviewButtons
                       kind="scripts"
                       id={v.id}
-                      label={`script v${String(v.version)}`}
+                      label={t('ws.scriptV', { version: v.version })}
                     />
                   </div>
                 )}
@@ -581,25 +575,25 @@ export default async function ContentPage({
   const earlierStoryboards =
     storyboardList.length > 1 ? (
       <details className="earlier-versions">
-        <summary>Earlier storyboard versions ({storyboardList.length - 1})</summary>
-        <ul className="plain-list" aria-label="Earlier storyboard versions">
+        <summary>{t('ws.earlierBoards', { count: storyboardList.length - 1 })}</summary>
+        <ul className="plain-list" aria-label={t('ws.earlierBoardsLabel')}>
           {storyboardList.slice(1).map((v) => (
-            <li key={v.id} aria-label={`Storyboard version ${String(v.version)}`}>
+            <li key={v.id} aria-label={t('ws.board.label', { version: v.version })}>
               <p className="small-text">
-                <b>Version {v.version}</b> · {v.source === 'edited' ? 'Edited' : 'Generated'} ·{' '}
+                <b>{t('ws.version', { version: v.version })}</b> · {sourceText(v.source)} ·{' '}
                 {v.totalDurationSeconds} s ·{' '}
                 {v.isApproved
-                  ? 'Approved, in use'
+                  ? t('ws.approvedInUse')
                   : v.stale
-                    ? 'Stale (older script)'
-                    : STATUS_TEXT[v.status]}
+                    ? t('ws.stale')
+                    : t(VERSION_TEXT[v.status])}
               </p>
               {canEdit && v.status === 'pending_review' && !v.stale && (
                 <div className="review-actions">
                   <ReviewButtons
                     kind="storyboards"
                     id={v.id}
-                    label={`storyboard v${String(v.version)}`}
+                    label={t('ws.storyboardV', { version: v.version })}
                   />
                 </div>
               )}
@@ -613,7 +607,7 @@ export default async function ContentPage({
     canEdit && approvedScript ? (
       <GenerateButton
         path={`/scripts/${approvedScript.id}/storyboards/generate`}
-        label={storyboardList.length > 0 ? 'Regenerate storyboard' : 'Generate storyboard'}
+        label={storyboardList.length > 0 ? t('ws.regenerateBoard') : t('ws.generateBoard')}
         again={storyboardList.length > 0}
         primary={storyboardList.length === 0}
         models={optionsOf(textModels)}
@@ -628,28 +622,34 @@ export default async function ContentPage({
     elapsed += scene.durationSeconds;
   }
   const storyboardPanel = board ? (
-    <article className="card work-card" aria-label={`Storyboard version ${String(board.version)}`}>
+    <article
+      className="card work-card"
+      aria-label={t('ws.board.label', { version: board.version })}
+    >
       <div className="section-head">
         <div>
-          <h2>Storyboard · Version {board.version}</h2>
+          <h2>{t('ws.board.title', { version: board.version })}</h2>
           <p>
-            {board.scenes.length} scenes · {board.totalDurationSeconds} seconds total ·{' '}
-            {board.source === 'generated' ? 'Generated' : 'Edited'}{' '}
+            {t('ws.board.meta', {
+              scenes: board.scenes.length,
+              seconds: board.totalDurationSeconds,
+              source: sourceText(board.source),
+            })}{' '}
             <RelativeTime iso={board.createdAt} />
           </p>
         </div>
         <span className="actions">
           <VersionPill status={board.status} />
-          {board.stale && <Pill tone="amber">Stale (older script)</Pill>}
-          {board.isApproved && <Pill tone="green">In use</Pill>}
+          {board.stale && <Pill tone="amber">{t('ws.stale')}</Pill>}
+          {board.isApproved && <Pill tone="green">{t('ws.inUse')}</Pill>}
         </span>
       </div>
       {content.status === 'storyboarding' && (
         <p className="notice" role="status">
-          Generating a storyboard…
+          {t('ws.board.generating')}
         </p>
       )}
-      <ul className="storyboard-grid" aria-label="Scenes">
+      <ul className="storyboard-grid" aria-label={t('ws.board.scenes')}>
         {board.scenes.map((scene, i) => {
           const start = sceneStarts[i] ?? 0;
           const end = start + scene.durationSeconds;
@@ -658,17 +658,21 @@ export default async function ContentPage({
             <li key={scene.id} className="scene-card">
               <div className="scene-art">
                 <span className="scene-number">
-                  SCENE {String(scene.sceneNumber).padStart(2, '0')} · {start}–{end}s
+                  {t('ws.board.sceneTag', {
+                    number: String(scene.sceneNumber).padStart(2, '0'),
+                    start,
+                    end,
+                  })}
                 </span>
                 {keyframe ? (
                   // eslint-disable-next-line @next/next/no-img-element -- authenticated API stream
                   <img
                     src={assetContentUrl(keyframe.id)}
-                    alt={`Scene ${String(scene.sceneNumber)} keyframe`}
+                    alt={t('ws.board.keyframeAlt', { number: scene.sceneNumber })}
                     loading="lazy"
                   />
                 ) : (
-                  <span>No keyframe yet</span>
+                  <span>{t('ws.board.noKeyframe')}</span>
                 )}
               </div>
               <div className="scene-body">
@@ -678,7 +682,7 @@ export default async function ContentPage({
                 <p>{scene.visualDescription}</p>
                 {scene.voiceOverSegment && <p>“{scene.voiceOverSegment}”</p>}
                 <p className="prompt">
-                  <span className="script-label">Image prompt</span>
+                  <span className="script-label">{t('ws.board.imagePrompt')}</span>
                   {scene.imagePrompt}
                 </p>
                 <div className="scene-foot">
@@ -691,32 +695,32 @@ export default async function ContentPage({
           );
         })}
       </ul>
-      {canEdit && (
-        <div className="review-actions">
-          {board.status === 'pending_review' && !board.stale && (
-            <ReviewButtons kind="storyboards" id={board.id} label="storyboard" />
-          )}
-          {generateStoryboard}
-        </div>
+      {canEdit && board.status === 'pending_review' && !board.stale && (
+        <ReviewPanel
+          kind="storyboards"
+          id={board.id}
+          what={t('review.what.storyboard')}
+          gate={t('review.gate', { number: 2, name: t('ws.check.storyboardApproval') })}
+          items={boardChecks}
+        />
       )}
+      {canEdit && generateStoryboard && <div className="review-actions">{generateStoryboard}</div>}
       {earlierStoryboards}
     </article>
   ) : (
     <section className="card work-card">
       <div className="section-head">
         <div>
-          <h2>Storyboard</h2>
-          <p>Scenes, shots and prompts derived from the approved script.</p>
+          <h2>{t('ws.board.empty')}</h2>
+          <p>{t('ws.board.emptyHint')}</p>
         </div>
       </div>
       {content.status === 'storyboarding' && (
         <p className="notice" role="status">
-          Generating a storyboard…
+          {t('ws.board.generating')}
         </p>
       )}
-      <div className="empty">
-        {approvedScript ? 'No storyboard yet.' : 'Approve a script first (gate 1).'}
-      </div>
+      <div className="empty">{approvedScript ? t('ws.board.none') : t('ws.board.locked')}</div>
       {generateStoryboard && <div className="review-actions">{generateStoryboard}</div>}
     </section>
   );
@@ -740,6 +744,7 @@ export default async function ContentPage({
       profiles={profileList}
       initialStage={initialStage}
       voiceEnabled={content.voiceEnabled}
+      confirmThresholdUsd={threshold}
     />
   );
 
@@ -747,7 +752,7 @@ export default async function ContentPage({
     <section className="card work-card">
       {!plan ? (
         <p className="notice error" role="alert">
-          The render plan could not be loaded.
+          {t('ws.renderPlanError')}
         </p>
       ) : (
         <RenderPanel
@@ -762,41 +767,39 @@ export default async function ContentPage({
     </section>
   );
 
-  const events = activityOf(scriptList, storyboardList, imageData, [
+  const events = activityOf(t, locale, scriptList, storyboardList, [
+    { kind: 'image', scenes: imageData?.scenes ?? [] },
     { kind: 'clip', scenes: videoData?.scenes ?? [] },
-    { kind: 'voice-over', scenes: voiceData?.scenes ?? [] },
+    { kind: 'voice', scenes: voiceData?.scenes ?? [] },
   ]);
   const sceneNumbers: Record<string, number> = Object.fromEntries(
     (imageData?.scenes ?? []).map((s) => [s.sceneId, s.sceneNumber]),
   );
-  const activityPanel = (
-    <section className="card work-card">
-      <h2>Activity & version history</h2>
+  const models = (jobs: readonly GenerationJobDto[]) =>
+    [...new Set(jobs.map((j) => j.modelKey))].join(', ') || t('ws.routing.none');
+  const historyPanel = (
+    <>
       <div className="routing" style={{ marginBottom: 18 }}>
-        <span className="routing-label">Model routing (latest jobs)</span>
+        <span className="routing-label">{t('ws.routing')}</span>
         <dl>
-          <dt>Script</dt>
-          <dd>{scriptJobData?.modelKey ?? 'Not generated yet'}</dd>
-          <dt>Storyboard</dt>
-          <dd>{storyboardJobData?.modelKey ?? 'Not generated yet'}</dd>
-          <dt>Images</dt>
-          <dd>
-            {[...new Set(imageJobs.map((j) => j.modelKey))].join(', ') || 'Not generated yet'}
-          </dd>
-          <dt>Clips</dt>
-          <dd>{[...new Set(clipJobs.map((j) => j.modelKey))].join(', ') || 'Not generated yet'}</dd>
-          <dt>Voice-over</dt>
-          <dd>
-            {[...new Set(voiceJobs.map((j) => j.modelKey))].join(', ') || 'Not generated yet'}
-          </dd>
+          <dt>{t('ws.routing.script')}</dt>
+          <dd>{scriptJobData?.modelKey ?? t('ws.routing.none')}</dd>
+          <dt>{t('ws.routing.storyboard')}</dt>
+          <dd>{storyboardJobData?.modelKey ?? t('ws.routing.none')}</dd>
+          <dt>{t('ws.routing.images')}</dt>
+          <dd>{models(imageJobs)}</dd>
+          <dt>{t('ws.routing.clips')}</dt>
+          <dd>{models(clipJobs)}</dd>
+          <dt>{t('ws.routing.voice')}</dt>
+          <dd>{models(voiceJobs)}</dd>
         </dl>
       </div>
       <JobActivity contentId={content.id} sceneNumbers={sceneNumbers} canEdit={canEdit} />
-      <h3 style={{ marginTop: 24 }}>Version history</h3>
+      <h3 style={{ marginTop: 24 }}>{t('ws.versionHistory')}</h3>
       {events.length === 0 ? (
-        <div className="empty">Nothing has happened yet.</div>
+        <div className="empty">{t('ws.nothingYet')}</div>
       ) : (
-        <ul className="activity" style={{ marginTop: 18 }} aria-label="Version history">
+        <ul className="activity" style={{ marginTop: 18 }} aria-label={t('ws.versionHistory')}>
           {events.map((e) => (
             <li key={`${e.at}-${e.title}`} className="activity-item">
               <i className="activity-dot" aria-hidden="true" />
@@ -809,76 +812,139 @@ export default async function ContentPage({
           ))}
         </ul>
       )}
-    </section>
+    </>
   );
 
+  // Stable ids (English) for nextStep(); labels are only shown through it.
   const checklist = [
-    {
-      label: 'Script generated',
-      done: scriptList.length > 0,
-      note: latestScript
-        ? `Version ${String(latestScript.version)} · ${String(scriptList.length)} version(s)`
-        : 'From the validated brief',
-    },
-    {
-      label: 'Script approval',
-      done: approvedScript !== undefined,
-      note: approvedScript
-        ? `Version ${String(approvedScript.version)} in use`
-        : 'Waiting for review',
-    },
-    {
-      label: 'Storyboard approval',
-      done: content.approvedStoryboardVersionId !== null,
-      note: content.approvedStoryboardVersionId
-        ? 'Approved storyboard in use'
-        : 'Unlocks after script approval',
-    },
-    {
-      label: 'Keyframe selection',
-      done: keyframesDone,
-      note: imageData
-        ? `${String(keyframeCount)} of ${String(sceneCount)} scenes chosen`
-        : 'Unlocks after storyboard approval',
-    },
-    {
-      label: 'Clip selection',
-      done: videoData?.clipsComplete ?? false,
-      note: videoData
-        ? `${String(clipCount)} of ${String(sceneCount)} scenes chosen`
-        : 'Unlocks after storyboard approval',
-    },
-    {
-      label: 'Voice-over selection',
-      done: voiceDone,
-      note: !content.voiceEnabled
-        ? 'Voice-over is off'
-        : voiceData
-          ? `${String(voiceCount)} of ${String(voiceScenes.length)} scenes chosen`
-          : 'Unlocks after storyboard approval',
-    },
-    {
-      label: 'Render & export',
-      done: content.status === 'exported',
-      note:
-        content.status === 'exported'
-          ? 'Exported'
+    { label: 'Script generated', done: scriptList.length > 0, note: '' },
+    { label: 'Script approval', done: approvedScript !== undefined, note: '' },
+    { label: 'Storyboard approval', done: content.approvedStoryboardVersionId !== null, note: '' },
+    { label: 'Keyframe selection', done: keyframesDone, note: '' },
+    { label: 'Clip selection', done: videoData?.clipsComplete ?? false, note: '' },
+    { label: 'Voice-over selection', done: voiceDone, note: '' },
+    { label: 'Render & export', done: content.status === 'exported', note: '' },
+  ].map((c) => ({ ...c, note: checkNote(c.label) }));
+  function checkNote(label: string): string {
+    switch (label) {
+      case 'Script generated':
+        return latestScript
+          ? t('ws.checkNote.versions', { version: latestScript.version, count: scriptList.length })
+          : t('ws.checkNote.fromBrief');
+      case 'Script approval':
+        return approvedScript
+          ? t('ws.checkNote.inUse', { version: approvedScript.version })
+          : t('ws.checkNote.waiting');
+      case 'Storyboard approval':
+        return content.approvedStoryboardVersionId
+          ? t('ws.checkNote.boardInUse')
+          : t('ws.checkNote.afterScript');
+      case 'Keyframe selection':
+        return imageData
+          ? t('ws.checkNote.scenesChosen', { done: keyframeCount, total: sceneCount })
+          : t('ws.checkNote.afterBoard');
+      case 'Clip selection':
+        return videoData
+          ? t('ws.checkNote.scenesChosen', { done: clipCount, total: sceneCount })
+          : t('ws.checkNote.afterBoard');
+      case 'Voice-over selection':
+        return !content.voiceEnabled
+          ? t('ws.checkNote.voiceOff')
+          : voiceData
+            ? t('ws.checkNote.scenesChosen', { done: voiceCount, total: voiceScenes.length })
+            : t('ws.checkNote.afterBoard');
+      default:
+        return content.status === 'exported'
+          ? t('ws.note.exported')
           : approvedRender
-            ? 'Render approved'
+            ? t('ws.checkNote.renderApproved')
             : renders.length > 0
-              ? `${String(renders.length)} render(s), review required`
-              : 'Unlocks with every clip and voice-over',
-    },
-  ];
-  const sceneRows = buildSceneRows(imageData, videoData, voiceData, content.voiceEnabled);
-  const next = nextStep(checklist, sceneRows);
+              ? t('ws.checkNote.renders', { count: renders.length })
+              : t('ws.checkNote.afterMedia');
+    }
+  }
+  const next = nextStep(checklist, sceneRows, t);
   const costs = [scriptJobData, storyboardJobData, ...imageJobs, ...clipJobs, ...voiceJobs].flatMap(
     (j) => (j ? [j.cost] : []),
   );
 
+  // --- Stage rail (R3): four stages, gates G1–G4.
+  const scriptState: StageState = approvedScript ? 'done' : 'current';
+  const boardState: StageState = content.approvedStoryboardVersionId
+    ? 'done'
+    : approvedScript
+      ? 'current'
+      : 'locked';
+  const scenesState: StageState =
+    keyframesDone && mediaDone ? 'done' : imageData ? 'current' : 'locked';
+  const renderState: StageState =
+    content.status === 'exported' ? 'done' : scenesState === 'done' ? 'current' : 'locked';
+  const stages: WorkspaceStage[] = [
+    {
+      id: 'script',
+      label: t('ws.stage.script'),
+      state: scriptState,
+      gate: t('ws.gate', { number: 1 }),
+      note: approvedScript
+        ? t('ws.note.approvedVersion', { version: approvedScript.version })
+        : content.status === 'scripting'
+          ? t('ws.note.generating')
+          : latestScript?.status === 'pending_review'
+            ? t('ws.note.reviewRequired')
+            : t('ws.note.notStarted'),
+      panel: scriptPanel,
+    },
+    {
+      id: 'storyboard',
+      label: t('ws.stage.storyboard'),
+      state: boardState,
+      gate: t('ws.gate', { number: 2 }),
+      note: content.approvedStoryboardVersionId
+        ? t('ws.note.approved')
+        : !approvedScript
+          ? t('ws.note.locked')
+          : content.status === 'storyboarding'
+            ? t('ws.note.generating')
+            : board?.status === 'pending_review'
+              ? t('ws.note.reviewRequired')
+              : t('ws.note.notStarted'),
+      panel: storyboardPanel,
+    },
+    {
+      id: 'scenes',
+      label: t('ws.stage.scenes'),
+      state: scenesState,
+      gate: t('ws.gate', { number: 3 }),
+      note: !imageData
+        ? t('ws.note.locked')
+        : t('ws.note.scenesDone', { done: doneScenes, total: sceneRows.length }),
+      badge: imageData ? `${String(doneScenes)}/${String(sceneRows.length)}` : undefined,
+      panel: scenesPanel,
+    },
+    {
+      id: 'render',
+      label: t('ws.stage.render'),
+      state: renderState,
+      gate: t('ws.gate', { number: 4 }),
+      note:
+        content.status === 'exported'
+          ? t('ws.note.exported')
+          : approvedRender
+            ? t('ws.note.readyToExport')
+            : renders.length > 0
+              ? t('ws.note.renderReview')
+              : plan?.blockers.length === 0
+                ? t('ws.note.readyToRender')
+                : t('ws.note.locked'),
+      badge: renders.length > 0 ? String(renders.length) : undefined,
+      panel: renderPanel,
+    },
+  ];
+  const totalCost = costs.length > 0 ? sumJobCosts(costs) : null;
+
   return (
     <>
-      <AutoRefresh active={isGenerating(content.status)} />
+      <LiveRefresh contentId={content.id} />
       <div className="page-heading">
         <div>
           <div className="eyebrow">
@@ -887,70 +953,54 @@ export default async function ContentPage({
           </div>
           <h1>{content.title}</h1>
           <p>
-            {FORMAT_LABEL[content.format]} · {platformLabel(content.targetPlatform)} ·{' '}
-            {content.targetDurationSeconds} seconds · Updated{' '}
+            {t('ws.subtitle', {
+              format: formatLabel(t, content.format),
+              platform: platformLabel(t, content.targetPlatform),
+              seconds: content.targetDurationSeconds,
+            })}{' '}
             <RelativeTime iso={content.updatedAt} />
           </p>
         </div>
         <div className="actions">
-          <ContentStatusPill status={content.status} label="Content status" />
-          <a className="btn" href="#activity">
-            <Icon name="history" /> Version history
-          </a>
+          <ContentStatusPill status={content.status} label={t('ws.statusLabel')} />
+          <HistoryDrawer>{historyPanel}</HistoryDrawer>
         </div>
       </div>
 
-      <Workflow steps={steps} />
-
-      <div className="content-main-grid">
-        <div>
-          <WorkspaceTabs
-            initial={initialTab}
-            tabs={[
-              { id: 'script', label: 'Script & brief', panel: scriptPanel },
-              { id: 'storyboard', label: 'Storyboard', panel: storyboardPanel },
-              {
-                id: 'scenes',
-                label: 'Scenes',
-                badge: imageData
-                  ? `${String(sceneRows.filter((r) => r.status === 'done').length)}/${String(sceneRows.length)}`
-                  : undefined,
-                panel: scenesPanel,
-              },
-              {
-                id: 'render',
-                label: 'Render & export',
-                badge: renders.length > 0 ? String(renders.length) : undefined,
-                panel: renderPanel,
-              },
-              { id: 'activity', label: 'Activity', panel: activityPanel },
-            ]}
-          />
-        </div>
-        <aside className="side-stack">
-          {next ? (
-            <section className="card card-pad next-step" aria-label="Next step">
-              <p className="eyebrow">Next step</p>
-              <b>{next.title}</b>
-              <span className="muted">{next.detail}</span>
-              <a
-                className="btn primary"
-                href={`#${next.tab}${next.filter ? `?filter=${next.filter}` : ''}`}
-              >
-                {next.action}
-              </a>
-            </section>
-          ) : (
-            <section className="card card-pad next-step" aria-label="Next step">
-              <p className="eyebrow">All done</p>
-              <b>Every gate is passed and the video is exported.</b>
-            </section>
+      {next ? (
+        <section className="card action-bar next-step" aria-label={t('ws.nextStep')}>
+          <span className="next-text">
+            <span className="eyebrow">{t('ws.nextStep')}</span>
+            <b>{next.title}</b>
+            <span className="muted">{next.detail}</span>
+          </span>
+          {totalCost && (
+            <span className="next-cost">
+              {t('ws.cost')}: {formatUsd(addUsd(totalCost.reportedUsd, totalCost.estimatedUsd))}
+              {totalCost.unknownCalls > 0 ? ' + ?' : ''}
+            </span>
           )}
-          <section className="card cost-card" aria-label="Cost">
-            <CostBox costs={costs} />
-          </section>
-        </aside>
-      </div>
+          <a
+            className="btn primary"
+            href={`#${next.tab}${next.filter ? `?filter=${next.filter}` : ''}`}
+          >
+            {next.action}
+          </a>
+        </section>
+      ) : (
+        <section className="card action-bar next-step" aria-label={t('ws.nextStep')}>
+          <span className="next-text">
+            <span className="eyebrow">{t('ws.allDoneTitle')}</span>
+            <b>{t('ws.allDoneBody')}</b>
+          </span>
+        </section>
+      )}
+
+      <StageRail initial={initialTab} stages={stages} />
+
+      <section className="card cost-card workspace-cost" aria-label={t('ws.cost')}>
+        <CostBox costs={costs} t={t} />
+      </section>
     </>
   );
 }

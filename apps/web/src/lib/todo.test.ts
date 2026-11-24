@@ -4,22 +4,25 @@ import type { ContentItemDto, OpsSummaryDto } from '@acf/contracts';
 
 import { buildTodo } from './todo';
 
-const item = (id: string, status: ContentItemDto['status'], updatedAt = '2026-11-20T10:00:00.000Z') =>
+const item = (
+  id: string,
+  status: ContentItemDto['status'],
+  updatedAt = '2026-11-20T10:00:00.000Z',
+) =>
   ({ id, status, title: `T ${id}`, projectName: 'P', updatedAt }) as unknown as ContentItemDto & {
     projectName: string;
   };
 
-const ops = (over: Partial<OpsSummaryDto>): OpsSummaryDto =>
-  ({
-    generatedAt: '2026-11-21T00:00:00.000Z',
-    queues: [],
-    jobs24h: [],
-    failedJobs: [],
-    circuits: [],
-    budgets: [],
-    heldReservations: [],
-    ...over,
-  }) as OpsSummaryDto;
+const ops = (over: Partial<OpsSummaryDto>): OpsSummaryDto => ({
+  generatedAt: '2026-11-21T00:00:00.000Z',
+  queues: [],
+  jobs24h: [],
+  failedJobs: [],
+  circuits: [],
+  budgets: [],
+  heldReservations: [],
+  ...over,
+});
 
 describe('buildTodo (R2)', () => {
   it('lists open gates with the action of their stage', () => {
@@ -63,8 +66,22 @@ describe('buildTodo (R2)', () => {
       [],
       ops({
         budgets: [
-          { projectId: 'p1', projectName: 'A', limitUsd: '50', usedUsd: '45', heldUsd: '0', warning: true },
-          { projectId: 'p2', projectName: 'B', limitUsd: '50', usedUsd: '1', heldUsd: '0', warning: false },
+          {
+            projectId: 'p1',
+            projectName: 'A',
+            limitUsd: '50',
+            usedUsd: '45',
+            heldUsd: '0',
+            warning: true,
+          },
+          {
+            projectId: 'p2',
+            projectName: 'B',
+            limitUsd: '50',
+            usedUsd: '1',
+            heldUsd: '0',
+            warning: false,
+          },
         ],
       }),
     );

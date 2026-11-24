@@ -75,7 +75,9 @@ export default async function MasterPage({
             {m.brief.tone ? ` · ${m.brief.tone}` : ''}
           </p>
           <div className="tags">
-            <span className="tag">{t('masters.variantCount', { count: m.activeVariantCount })}</span>
+            <span className="tag">
+              {t('masters.variantCount', { count: m.activeVariantCount })}
+            </span>
             <span className="tag">{t('masters.approvedCount', { count: approved })}</span>
             <span className="tag">{t('masters.revision', { revision: m.briefRevision })}</span>
           </div>
@@ -168,7 +170,9 @@ export default async function MasterPage({
             {m.brief.objective && (
               <span className="tag">{t('master.objective', { value: m.brief.objective })}</span>
             )}
-            {m.brief.tone && <span className="tag">{t('master.tone', { value: m.brief.tone })}</span>}
+            {m.brief.tone && (
+              <span className="tag">{t('master.tone', { value: m.brief.tone })}</span>
+            )}
             {m.brief.callToAction && (
               <span className="tag">{t('master.cta', { value: m.brief.callToAction })}</span>
             )}

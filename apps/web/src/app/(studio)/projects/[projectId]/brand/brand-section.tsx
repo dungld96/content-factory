@@ -235,8 +235,9 @@ function EntityRow(props: {
                 <Pill tone={v.status === 'approved' ? 'green' : 'amber'}>
                   {v.status === 'approved' ? t('brand.status.approved') : t('brand.status.draft')}
                 </Pill>{' '}
-                · {v.description} · {v.primaryAssetId ? t('brand.primarySet') : t('brand.noPrimary')}{' '}
-                · {t('brand.linked', { count: v.assets.length })} · <LocalTime iso={v.createdAt} />
+                · {v.description} ·{' '}
+                {v.primaryAssetId ? t('brand.primarySet') : t('brand.noPrimary')} ·{' '}
+                {t('brand.linked', { count: v.assets.length })} · <LocalTime iso={v.createdAt} />
                 {props.canEdit && v.status === 'draft' && (
                   <button type="button" className="btn small" onClick={() => void approve(v)}>
                     {t('brand.approve')}

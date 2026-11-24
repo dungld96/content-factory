@@ -40,7 +40,7 @@ export function format(locale: Locale, text: string, vars: MessageVars = {}): st
 }
 
 export function translator(locale: Locale, messages: Messages = messagesFor(locale)): Translate {
-  return (key, vars) => format(locale, messages[key] ?? EN[key], vars);
+  return (key, vars) => format(locale, messages[key], vars);
 }
 
 /**
@@ -59,7 +59,10 @@ export function resolveLocale(input: {
     .map((part) => {
       const [tag = '', ...params] = part.trim().split(';');
       const q = params.find((p) => p.trim().startsWith('q='));
-      return { lang: tag.trim().toLowerCase().split('-')[0] ?? '', q: q ? Number(q.split('=')[1]) : 1 };
+      return {
+        lang: tag.trim().toLowerCase().split('-')[0] ?? '',
+        q: q ? Number(q.split('=')[1]) : 1,
+      };
     })
     .filter((entry) => entry.lang && !Number.isNaN(entry.q))
     .sort((a, b) => b.q - a.q);

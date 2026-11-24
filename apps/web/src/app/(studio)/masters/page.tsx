@@ -115,7 +115,9 @@ export default async function MastersPage(props: { readonly searchParams: Promis
                   count: detail.variants.filter((v) => isFinished(v.status)).length,
                 })}
               </span>
-              <span className="tag">{t('masters.revision', { revision: detail.briefRevision })}</span>
+              <span className="tag">
+                {t('masters.revision', { revision: detail.briefRevision })}
+              </span>
             </div>
           </div>
           <Link className="btn" href={`/masters/${detail.id}`}>

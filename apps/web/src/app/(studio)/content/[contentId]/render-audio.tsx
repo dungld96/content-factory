@@ -2,6 +2,8 @@
 
 import type { RenderPlanDto } from '@acf/contracts';
 
+import { useT } from '@/components/i18n-provider';
+
 import type { AudioState } from '@/lib/render-audio';
 
 const nameOf = (a: RenderPlanDto['sfxOptions'][number]) =>
@@ -25,6 +27,7 @@ export function RenderAudioSection(props: {
   /** P4d: voice-over is off for the content item (Script & brief › Audio). */
   readonly voiceLocked?: boolean;
 }) {
+  const t = useT();
   const { plan, state } = props;
   const set = (patch: Partial<AudioState>) => {
     props.onChange({ ...state, ...patch });
@@ -33,8 +36,8 @@ export function RenderAudioSection(props: {
   const sceneOf = (id: string) => state.scenes[id] ?? { voiceOffsetMs: 0, muteMusic: false };
 
   return (
-    <details className="earlier-versions" aria-label="Audio settings">
-      <summary>Audio</summary>
+    <details className="earlier-versions" aria-label={t('ra.settings')}>
+      <summary>{t('ra.audio')}</summary>
       <div className="image-toolbar">
         <label className="checkbox">
           <input
@@ -45,11 +48,11 @@ export function RenderAudioSection(props: {
               set({ voiceEnabled: e.target.checked });
             }}
           />
-          Voice-over (no voice-over: no captions)
-          {props.voiceLocked ? ' · off for this content (Script & brief › Audio)' : ''}
+          {t('ra.voice')}
+          {props.voiceLocked ? ` ${t('ra.voiceLocked')}` : ''}
         </label>
         <label className="field">
-          Voice level (dB)
+          {t('ra.voiceLevel')}
           <input
             type="number"
             min={-20}
@@ -70,11 +73,11 @@ export function RenderAudioSection(props: {
               set({ clipAudio: e.target.checked });
             }}
           />
-          Clip audio
+          {t('ra.clipAudio')}
         </label>
         {state.clipAudio && (
           <label className="field">
-            Clip level (dB)
+            {t('ra.clipLevel')}
             <input
               type="number"
               min={-40}
@@ -90,14 +93,13 @@ export function RenderAudioSection(props: {
       </div>
       {clipsWithAudio > 0 && !state.clipAudio && (
         <p className="muted small-text" role="status">
-          {clipsWithAudio} chosen clip(s) have their own audio, which was paid for. Turn on “Clip
-          audio” to use it; otherwise it is left out of the render.
+          {t('ra.clipAudioHint', { count: clipsWithAudio })}
         </p>
       )}
       {props.hasMusic && (
         <div className="image-toolbar">
           <label className="field">
-            Music fade-in (ms)
+            {t('ra.fadeIn')}
             <input
               type="number"
               min={0}
@@ -110,7 +112,7 @@ export function RenderAudioSection(props: {
             />
           </label>
           <label className="field">
-            Music fade-out (ms)
+            {t('ra.fadeOut')}
             <input
               type="number"
               min={0}
@@ -130,18 +132,18 @@ export function RenderAudioSection(props: {
                 set({ ducking: e.target.checked });
               }}
             />
-            Lower the music under the voice
+            {t('ra.ducking')}
           </label>
         </div>
       )}
 
       <div className="table-wrap">
-        <table className="table" aria-label="Audio per scene">
+        <table className="table" aria-label={t('ra.perScene')}>
           <thead>
             <tr>
-              <th scope="col">Scene</th>
-              <th scope="col">Voice starts at (ms)</th>
-              {props.hasMusic && <th scope="col">Mute music</th>}
+              <th scope="col">{t('ra.scene')}</th>
+              <th scope="col">{t('ra.voiceStart')}</th>
+              {props.hasMusic && <th scope="col">{t('ra.muteMusic')}</th>}
             </tr>
           </thead>
           <tbody>
@@ -153,7 +155,7 @@ export function RenderAudioSection(props: {
                 <td>
                   <input
                     type="number"
-                    aria-label={`Voice offset of scene ${String(s.sceneNumber)}`}
+                    aria-label={t('ra.voiceOffset', { number: s.sceneNumber })}
                     min={0}
                     max={Math.round(s.durationSeconds * 1000)}
                     step={100}
@@ -176,7 +178,7 @@ export function RenderAudioSection(props: {
                   <td>
                     <input
                       type="checkbox"
-                      aria-label={`Mute music in scene ${String(s.sceneNumber)}`}
+                      aria-label={t('ra.muteIn', { number: s.sceneNumber })}
                       checked={sceneOf(s.sceneId).muteMusic}
                       onChange={(e) => {
                         set({
@@ -195,19 +197,16 @@ export function RenderAudioSection(props: {
         </table>
       </div>
 
-      <h4>Sound effects</h4>
+      <h4>{t('ra.sfx')}</h4>
       {plan.sfxOptions.length === 0 ? (
-        <p className="muted small-text">
-          Upload a sound effect (with its licence note) in the Asset library and approve it to use
-          it here.
-        </p>
+        <p className="muted small-text">{t('ra.sfxHint')}</p>
       ) : (
         <>
-          <ul className="plain-list" aria-label="Sound effects">
+          <ul className="plain-list" aria-label={t('ra.sfx')}>
             {state.sfx.map((x, i) => (
               <li key={`${x.assetId}-${String(i)}`} className="image-toolbar">
                 <select
-                  aria-label="Sound effect"
+                  aria-label={t('ra.sfxOne')}
                   value={x.assetId}
                   onChange={(e) => {
                     set({
@@ -224,7 +223,7 @@ export function RenderAudioSection(props: {
                   ))}
                 </select>
                 <select
-                  aria-label="Scene"
+                  aria-label={t('ra.scene')}
                   value={x.sceneId}
                   onChange={(e) => {
                     set({
@@ -236,12 +235,12 @@ export function RenderAudioSection(props: {
                 >
                   {plan.scenes.map((s) => (
                     <option key={s.sceneId} value={s.sceneId}>
-                      Scene {s.sceneNumber}
+                      {t('ra.sceneN', { number: s.sceneNumber })}
                     </option>
                   ))}
                 </select>
                 <label className="field">
-                  At (ms)
+                  {t('ra.at')}
                   <input
                     type="number"
                     min={0}
@@ -257,7 +256,7 @@ export function RenderAudioSection(props: {
                   />
                 </label>
                 <label className="field">
-                  Level (dB)
+                  {t('ra.level')}
                   <input
                     type="number"
                     min={-40}
@@ -280,7 +279,7 @@ export function RenderAudioSection(props: {
                     set({ sfx: state.sfx.filter((_, j) => j !== i) });
                   }}
                 >
-                  Remove
+                  {t('ra.remove')}
                 </button>
               </li>
             ))}
@@ -302,7 +301,7 @@ export function RenderAudioSection(props: {
               }
             }}
           >
-            Add a sound effect
+            {t('ra.add')}
           </button>
         </>
       )}

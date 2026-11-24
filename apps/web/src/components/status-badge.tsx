@@ -46,7 +46,10 @@ export type BadgeState =
 export type BadgeTone = 'gray' | 'info' | 'review' | 'green' | 'amber' | 'red';
 
 const STATES: Readonly<
-  Record<BadgeState, { readonly icon: LucideIcon; readonly tone: BadgeTone; readonly label: MessageKey }>
+  Record<
+    BadgeState,
+    { readonly icon: LucideIcon; readonly tone: BadgeTone; readonly label: MessageKey }
+  >
 > = {
   draft: { icon: CircleDashed, tone: 'gray', label: 'state.draft' },
   queued: { icon: Clock, tone: 'info', label: 'state.queued' },

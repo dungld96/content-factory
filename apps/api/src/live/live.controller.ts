@@ -125,7 +125,7 @@ export class LiveController {
       write(`event: ready\ndata: ${JSON.stringify({ cursor: nowCursor() })}\n\n`);
     }
     const heartbeat = setInterval(() => {
-      write(':ping\n\n');
+      write('event: ping\ndata: {}\n\n');
     }, HEARTBEAT_MS);
     heartbeat.unref();
     req.on('close', () => {

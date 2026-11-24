@@ -16,9 +16,17 @@ export function ProjectTabs({ projectId }: { readonly projectId: string }) {
   const base = `/projects/${projectId}`;
   const tabs: readonly { href: string; label: MessageKey; current: boolean }[] = [
     { href: base, label: 'project.tab.overview', current: path === base },
-    { href: `${base}/brand`, label: 'project.tab.brand', current: path.startsWith(`${base}/brand`) },
+    {
+      href: `${base}/brand`,
+      label: 'project.tab.brand',
+      current: path.startsWith(`${base}/brand`),
+    },
     { href: `/masters?project=${projectId}`, label: 'project.tab.masters', current: false },
-    { href: `${base}/costs`, label: 'project.tab.costs', current: path.startsWith(`${base}/costs`) },
+    {
+      href: `${base}/costs`,
+      label: 'project.tab.costs',
+      current: path.startsWith(`${base}/costs`),
+    },
     { href: `/assets?project=${projectId}`, label: 'project.tab.library', current: false },
   ];
   return (

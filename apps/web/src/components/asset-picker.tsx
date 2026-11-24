@@ -109,7 +109,9 @@ export function AssetPicker(props: {
         label: f.name.replace(/\.[a-z0-9]+$/i, ''),
       });
       if (!r.ok || !r.data) {
-        setError(t('picker.failed', { name: f.name, message: r.message ?? t('picker.uploadFailed') }));
+        setError(
+          t('picker.failed', { name: f.name, message: r.message ?? t('picker.uploadFailed') }),
+        );
         continue;
       }
       added.push(r.data.id);
@@ -207,9 +209,7 @@ export function AssetPicker(props: {
         </p>
       ) : assets.length === 0 ? (
         <p className="muted small-text">
-          {collectionId
-            ? t('picker.emptyCollection')
-            : t('picker.emptyProject')}
+          {collectionId ? t('picker.emptyCollection') : t('picker.emptyProject')}
         </p>
       ) : (
         <ul className="asset-grid" aria-label={t('picker.gridLabel')}>

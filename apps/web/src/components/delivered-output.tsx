@@ -44,9 +44,7 @@ export function DeliveredOutputActions(props: {
         <ResumeRunButton
           runId={job.productionRunId}
           label={
-            job.errorCode === 'OUTPUT_INVALID'
-              ? t('delivered.checkAgain')
-              : t('delivered.finish')
+            job.errorCode === 'OUTPUT_INVALID' ? t('delivered.checkAgain') : t('delivered.finish')
           }
           className="btn small primary"
         />

@@ -12,7 +12,6 @@ import { toast } from '@/components/toast';
 import { mutate } from '@/lib/api-client';
 import { MAX_RESUME_ROUNDS, nextResumeStep, type ResumeBody } from '@/lib/resume-flow';
 
-
 interface Question {
   readonly title: string;
   readonly text: string;
@@ -79,9 +78,7 @@ export function ResumeRunButton(props: {
       const step = nextResumeStep(r, body, t);
       if (step.kind === 'error' || round === MAX_RESUME_ROUNDS) {
         setBusy(false);
-        setError(
-          step.kind === 'error' ? step.text : (r.message ?? t('resume.failed')),
-        );
+        setError(step.kind === 'error' ? step.text : (r.message ?? t('resume.failed')));
         return;
       }
       if (!(await ask(step.title, step.text))) {

@@ -127,9 +127,7 @@ export function VoiceProfilesCard(props: {
       )}
       {props.canEdit &&
         (usable.length === 0 ? (
-          <p className="muted small-text">
-            {t('voice.noModel')}
-          </p>
+          <p className="muted small-text">{t('voice.noModel')}</p>
         ) : (
           <form
             className="form"

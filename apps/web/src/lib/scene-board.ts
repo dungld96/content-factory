@@ -6,6 +6,8 @@ import type {
   StoryboardVoiceoversDto,
 } from '@acf/contracts';
 
+import { translator, type MessageKey, type Translate } from './i18n';
+
 /**
  * The Scenes board (UX review U1, P3e): one row per scene with the state of its keyframe, clip
  * and voice-over, so a scene's progress is visible without switching tabs. Pure: built from the
@@ -45,12 +47,12 @@ export interface SceneRow {
   readonly runningSince: string | null;
 }
 
-export const ROW_STATUS_LABEL: Readonly<Record<RowStatus, string>> = {
-  failed: 'Needs fix',
-  needs: 'Needs you',
-  running: 'Running',
-  done: 'Done',
-  todo: 'To do',
+export const ROW_STATUS_LABEL: Readonly<Record<RowStatus, MessageKey>> = {
+  failed: 'board.row.failed',
+  needs: 'board.row.needs',
+  running: 'board.row.running',
+  done: 'board.row.done',
+  todo: 'board.row.todo',
 };
 
 interface StageScene {
@@ -62,6 +64,7 @@ interface StageScene {
 }
 
 function cell(
+  t: Translate,
   stage: Stage,
   scene: StageScene | undefined,
   chosen: AssetDto | null,
@@ -70,20 +73,21 @@ function cell(
 ): Cell {
   const job = scene?.activeJob ?? scene?.lastJob ?? null;
   const base = { stage, job, asset: chosen };
-  if (notNeeded) return { ...base, state: 'none', label: 'Not needed', sub: 'No narration' };
+  if (notNeeded)
+    return { ...base, state: 'none', label: t('cell.notNeeded'), sub: t('cell.noNarration') };
   if (scene?.activeJob?.status === 'running')
-    return { ...base, state: 'running', label: 'Generating', sub: 'Running' };
+    return { ...base, state: 'running', label: t('cell.generating'), sub: t('cell.running') };
   if (scene?.activeJob?.status === 'queued')
-    return { ...base, state: 'queued', label: 'Queued', sub: 'Waiting for a worker' };
-  if (chosen) return { ...base, state: 'chosen', label: 'Chosen', sub: chosen.label ?? '' };
+    return { ...base, state: 'queued', label: t('cell.queued'), sub: t('cell.waitingWorker') };
+  if (chosen) return { ...base, state: 'chosen', label: t('cell.chosen'), sub: chosen.label ?? '' };
   if (scene?.lastJob?.status === 'failed') {
     return {
       ...base,
       state: 'failed',
-      label: scene.lastJob.finishable ? 'Check failed' : 'Failed',
+      label: scene.lastJob.finishable ? t('cell.checkFailed') : t('cell.failed'),
       sub: scene.lastJob.finishable
-        ? 'Output kept · finish free'
-        : (scene.lastJob.errorCode ?? 'Failed'),
+        ? t('cell.outputKept')
+        : (scene.lastJob.errorCode ?? t('cell.failed')),
     };
   }
   const pickable = (scene?.candidates ?? []).filter((a) => a.approvalStatus !== 'rejected');
@@ -91,22 +95,22 @@ function cell(
     return {
       ...base,
       state: 'pick',
-      label: 'Choose one',
-      sub: `${String(pickable.length)} candidate${pickable.length === 1 ? '' : 's'}`,
+      label: t('cell.chooseOne'),
+      sub: t('cell.candidates', { count: pickable.length }),
     };
   }
-  if (blocked) return { ...base, state: 'waiting', label: 'Waiting', sub: blocked };
-  return { ...base, state: 'todo', label: 'Not generated', sub: 'Ready to generate' };
+  if (blocked) return { ...base, state: 'waiting', label: t('cell.waiting'), sub: blocked };
+  return { ...base, state: 'todo', label: t('cell.notGenerated'), sub: t('cell.ready') };
 }
 
-const OFF_CELL: Cell = {
+const offCell = (t: Translate): Cell => ({
   stage: 'voiceover',
   state: 'none',
-  label: 'Off',
-  sub: 'No voice-over',
+  label: t('cell.off'),
+  sub: t('cell.noVoiceover'),
   asset: null,
   job: null,
-};
+});
 
 function rowStatus(cells: readonly Cell[]): RowStatus {
   if (cells.some((c) => c.state === 'failed')) return 'failed';
@@ -131,6 +135,7 @@ export function buildSceneRows(
   voiceovers: StoryboardVoiceoversDto | null,
   /** P4d: voice-over switched off for the item: the column reads "Off". */
   voiceEnabled = true,
+  t: Translate = translator('en'),
 ): SceneRow[] {
   const ids = images?.scenes ?? videos?.scenes ?? voiceovers?.scenes ?? [];
   const rows = ids.map((s): SceneRow => {
@@ -139,11 +144,18 @@ export function buildSceneRows(
     const voc = voiceovers?.scenes.find((x) => x.sceneId === s.sceneId);
     const keyframe = img?.keyframe ?? vid?.keyframe ?? null;
     const cells = [
-      cell('keyframes', img, keyframe, null),
-      cell('clips', vid, vid?.clip ?? null, keyframe ? null : 'Needs a keyframe'),
+      cell(t, 'keyframes', img, keyframe, null),
+      cell(t, 'clips', vid, vid?.clip ?? null, keyframe ? null : t('cell.needsKeyframe')),
       voiceEnabled
-        ? cell('voiceover', voc, voc?.voiceover ?? null, null, voc !== undefined && voc.text === '')
-        : OFF_CELL,
+        ? cell(
+            t,
+            'voiceover',
+            voc,
+            voc?.voiceover ?? null,
+            null,
+            voc !== undefined && voc.text === '',
+          )
+        : offCell(t),
     ] as const;
     const status = rowStatus(cells);
     const starts = cells
@@ -155,7 +167,7 @@ export function buildSceneRows(
       sceneNumber: s.sceneNumber,
       cells,
       status,
-      statusLabel: ROW_STATUS_LABEL[status],
+      statusLabel: t(ROW_STATUS_LABEL[status]),
       runningSince: starts[0] ?? null,
     };
   });
@@ -164,12 +176,12 @@ export function buildSceneRows(
 
 export type BoardFilter = 'all' | 'needs' | 'running' | 'failed' | 'done';
 
-export const FILTERS: readonly { readonly id: BoardFilter; readonly label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'needs', label: 'Needs you' },
-  { id: 'running', label: 'Running' },
-  { id: 'failed', label: 'Failed' },
-  { id: 'done', label: 'Done' },
+export const FILTERS: readonly { readonly id: BoardFilter; readonly label: MessageKey }[] = [
+  { id: 'all', label: 'board.filter.all' },
+  { id: 'needs', label: 'board.filter.needs' },
+  { id: 'running', label: 'board.filter.running' },
+  { id: 'failed', label: 'board.filter.failed' },
+  { id: 'done', label: 'board.filter.done' },
 ];
 
 export function matchesFilter(row: SceneRow, filter: BoardFilter): boolean {
@@ -213,14 +225,12 @@ export interface NextStep {
 export function nextStep(
   checklist: readonly { readonly label: string; readonly done: boolean; readonly note: string }[],
   rows: readonly SceneRow[],
+  t: Translate = translator('en'),
 ): NextStep | null {
   const failed = rows.filter((r) => r.status === 'failed').length;
   const needs = rows.filter((r) => r.status === 'needs').length;
   const running = rows.filter((r) => r.status === 'running').length;
-  const runningNote =
-    running > 0
-      ? `${String(running)} scene${running === 1 ? ' is' : 's are'} still generating.`
-      : '';
+  const runningNote = running > 0 ? t('next.stillGenerating', { count: running }) : '';
   const first = checklist.find((c) => !c.done);
   if (!first) return null;
   const scenesStep = ['Keyframe selection', 'Clip selection', 'Voice-over selection'].includes(
@@ -228,56 +238,68 @@ export function nextStep(
   );
   if (scenesStep && failed > 0) {
     return {
-      title: `Fix ${String(failed)} scene${failed === 1 ? '' : 's'}`,
-      detail: runningNote || 'Open the failed scenes to see what happened.',
+      title: t('next.fix', { count: failed }),
+      detail: runningNote || t('next.fixDetail'),
       tab: 'scenes',
       filter: 'failed',
-      action: 'Show failed scenes',
+      action: t('next.showFailed'),
     };
   }
   if (scenesStep && needs > 0) {
     return {
-      title: `Choose for ${String(needs)} scene${needs === 1 ? '' : 's'}`,
-      detail: runningNote || 'Candidates are ready to compare.',
+      title: t('next.choose', { count: needs }),
+      detail: runningNote || t('next.chooseDetail'),
       tab: 'scenes',
       filter: 'needs',
-      action: 'Show scenes to review',
+      action: t('next.showNeeds'),
     };
   }
   if (scenesStep && running > 0) {
     return {
-      title: 'Generating scenes',
-      detail: `${runningNote} Nothing needs you right now.`,
+      title: t('next.generating'),
+      detail: `${runningNote} ${t('next.nothingNeeded')}`,
       tab: 'scenes',
       filter: 'running',
-      action: 'Show running scenes',
+      action: t('next.showRunning'),
     };
   }
   const map: Readonly<Record<string, Omit<NextStep, 'detail'>>> = {
-    'Script generated': { title: 'Generate the script', tab: 'script', action: 'Open the script' },
-    'Script approval': { title: 'Review the script', tab: 'script', action: 'Open the script' },
+    'Script generated': {
+      title: t('next.generateScript'),
+      tab: 'script',
+      action: t('next.openScript'),
+    },
+    'Script approval': {
+      title: t('next.reviewScript'),
+      tab: 'script',
+      action: t('next.openScript'),
+    },
     'Storyboard approval': {
-      title: 'Review the storyboard',
+      title: t('next.reviewStoryboard'),
       tab: 'storyboard',
-      action: 'Open the storyboard',
+      action: t('next.openStoryboard'),
     },
     'Keyframe selection': {
-      title: 'Generate keyframes',
+      title: t('next.generateKeyframes'),
       tab: 'scenes',
-      action: 'Open the scenes',
+      action: t('next.openScenes'),
     },
-    'Clip selection': { title: 'Generate clips', tab: 'scenes', action: 'Open the scenes' },
-    'Voice-over selection': {
-      title: 'Generate voice-overs',
+    'Clip selection': {
+      title: t('next.generateClips'),
       tab: 'scenes',
-      action: 'Open the scenes',
+      action: t('next.openScenes'),
+    },
+    'Voice-over selection': {
+      title: t('next.generateVoice'),
+      tab: 'scenes',
+      action: t('next.openScenes'),
     },
     'Render & export': {
-      title: 'Render and export the video',
+      title: t('next.render'),
       tab: 'render',
-      action: 'Open render & export',
+      action: t('next.openRender'),
     },
   };
-  const step = map[first.label] ?? { title: first.label, tab: 'script', action: 'Open' };
+  const step = map[first.label] ?? { title: first.label, tab: 'script', action: t('next.open') };
   return { ...step, detail: first.note };
 }

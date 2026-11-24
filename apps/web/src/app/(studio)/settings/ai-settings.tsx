@@ -40,7 +40,8 @@ const TASK_CAPABILITY: Readonly<Record<AiTask, Capability>> = {
   tts_generation: 'tts',
 };
 
-const CAPABILITIES: readonly Capability[] = ['llm', 'image_generation', 'video_generation', 'tts'];
+const CAPABILITIES = ['llm', 'image_generation', 'video_generation', 'tts'] as const;
+type ShownCapability = (typeof CAPABILITIES)[number];
 
 const STATUS_TONE: Readonly<Record<AiProviderDto['status'], Tone>> = {
   enabled: 'green',
@@ -194,7 +195,9 @@ export function ProvidersPanel(props: {
                         { status: p.status === 'enabled' ? 'disabled' : 'enabled' },
                         t('ai.providerToggled', {
                           name: p.name,
-                          state: t(p.status === 'enabled' ? 'ai.status.disabled' : 'ai.status.enabled'),
+                          state: t(
+                            p.status === 'enabled' ? 'ai.status.disabled' : 'ai.status.enabled',
+                          ),
                         }),
                       )
                     }
@@ -336,7 +339,7 @@ export function ModelsPanel(props: {
 }) {
   const t = useT();
   const { busy, error, run } = useAction();
-  const [capability, setCapability] = useState<Capability>('llm');
+  const [capability, setCapability] = useState<ShownCapability>('llm');
   const [status, setStatus] = useState<'all' | 'enabled' | 'disabled'>('all');
   const [q, setQ] = useState('');
   const counts = useMemo(
@@ -459,7 +462,9 @@ export function ModelsPanel(props: {
                           </ul>
                           {rest > 0 && (
                             <details className="price-more">
-                              <summary>{t('ai.allPrices', { count: m.activePrices.length })}</summary>
+                              <summary>
+                                {t('ai.allPrices', { count: m.activePrices.length })}
+                              </summary>
                               <ul className="price-list">
                                 {sortPrices(m.activePrices)
                                   .map(priceLine)
@@ -499,7 +504,9 @@ export function ModelsPanel(props: {
                                 t('ai.providerToggled', {
                                   name: m.displayName,
                                   state: t(
-                                    m.status === 'enabled' ? 'ai.status.disabled' : 'ai.status.enabled',
+                                    m.status === 'enabled'
+                                      ? 'ai.status.disabled'
+                                      : 'ai.status.enabled',
                                   ),
                                 }),
                               )

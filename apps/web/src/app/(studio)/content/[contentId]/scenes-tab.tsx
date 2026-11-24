@@ -1,6 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState, useSyncExternalStore, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent,
+} from 'react';
 
 import type {
   StoryboardImagesDto,
@@ -9,9 +16,11 @@ import type {
   VoiceProfileDto,
 } from '@acf/contracts';
 
+import { useT } from '@/components/i18n-provider';
 import { Icon } from '@/components/icon';
 import type { ModelOption } from '@/components/model-select';
 import { assetContentUrl } from '@/lib/asset-url';
+import type { MessageKey } from '@/lib/i18n';
 import {
   buildSceneRows,
   elapsed,
@@ -27,17 +36,21 @@ import { SceneClipsPanel } from './scene-clips';
 import { SceneImagesPanel } from './scene-images';
 import { SceneVoiceoversPanel } from './scene-voiceovers';
 
-const STAGES: readonly { readonly id: Stage; readonly label: string }[] = [
-  { id: 'keyframes', label: 'Keyframes' },
-  { id: 'clips', label: 'Clips' },
-  { id: 'voiceover', label: 'Voice-over' },
+const STAGES: readonly { readonly id: Stage; readonly label: MessageKey }[] = [
+  { id: 'keyframes', label: 'st.keyframes' },
+  { id: 'clips', label: 'st.clips' },
+  { id: 'voiceover', label: 'st.voiceover' },
 ];
 
-const STAGE_TITLE: Readonly<Record<Stage, string>> = {
-  keyframes: 'Keyframe',
-  clips: 'Clip',
-  voiceover: 'Voice-over',
+const STAGE_TITLE: Readonly<Record<Stage, MessageKey>> = {
+  keyframes: 'st.keyframe',
+  clips: 'st.clip',
+  voiceover: 'st.voiceover',
 };
+
+const typing = (target: EventTarget | null) =>
+  target instanceof HTMLElement &&
+  (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.tagName === 'SELECT');
 
 /** A clock ticking every second while something runs (elapsed times). */
 let tick = 0;
@@ -98,14 +111,18 @@ export function ScenesTab(props: {
   readonly initialStage: Stage;
   /** P4d: voice-over on for the item (off hides the voice-over stage). */
   readonly voiceEnabled: boolean;
+  /** R-D4: paid generations above this total (USD) or with an unknown price ask first. */
+  readonly confirmThresholdUsd: string;
 }) {
+  const t = useT();
+  const tableRef = useRef<HTMLDivElement>(null);
   const [chosenStage, setStage] = useState<Stage>(props.initialStage);
   const stage: Stage = !props.voiceEnabled && chosenStage === 'voiceover' ? 'clips' : chosenStage;
   const [filter, setFilter] = useState<BoardFilter>('all');
   const [focus, setFocus] = useState<string | null>(null);
   const rows = useMemo(
-    () => buildSceneRows(props.images, props.videos, props.voiceovers, props.voiceEnabled),
-    [props.images, props.videos, props.voiceovers, props.voiceEnabled],
+    () => buildSceneRows(props.images, props.videos, props.voiceovers, props.voiceEnabled, t),
+    [props.images, props.videos, props.voiceovers, props.voiceEnabled, t],
   );
   const now = useTick();
 
@@ -130,18 +147,18 @@ export function ScenesTab(props: {
       <section className="card work-card">
         <div className="section-head">
           <div>
-            <h2>Scenes</h2>
-            <p>Keyframes, clips and voice-overs for every scene of the approved storyboard.</p>
+            <h2>{t('st.title')}</h2>
+            <p>{t('st.lockedHint')}</p>
           </div>
         </div>
-        <div className="empty">Approve a storyboard first (gate 2).</div>
+        <div className="empty">{t('st.locked')}</div>
       </section>
     );
   }
   if (props.loadFailed) {
     return (
       <p className="notice error" role="alert">
-        The scenes could not be loaded.
+        {t('st.loadError')}
       </p>
     );
   }
@@ -158,6 +175,22 @@ export function ScenesTab(props: {
     requestAnimationFrame(() => {
       document.getElementById('scene-stage-panel')?.scrollIntoView({ block: 'start' });
     });
+  }
+
+  /** Gate 3 review keys (R4): J / K move between scene rows, Enter opens the focused cell. */
+  function onBoardKey(event: KeyboardEvent<HTMLDivElement>) {
+    if (typing(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+    const key = event.key.toLowerCase();
+    if (key !== 'j' && key !== 'k') return;
+    event.preventDefault();
+    const rowsEls = [...(tableRef.current?.querySelectorAll<HTMLElement>('.board-row') ?? [])];
+    const current = rowsEls.findIndex((r) => r.contains(document.activeElement));
+    const next =
+      rowsEls[Math.max(0, Math.min(rowsEls.length - 1, current + (key === 'j' ? 1 : -1)))];
+    const target =
+      next?.querySelector<HTMLButtonElement>('.board-cell:not(.chosen):not(.none)') ??
+      next?.querySelector<HTMLButtonElement>('.board-cell');
+    target?.focus();
   }
 
   function chooseStage(next: Stage) {
@@ -187,22 +220,20 @@ export function ScenesTab(props: {
 
   return (
     <>
-      <section className="card work-card scene-board" aria-label="Scenes board">
+      <section className="card work-card scene-board" aria-label={t('st.board')}>
         <div className="section-head">
           <div>
-            <h2>Scenes</h2>
-            <p>
-              {done} of {rows.length} scene{rows.length === 1 ? '' : 's'} done. Choose a cell to
-              open that stage for the scene.
-            </p>
+            <h2>{t('st.title')}</h2>
+            <p>{t('st.done', { done, total: rows.length })}</p>
+            <p className="muted small-text">{t('st.keysHint')}</p>
           </div>
           {props.generating && (
             <span className="status purple" role="status">
-              Generating…
+              {t('st.generating')}
             </span>
           )}
         </div>
-        <div className="board-filters" role="group" aria-label="Filter scenes">
+        <div className="board-filters" role="group" aria-label={t('st.filter')}>
           {FILTERS.map((f) => (
             <button
               key={f.id}
@@ -213,27 +244,33 @@ export function ScenesTab(props: {
                 setFilter(f.id);
               }}
             >
-              {f.label} <span className="chip-num">{count(f.id)}</span>
+              {t(f.label)} <span className="chip-num">{count(f.id)}</span>
             </button>
           ))}
         </div>
-        <div className="board-table" role="table" aria-label="Scenes">
+        <div
+          className="board-table"
+          role="table"
+          aria-label={t('st.table')}
+          ref={tableRef}
+          onKeyDown={onBoardKey}
+        >
           <div className="board-head" role="row">
-            <span role="columnheader">Scene</span>
-            <span role="columnheader">Keyframe</span>
-            <span role="columnheader">Clip</span>
-            <span role="columnheader">Voice-over</span>
-            <span role="columnheader">Status</span>
+            <span role="columnheader">{t('st.colScene')}</span>
+            <span role="columnheader">{t('st.keyframe')}</span>
+            <span role="columnheader">{t('st.clip')}</span>
+            <span role="columnheader">{t('st.voiceover')}</span>
+            <span role="columnheader">{t('st.colStatus')}</span>
           </div>
           {visible.length === 0 ? (
-            <p className="muted board-empty">No scenes in this state.</p>
+            <p className="muted board-empty">{t('st.noRows')}</p>
           ) : (
             visible.map((row) => (
               <div
                 key={row.sceneId}
                 role="row"
                 className={row.sceneId === focus ? 'board-row focused' : 'board-row'}
-                aria-label={`Scene ${String(row.sceneNumber)}: ${row.statusLabel}`}
+                aria-label={t('st.rowLabel', { number: row.sceneNumber, status: row.statusLabel })}
               >
                 <span role="rowheader" className="board-scene">
                   <b>{String(row.sceneNumber).padStart(2, '0')}</b>
@@ -246,14 +283,18 @@ export function ScenesTab(props: {
                       onClick={() => {
                         open(row, c);
                       }}
-                      aria-label={`Scene ${String(row.sceneNumber)} ${STAGE_TITLE[c.stage]}: ${c.label}${c.sub ? `, ${c.sub}` : ''}`}
+                      aria-label={`${t('st.cellLabel', {
+                        number: row.sceneNumber,
+                        stage: t(STAGE_TITLE[c.stage]),
+                        label: c.label,
+                      })}${c.sub ? `, ${c.sub}` : ''}`}
                     >
                       <CellThumb cell={c} />
                       <span className="board-cell-copy">
                         <b>{c.label}</b>
                         <small>
                           {c.state === 'running' && c.job?.startedAt && now !== null
-                            ? `${elapsed(c.job.startedAt, now)} elapsed`
+                            ? t('st.elapsed', { time: elapsed(c.job.startedAt, now) })
                             : c.sub}
                         </small>
                       </span>
@@ -272,11 +313,11 @@ export function ScenesTab(props: {
         </div>
       </section>
 
-      <section className="card work-card" id="scene-stage-panel" aria-label="Scene stage">
+      <section className="card work-card" id="scene-stage-panel" aria-label={t('st.stagePanel')}>
         <div
           className="tabs stage-tabs"
           role="tablist"
-          aria-label="Scene stage"
+          aria-label={t('st.stagePanel')}
           onKeyDown={onStageKey}
         >
           {STAGES.filter((s) => props.voiceEnabled || s.id !== 'voiceover').map((s) => (
@@ -293,14 +334,14 @@ export function ScenesTab(props: {
                 chooseStage(s.id);
               }}
             >
-              {s.label}
+              {t(s.label)}
               <span className="chip-count">{badge[s.id]}</span>
             </button>
           ))}
         </div>
         {focusRow && (
           <p className="focus-note" role="status">
-            Showing scene {focusRow.sceneNumber} only.{' '}
+            {t('st.onlyScene', { number: focusRow.sceneNumber })}{' '}
             <button
               type="button"
               className="link-button"
@@ -308,7 +349,7 @@ export function ScenesTab(props: {
                 setFocus(null);
               }}
             >
-              Show all scenes
+              {t('st.showAll')}
             </button>
           </p>
         )}
@@ -324,6 +365,7 @@ export function ScenesTab(props: {
               canEdit={props.canEdit}
               models={props.imageModels}
               onlySceneId={focus}
+              confirmThresholdUsd={props.confirmThresholdUsd}
             />
           )}
         </div>
@@ -339,6 +381,7 @@ export function ScenesTab(props: {
               canEdit={props.canEdit}
               models={props.videoModels}
               onlySceneId={focus}
+              confirmThresholdUsd={props.confirmThresholdUsd}
             />
           )}
         </div>
@@ -355,6 +398,7 @@ export function ScenesTab(props: {
               profiles={props.profiles}
               canEdit={props.canEdit}
               onlySceneId={focus}
+              confirmThresholdUsd={props.confirmThresholdUsd}
             />
           )}
         </div>

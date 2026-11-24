@@ -47,7 +47,9 @@ function HealthTile(props: {
   return (
     <div className={`health-tile ${props.health}`}>
       <span className="health-icon" aria-hidden="true">
-        <Icon name={props.health === 'ok' ? 'check' : props.health === 'warn' ? 'warning' : 'failed'} />
+        <Icon
+          name={props.health === 'ok' ? 'check' : props.health === 'warn' ? 'warning' : 'failed'}
+        />
       </span>
       <span>
         <b>
@@ -220,7 +222,8 @@ export default async function OperationsPage() {
           <ul className="plain-list" aria-label={t('ops.heldTitle')}>
             {s.heldReservations.map((r) => (
               <li key={r.id}>
-                <b>{formatUsd(r.amountUsd)}</b> · {t('ops.heldOf', { kind: jobKindLabel(t, r.jobKind) })}{' '}
+                <b>{formatUsd(r.amountUsd)}</b> ·{' '}
+                {t('ops.heldOf', { kind: jobKindLabel(t, r.jobKind) })}{' '}
                 <Link href={`/content/${r.contentItemId}`}>{r.contentTitle}</Link> ({r.projectName})
                 {r.jobErrorCode ? ` · ${r.jobErrorCode}` : ''} · <LocalTime iso={r.createdAt} />{' '}
                 {r.canResolve ? (
@@ -320,7 +323,9 @@ export default async function OperationsPage() {
               <li key={b.projectId}>
                 <Link href={`/projects/${b.projectId}/costs`}>{b.projectName}</Link>:{' '}
                 {t('ops.budgetLine', { used: formatUsd(b.usedUsd), limit: formatUsd(b.limitUsd) })}
-                {b.heldUsd !== '0' ? ` ${t('ops.heldAmount', { amount: formatUsd(b.heldUsd) })}` : ''}{' '}
+                {b.heldUsd !== '0'
+                  ? ` ${t('ops.heldAmount', { amount: formatUsd(b.heldUsd) })}`
+                  : ''}{' '}
                 {b.warning && <Pill tone="amber">{t('costs.warning80')}</Pill>}
               </li>
             ))}

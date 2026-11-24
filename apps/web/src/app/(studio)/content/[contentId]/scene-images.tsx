@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import type {
   AssetDto,
@@ -10,19 +10,25 @@ import type {
   StoryboardImagesDto,
 } from '@acf/contracts';
 
-import { Icon } from '@/components/icon';
 import { CancelActiveRuns } from '@/components/cancel-run';
+import { CostConfirmDialog, estimateText } from '@/components/cost-confirm';
+import { useLocale, useT } from '@/components/i18n-provider';
+import { Icon } from '@/components/icon';
 import { ModelSelect, type ModelOption } from '@/components/model-select';
 import { ApprovalPill, Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { mutate } from '@/lib/api-client';
 import { assetContentUrl } from '@/lib/asset-url';
+import { confirmReasons, type ConfirmReason } from '@/lib/cost-confirm';
 import { jobErrorText } from '@/lib/format';
 import { formatUsd } from '@/lib/money';
 
+type Scope = Readonly<Record<string, unknown>>;
+
 /**
- * Scene images of the approved storyboard (M4 design §8): estimate and generate (one job per
- * scene, the worker makes the calls), review candidates, choose each scene's keyframe (gate 3).
+ * Scene images of the approved storyboard (M4 design §8; redesign R-D4): the price is on the
+ * button, a click within the cost threshold generates at once (one job per scene), above it or
+ * with an unknown price it asks first; review candidates, choose each scene's keyframe (gate 3).
  */
 export function SceneImagesPanel(props: {
   readonly images: StoryboardImagesDto;
@@ -31,14 +37,22 @@ export function SceneImagesPanel(props: {
   readonly onlySceneId?: string | null;
   /** Enabled image models the editor may pick instead of the task route. */
   readonly models?: readonly ModelOption[];
+  /** R-D4: the effective cost-confirmation threshold (USD). */
+  readonly confirmThresholdUsd?: string;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const { images, canEdit } = props;
+  const threshold = props.confirmThresholdUsd ?? '1';
   const [count, setCount] = useState(1);
   const [modelKey, setModelKey] = useState('');
-  const model = modelKey ? { modelKey } : {};
   const [estimate, setEstimate] = useState<ImageEstimateDto | null>(null);
-  const [acceptUnknown, setAcceptUnknown] = useState(false);
+  const [pending, setPending] = useState<{
+    plan: ImageEstimateDto;
+    scope: Scope;
+    reasons: ConfirmReason[];
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const withKeyframe = images.scenes.filter((s) => s.keyframe !== null).length;
@@ -50,64 +64,110 @@ export function SceneImagesPanel(props: {
     const r = await mutate<T>(method, path, body);
     setBusy(false);
     if (!r.ok) {
-      setError(r.message ?? `Request failed (HTTP ${String(r.status)})`);
+      setError(r.message ?? t('form.requestFailed', { status: r.status }));
       return null;
     }
     return r.data;
   }
 
-  async function estimateCost() {
-    const plan = await run<ImageEstimateDto>(
-      'POST',
-      `/storyboards/${images.storyboardVersionId}/images/estimate`,
-      { count, ...model },
-    );
-    if (plan) setEstimate(plan);
-  }
+  const estimateFor = useCallback(
+    async (scope: Scope): Promise<ImageEstimateDto | null> => {
+      const r = await mutate<ImageEstimateDto>(
+        'POST',
+        `/storyboards/${images.storyboardVersionId}/images/estimate`,
+        { count, ...(modelKey ? { modelKey } : {}), ...scope },
+      );
+      return r.ok ? r.data : null;
+    },
+    [images.storyboardVersionId, count, modelKey],
+  );
 
-  async function generate(extra: Record<string, unknown> = {}) {
+  const shape = images.scenes
+    .map((s) => `${s.keyframe?.id ?? ''}:${s.activeJob?.id ?? ''}:${String(s.candidates.length)}`)
+    .join(',');
+  useEffect(() => {
+    if (!canEdit) return;
+    let live = true;
+    void estimateFor({}).then((plan) => {
+      if (live) setEstimate(plan);
+    });
+    return () => {
+      live = false;
+    };
+  }, [canEdit, estimateFor, shape]);
+
+  const toGenerate = (plan: ImageEstimateDto | null) =>
+    plan?.scenes.filter((s) => s.action === 'generate') ?? [];
+
+  async function generate(plan: ImageEstimateDto, scope: Scope) {
+    setPending(null);
     const result = await run<ImageGenerateResponseDto>(
       'POST',
       `/storyboards/${images.storyboardVersionId}/images/generate`,
-      { count, ...model, ...(acceptUnknown ? { acceptUnknownCost: true } : {}), ...extra },
+      {
+        count,
+        ...(modelKey ? { modelKey } : {}),
+        ...(plan.unknownCost ? { acceptUnknownCost: true } : {}),
+        ...scope,
+      },
     );
     if (result) {
       setEstimate(result.estimate);
       toast(
-        result.jobs.length > 0
-          ? `${String(result.jobs.length)} image job(s) queued.`
-          : 'Nothing to generate: every scene already has images or a keyframe.',
+        result.jobs.length > 0 ? t('img.queued', { count: result.jobs.length }) : t('img.nothing'),
       );
       router.refresh();
     }
+  }
+
+  async function start(scope: Scope) {
+    setBusy(true);
+    setError(null);
+    const plan = await estimateFor(scope);
+    setBusy(false);
+    if (!plan) {
+      setError(t('form.requestFailed', { status: 0 }));
+      return;
+    }
+    if (toGenerate(plan).length === 0) {
+      toast(t('img.nothing'));
+      return;
+    }
+    const reasons = confirmReasons({
+      totalUsd: plan.totalEstimatedUsd,
+      unknown: plan.unknownCost,
+      thresholdUsd: threshold,
+    });
+    if (reasons.length === 0) await generate(plan, scope);
+    else setPending({ plan, scope, reasons });
   }
 
   async function act(path: string, method: 'POST' | 'PUT' = 'POST', body?: unknown) {
     if ((await run(method, path, body)) !== null) router.refresh();
   }
 
+  const planned = toGenerate(estimate);
   return (
-    <div aria-label="Scene image controls">
+    <div aria-label={t('img.controls')}>
       <div className="section-head">
         <div>
-          <h2>Scene keyframes</h2>
-          <p>Generate candidates, compare them and choose one approved image per scene.</p>
+          <h2>{t('img.title')}</h2>
+          <p>{t('img.hint')}</p>
         </div>
-        <span className={complete ? 'status green' : 'status gray'} aria-label="Keyframe gate">
+        <span className={complete ? 'status green' : 'status gray'} aria-label={t('img.gate')}>
           {complete
-            ? 'All scenes have a keyframe'
-            : `${String(withKeyframe)} of ${String(images.scenes.length)} scenes have a keyframe`}
+            ? t('img.complete')
+            : t('img.count', { done: withKeyframe, total: images.scenes.length })}
         </span>
       </div>
       {canEdit && (
         <div className="image-toolbar">
           <label className="field">
-            Candidates per scene
+            {t('img.perScene')}
             <select
               value={count}
               onChange={(e) => {
                 setCount(Number(e.target.value));
-                setEstimate(null);
               }}
             >
               {[1, 2, 3, 4].map((n) => (
@@ -121,49 +181,57 @@ export function SceneImagesPanel(props: {
             models={props.models ?? []}
             value={modelKey}
             disabled={busy}
-            onChange={(key) => {
-              setModelKey(key);
-              setEstimate(null);
-            }}
+            onChange={setModelKey}
           />
-          <button type="button" className="btn" disabled={busy} onClick={() => void estimateCost()}>
-            Estimate cost
-          </button>
           <button
             type="button"
             className="btn primary"
-            disabled={busy}
-            onClick={() => void generate()}
+            disabled={busy || (estimate !== null && planned.length === 0)}
+            onClick={() => void start({})}
           >
-            <Icon name="generate" /> Generate images
+            <Icon name="generate" /> {t('img.generate')}
+            {estimate
+              ? planned.length > 0
+                ? ` · ${estimateText(estimate.totalEstimatedUsd, estimate.unknownCost)}`
+                : ''
+              : ` · ${t('clips.pricing')}`}
           </button>
           <CancelActiveRuns jobs={images.scenes.map((s) => s.activeJob)} />
         </div>
       )}
-      {estimate && (
-        <p className="muted small-text" role="status" aria-label="Image estimate">
-          {estimate.modelKey}
-          {estimate.resolution ? ` · ${estimate.resolution}` : ''} ·{' '}
-          {estimate.scenes.filter((s) => s.action === 'generate').length} scene(s) to generate ·{' '}
+      {estimate && planned.length > 0 && (
+        <p className="muted small-text" role="status" aria-label={t('img.estimateLabel')}>
+          {t('img.summary', {
+            model: estimate.modelKey,
+            resolution: estimate.resolution ? ` · ${estimate.resolution}` : '',
+            count: planned.length,
+          })}{' '}
+          ·{' '}
           {estimate.unknownCost
-            ? 'cost unknown (priced per token or not priced)'
-            : `estimated ${estimate.totalEstimatedUsd ?? '?'} USD`}
-          {!estimate.unknownCost && estimate.totalEstimatedUsd
-            ? ` (${formatUsd(estimate.totalEstimatedUsd)})`
-            : ''}
+            ? t('img.costUnknown')
+            : t('clips.costEstimated', { amount: formatUsd(estimate.totalEstimatedUsd ?? '0') })}
         </p>
       )}
-      {canEdit && estimate?.unknownCost && (
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={acceptUnknown}
-            onChange={(e) => {
-              setAcceptUnknown(e.target.checked);
-            }}
-          />
-          I accept that the cost is unknown until the images are generated
-        </label>
+      {pending && (
+        <CostConfirmDialog
+          open
+          title={t('img.confirmTitle', { count: toGenerate(pending.plan).length })}
+          description={pending.plan.modelKey}
+          lines={toGenerate(pending.plan).map((s) => ({
+            label: t('clips.scene', { number: s.sceneNumber }),
+            usd: s.estimatedUsd,
+          }))}
+          totalUsd={pending.plan.totalEstimatedUsd}
+          unknown={pending.plan.unknownCost}
+          thresholdUsd={threshold}
+          reasons={pending.reasons}
+          action={t('clips.confirmAction')}
+          busy={busy}
+          onCancel={() => {
+            setPending(null);
+          }}
+          onConfirm={() => void generate(pending.plan, pending.scope)}
+        />
       )}
       {error && (
         <p className="form-error" role="alert">
@@ -179,24 +247,24 @@ export function SceneImagesPanel(props: {
               <article
                 key={scene.sceneId}
                 className="scene-images"
-                aria-label={`Scene ${String(scene.sceneNumber)} images`}
+                aria-label={t('img.sceneTitle', { number: scene.sceneNumber })}
               >
                 <div className="section-head">
                   <div>
                     <h3>
-                      Scene {String(scene.sceneNumber).padStart(2, '0')}{' '}
+                      {t('clips.scene', { number: String(scene.sceneNumber).padStart(2, '0') })}{' '}
                       {scene.keyframe ? (
-                        <Pill tone="green">Keyframe chosen</Pill>
+                        <Pill tone="green">{t('img.chosen')}</Pill>
                       ) : (
-                        <Pill tone="gray">No keyframe</Pill>
+                        <Pill tone="gray">{t('img.noKeyframe')}</Pill>
                       )}
                     </h3>
                     <p>{scene.imagePrompt}</p>
                     {job && (
                       <p role="status">
-                        Image job {job.status}
-                        {job.attempt > 1 ? ` (attempt ${String(job.attempt)})` : ''}
-                        {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}
+                        {t('img.job', { status: t(`state.${job.status}`) })}
+                        {job.attempt > 1 ? ` ${t('pc.attempt', { count: job.attempt })}` : ''}
+                        {job.errorCode ? ` — ${jobErrorText(job.errorCode, locale)}` : ''}
                       </p>
                     )}
                   </div>
@@ -205,25 +273,25 @@ export function SceneImagesPanel(props: {
                       type="button"
                       className="btn small"
                       disabled={busy || scene.activeJob !== null}
-                      onClick={() => void generate({ sceneIds: [scene.sceneId], regenerate: true })}
+                      onClick={() => void start({ sceneIds: [scene.sceneId], regenerate: true })}
                     >
-                      Regenerate scene {scene.sceneNumber}
+                      {t('img.regenerate', { number: scene.sceneNumber })}
                     </button>
                   )}
                 </div>
                 {scene.candidates.length === 0 ? (
-                  <p className="muted small-text">No images yet.</p>
+                  <p className="muted small-text">{t('img.none')}</p>
                 ) : (
                   <ul
                     className="candidate-grid"
-                    aria-label={`Scene ${String(scene.sceneNumber)} candidates`}
+                    aria-label={t('img.candidates', { number: scene.sceneNumber })}
                   >
                     {scene.candidates.map((asset, i) => (
                       <Candidate
                         key={asset.id}
                         asset={asset}
                         index={i + 1}
-                        label={`Scene ${String(scene.sceneNumber)} candidate ${String(i + 1)}`}
+                        label={t('img.candidate', { number: scene.sceneNumber, index: i + 1 })}
                         isKeyframe={scene.keyframe?.id === asset.id}
                         canEdit={canEdit}
                         busy={busy}
@@ -251,6 +319,7 @@ function Candidate(props: {
   readonly sceneId: string;
   readonly onAction: (path: string, method?: 'POST' | 'PUT', body?: unknown) => void;
 }) {
+  const t = useT();
   const { asset } = props;
   return (
     <li aria-label={props.label} className={props.isKeyframe ? 'candidate selected' : 'candidate'}>
@@ -266,17 +335,17 @@ function Candidate(props: {
         />
         {props.isKeyframe && (
           <span className="selected-label">
-            <Icon name="check" size={14} /> Keyframe
+            <Icon name="check" size={14} /> {t('img.keyframe')}
           </span>
         )}
       </div>
       <div className="candidate-foot">
         <div className="row">
-          <b>Candidate {props.index}</b>
+          <b>{t('img.candidateN', { index: props.index })}</b>
           <span>
             {asset.width && asset.height
               ? `${String(asset.width)}×${String(asset.height)}`
-              : 'size unknown'}
+              : t('img.sizeUnknown')}
           </span>
         </div>
         <div className="row">
@@ -293,7 +362,7 @@ function Candidate(props: {
                   props.onAction(`/assets/${asset.id}/approve`);
                 }}
               >
-                Approve
+                {t('clips.approve')}
               </button>
             )}
             {asset.approvalStatus !== 'rejected' && !props.isKeyframe && (
@@ -305,7 +374,7 @@ function Candidate(props: {
                   props.onAction(`/assets/${asset.id}/reject`);
                 }}
               >
-                Reject
+                {t('clips.reject')}
               </button>
             )}
             {asset.approvalStatus === 'approved' && !props.isKeyframe && (
@@ -319,7 +388,7 @@ function Candidate(props: {
                   });
                 }}
               >
-                Use as keyframe
+                {t('img.use')}
               </button>
             )}
           </div>
@@ -331,6 +400,7 @@ function Candidate(props: {
 
 /** Copies the master's current brief into this variant (R0). */
 export function ResyncBriefButton({ contentId }: { readonly contentId: string }) {
+  const t = useT();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   return (
@@ -341,13 +411,13 @@ export function ResyncBriefButton({ contentId }: { readonly contentId: string })
         onClick={() =>
           void mutate('POST', `/content/${contentId}/brief/resync`).then((r) => {
             if (r.ok) {
-              toast('Brief resynced from the master.');
+              toast(t('img.resynced'));
               router.refresh();
-            } else setError(r.message ?? `Request failed (HTTP ${String(r.status)})`);
+            } else setError(r.message ?? t('form.requestFailed', { status: r.status }));
           })
         }
       >
-        Resync brief from master
+        {t('img.resync')}
       </button>
       {error && (
         <span className="form-error" role="alert">

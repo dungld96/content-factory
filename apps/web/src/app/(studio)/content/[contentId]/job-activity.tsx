@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { GenerationJobDetailDto, GenerationJobDto, Page } from '@acf/contracts';
 
 import { CancelRunButton } from '@/components/cancel-run';
+import { useT } from '@/components/i18n-provider';
 import { DeliveredOutputActions } from '@/components/delivered-output';
 import { JobErrorLine } from '@/components/job-error';
 import { LocalTime, RelativeTime } from '@/components/local-time';
@@ -12,7 +13,8 @@ import { ResumeRunButton } from '@/components/resume-run';
 import { Pill } from '@/components/status-pill';
 import { fetchJson } from '@/lib/api-client';
 import type { Tone } from '@/lib/content-status';
-import { JOB_KIND_LABEL } from '@/lib/format';
+import { jobKindLabel } from '@/lib/format';
+import { onJobEvent } from '@/lib/live/store';
 import { addUsd, formatUsd } from '@/lib/money';
 
 const ACTIVE = new Set(['queued', 'running']);
@@ -38,7 +40,7 @@ function fetchJobs(
 
 /**
  * The content item's jobs, newest first (P3 design W4): one compact row per job, expandable to
- * its event history. Polls while a job is queued or running.
+ * its event history. Reloads when one of the item's jobs changes state (live store, R-D5).
  */
 export function JobActivity(props: {
   readonly contentId: string;
@@ -46,6 +48,7 @@ export function JobActivity(props: {
   readonly sceneNumbers: Readonly<Record<string, number>>;
   readonly canEdit: boolean;
 }) {
+  const t = useT();
   const [failedOnly, setFailedOnly] = useState(false);
   const [jobs, setJobs] = useState<GenerationJobDto[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -71,25 +74,29 @@ export function JobActivity(props: {
     };
   }, [props.contentId, failedOnly, apply]);
 
-  const active = (jobs ?? []).some((j) => ACTIVE.has(j.status));
   useEffect(() => {
-    if (!active) return;
-    const timer = setInterval(() => {
-      void fetchJobs(props.contentId, failedOnly, null).then((page) => {
-        apply(page, false);
-      });
-    }, 3000);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const off = onJobEvent((e) => {
+      if (e.contentItemId !== props.contentId) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        void fetchJobs(props.contentId, failedOnly, null).then((page) => {
+          apply(page, false);
+        });
+      }, 400);
+    });
     return () => {
-      clearInterval(timer);
+      clearTimeout(timer);
+      off();
     };
-  }, [active, props.contentId, failedOnly, apply]);
+  }, [props.contentId, failedOnly, apply]);
 
   return (
     <div style={{ marginTop: 18 }}>
       <div className="section-head">
         <div>
-          <h3>Jobs</h3>
-          <p>Every generation and render job of this content, with its attempts and events.</p>
+          <h3>{t('ja.title')}</h3>
+          <p>{t('ja.hint')}</p>
         </div>
         <label className="checkbox">
           <input
@@ -99,22 +106,22 @@ export function JobActivity(props: {
               setFailedOnly(e.target.checked);
             }}
           />{' '}
-          Failed only
+          {t('ja.failedOnly')}
         </label>
       </div>
       {error && (
         <p className="notice error" role="alert">
-          The jobs could not be loaded.
+          {t('ja.loadError')}
         </p>
       )}
       {jobs === null ? (
         <p className="muted small-text" aria-busy="true">
-          Loading…
+          {t('common.loading')}
         </p>
       ) : jobs.length === 0 ? (
-        <div className="empty">{failedOnly ? 'No failed jobs.' : 'No jobs yet.'}</div>
+        <div className="empty">{failedOnly ? t('ja.noFailed') : t('ja.none')}</div>
       ) : (
-        <ul className="plain-list" aria-label="Jobs">
+        <ul className="plain-list" aria-label={t('ja.list')}>
           {jobs.map((job) => (
             <JobRow
               key={job.id}
@@ -137,7 +144,7 @@ export function JobActivity(props: {
             })
           }
         >
-          Show older jobs
+          {t('ja.older')}
         </button>
       )}
     </div>
@@ -149,6 +156,7 @@ function JobRow(props: {
   readonly sceneNumber: number | undefined;
   readonly canEdit: boolean;
 }) {
+  const t = useT();
   const { job } = props;
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<GenerationJobDetailDto | null>(null);
@@ -164,8 +172,8 @@ function JobRow(props: {
     };
   }, [open, job.id, job.status, job.attempt]);
 
-  const stage = `${JOB_KIND_LABEL[job.kind] ?? job.kind}${
-    props.sceneNumber === undefined ? '' : ` · scene ${String(props.sceneNumber)}`
+  const stage = `${jobKindLabel(t, job.kind)}${
+    props.sceneNumber === undefined ? '' : ` ${t('ja.scene', { number: props.sceneNumber })}`
   }`;
   const cost = addUsd(job.cost.reportedUsd, job.cost.estimatedUsd);
   return (
@@ -177,11 +185,18 @@ function JobRow(props: {
         }}
       >
         <summary>
-          <b>{stage}</b> <Pill tone={STATUS_TONE[job.status]}>{job.status}</Pill>{' '}
+          <b>{stage}</b> <Pill tone={STATUS_TONE[job.status]}>{t(`state.${job.status}`)}</Pill>{' '}
           <span className="muted small-text">
-            attempt {job.attempt}/{job.maxAttempts} · {job.modelKey} · {formatUsd(cost)}
-            {job.cost.unknownCalls > 0 ? ` + ${String(job.cost.unknownCalls)} unknown` : ''} ·{' '}
-            <RelativeTime iso={job.queuedAt} />
+            {t('ja.meta', {
+              attempt: job.attempt,
+              max: job.maxAttempts,
+              model: job.modelKey,
+              cost: formatUsd(cost),
+            })}
+            {job.cost.unknownCalls > 0
+              ? ` ${t('ja.unknown', { count: job.cost.unknownCalls })}`
+              : ''}{' '}
+            · <RelativeTime iso={job.queuedAt} />
           </span>
         </summary>
         {job.errorCode && (
@@ -191,15 +206,16 @@ function JobRow(props: {
         )}
         {detail === null ? (
           <p className="muted small-text" aria-busy="true">
-            Loading events…
+            {t('ja.loadingEvents')}
           </p>
         ) : (
-          <ol className="small-text" aria-label={`Events of ${stage}`}>
+          <ol className="small-text" aria-label={t('ja.eventsOf', { stage })}>
             {detail.events.map((e, i) => (
               <li key={`${e.createdAt}-${String(i)}`}>
                 <LocalTime iso={e.createdAt} /> · {e.type} ·{' '}
                 {e.fromStatus ? `${e.fromStatus} → ` : ''}
-                {e.toStatus} (attempt {e.attempt}){e.errorCode ? ` · ${e.errorCode}` : ''}
+                {e.toStatus} {t('ja.eventAttempt', { count: e.attempt })}
+                {e.errorCode ? ` · ${e.errorCode}` : ''}
               </li>
             ))}
           </ol>
@@ -214,7 +230,7 @@ function JobRow(props: {
       {props.canEdit && ACTIVE.has(job.status) && (
         <CancelRunButton
           runId={job.productionRunId}
-          what="this job's batch"
+          what={t('ja.batch')}
           video={job.kind === 'video_generation'}
         />
       )}

@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { useT } from '@/components/i18n-provider';
 import { toast } from '@/components/toast';
 import { mutate } from '@/lib/api-client';
 
@@ -16,6 +17,7 @@ export function AudioPlan(props: {
   readonly voiceEnabled: boolean;
   readonly canEdit: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,17 +28,15 @@ export function AudioPlan(props: {
     const r = await mutate('PATCH', `/content/${props.contentId}`, { voiceEnabled });
     setBusy(false);
     if (!r.ok) {
-      setError(r.message ?? 'The audio plan could not be saved.');
+      setError(r.message ?? t('ap.failed'));
       return;
     }
-    toast(
-      voiceEnabled ? 'Voice-over is on.' : 'Voice-over is off: no voice-over will be generated.',
-    );
+    toast(voiceEnabled ? t('ap.on') : t('ap.off'));
     router.refresh();
   }
 
   return (
-    <div className="audio-plan" aria-label="Audio plan">
+    <div className="audio-plan" aria-label={t('ap.label')}>
       <label className="switch">
         <input
           type="checkbox"
@@ -46,15 +46,11 @@ export function AudioPlan(props: {
           onChange={(e) => void change(e.target.checked)}
         />
         <span>
-          <b>Voice-over</b>
-          <small className="muted">
-            {props.voiceEnabled
-              ? 'A narrated voice-over is generated for each scene with text.'
-              : 'Off: no voice-over jobs or cost; the video has no narration or captions.'}
-          </small>
+          <b>{t('ap.voice')}</b>
+          <small className="muted">{props.voiceEnabled ? t('ap.onHint') : t('ap.offHint')}</small>
         </span>
       </label>
-      <p className="muted small-text">Music and sound effects are chosen when rendering.</p>
+      <p className="muted small-text">{t('ap.music')}</p>
       {error && (
         <p className="form-error" role="alert">
           {error}

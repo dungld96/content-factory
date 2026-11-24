@@ -14,6 +14,11 @@ export function rememberLocale(locale: Locale): void {
   document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=${String(ONE_YEAR_SECONDS)}; samesite=lax`;
 }
 
+/** Forgets the remembered language ("follow the browser"). */
+export function forgetLocale(): void {
+  document.cookie = `${LOCALE_COOKIE}=; path=/; max-age=0; samesite=lax`;
+}
+
 /**
  * VI / EN switch (redesign R-D6). Signed in, the choice is saved on the user's profile so it
  * follows them to other devices; the page re-renders in the new language without a reload.

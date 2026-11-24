@@ -11,17 +11,19 @@ import type {
   StoryboardSceneDto,
 } from '@acf/contracts';
 
-import { Icon } from '@/components/icon';
 import { AssetPicker } from '@/components/asset-picker';
+import { useLocale, useT } from '@/components/i18n-provider';
+import { Icon } from '@/components/icon';
 import { CancelRunButton } from '@/components/cancel-run';
 import { Modal } from '@/components/modal';
 import { ModelSelect, type ModelOption } from '@/components/model-select';
 import { ResumeRunButton } from '@/components/resume-run';
 import { Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
-import { errorText, fetchJson, mutate } from '@/lib/api-client';
-import { jobErrorText } from '@/lib/format';
+import { errorText, mutate } from '@/lib/api-client';
 import { briefIssueText } from '@/lib/brief-labels';
+import { jobErrorText } from '@/lib/format';
+import { onJobEvent } from '@/lib/live/store';
 
 const TERMINAL = new Set(['succeeded', 'failed', 'canceled']);
 
@@ -39,39 +41,25 @@ function ErrorText({ error }: { readonly error: string | null }) {
   ) : null;
 }
 
-/** Refreshes the server-rendered page while a generation runs (also after a reload). */
-export function AutoRefresh({ active }: { readonly active: boolean }) {
-  const router = useRouter();
-  useEffect(() => {
-    if (!active) return;
-    const timer = setInterval(() => {
-      router.refresh();
-    }, 2000);
-    return () => {
-      clearInterval(timer);
-    };
-  }, [active, router]);
-  return null;
-}
-
 /** Brief check on load (POST, so it runs in the browser with the CSRF token). */
 export function BriefCheck({ contentId }: { readonly contentId: string }) {
+  const t = useT();
   const [result, setResult] = useState<BriefValidationDto | null>(null);
   useEffect(() => {
     void mutate<BriefValidationDto>('POST', `/content/${contentId}/brief/validate`).then((r) => {
       setResult(r.data);
     });
   }, [contentId]);
-  if (!result) return <p className="brief-check">Checking the brief…</p>;
+  if (!result) return <p className="brief-check">{t('pc.checkingBrief')}</p>;
   return (
-    <div className="brief-check" aria-label="Brief check">
+    <div className="brief-check" aria-label={t('pc.briefCheck')}>
       {result.errors.length === 0 ? (
-        <Pill tone="green">Brief ready</Pill>
+        <Pill tone="green">{t('pc.briefReady')}</Pill>
       ) : (
         <ul role="alert">
           {result.errors.map((e) => (
             <li key={e.path}>
-              <Pill tone="red">Error</Pill> {briefIssueText(e)}
+              <Pill tone="red">{t('pc.error')}</Pill> {briefIssueText(e)}
             </li>
           ))}
         </ul>
@@ -83,12 +71,12 @@ export function BriefCheck({ contentId }: { readonly contentId: string }) {
           ))}
         </ul>
       )}
-      {result.flags.length > 0 && <p>Claim terms to verify: {result.flags.join(', ')}</p>}
+      {result.flags.length > 0 && <p>{t('pc.claims', { terms: result.flags.join(', ') })}</p>}
     </div>
   );
 }
 
-/** Starts a generation job and follows it until it ends. */
+/** Starts a generation job and follows it through the live store until it ends (R-D5). */
 export function GenerateButton(props: {
   readonly path: string;
   readonly label: string;
@@ -97,25 +85,22 @@ export function GenerateButton(props: {
   /** Enabled text models (M8.5 Q3); empty → the task route only. */
   readonly models?: readonly ModelOption[];
 }) {
+  const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const [modelKey, setModelKey] = useState('');
   const [job, setJob] = useState<GenerationJobDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const jobId = job?.id;
   useEffect(() => {
-    if (!job || TERMINAL.has(job.status)) return;
-    const timer = setInterval(() => {
-      void fetchJson<GenerationJobDto>(`/generation-jobs/${job.id}`).then((next) => {
-        if (!next) return;
-        setJob(next);
-        if (TERMINAL.has(next.status)) router.refresh();
-      });
-    }, 1500);
-    return () => {
-      clearInterval(timer);
-    };
-  }, [job, router]);
+    if (!jobId) return;
+    return onJobEvent((e) => {
+      if (e.jobId !== jobId) return;
+      setJob((prev) => (prev ? { ...prev, status: e.to, attempt: e.attempt } : prev));
+    });
+  }, [jobId]);
 
   async function start() {
     setBusy(true);
@@ -148,13 +133,13 @@ export function GenerateButton(props: {
         onClick={() => void start()}
         disabled={busy || running}
       >
-        <Icon name="generate" /> {running ? 'Generating…' : props.label}
+        <Icon name="generate" /> {running ? t('pc.generating') : props.label}
       </button>
       {job && (
         <span className="job-line" role="status">
-          Job {job.status}
-          {job.attempt > 1 ? ` (attempt ${String(job.attempt)})` : ''}
-          {job.errorCode ? ` — ${jobErrorText(job.errorCode)}` : ''}
+          {t('pc.job', { status: t(`state.${job.status}`) })}
+          {job.attempt > 1 ? ` ${t('pc.attempt', { count: job.attempt })}` : ''}
+          {job.errorCode ? ` — ${jobErrorText(job.errorCode, locale)}` : ''}
         </span>
       )}
       {job && (job.status === 'failed' || job.status === 'canceled') && (
@@ -163,7 +148,7 @@ export function GenerateButton(props: {
       {running && (
         <CancelRunButton
           runId={job.productionRunId}
-          what={`the ${props.label.toLowerCase()} job`}
+          what={t('pc.theJob', { label: props.label.toLowerCase() })}
         />
       )}
       <ErrorText error={error} />
@@ -177,6 +162,7 @@ export function ReviewButtons(props: {
   readonly id: string;
   readonly label: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -189,7 +175,9 @@ export function ReviewButtons(props: {
       return;
     }
     toast(
-      action === 'approve' ? `The ${props.label} is approved.` : `The ${props.label} is rejected.`,
+      action === 'approve'
+        ? t('pc.approved', { what: props.label })
+        : t('pc.rejected', { what: props.label }),
     );
     router.refresh();
   }
@@ -201,7 +189,7 @@ export function ReviewButtons(props: {
         disabled={busy}
         onClick={() => void review('approve')}
       >
-        <Icon name="check" /> Approve {props.label}
+        <Icon name="check" /> {t('pc.approve', { what: props.label })}
       </button>
       <button
         type="button"
@@ -209,7 +197,7 @@ export function ReviewButtons(props: {
         disabled={busy}
         onClick={() => void review('reject')}
       >
-        <Icon name="reject" /> Reject
+        <Icon name="reject" /> {t('pc.reject')}
       </button>
       <ErrorText error={error} />
     </>
@@ -217,13 +205,14 @@ export function ReviewButtons(props: {
 }
 
 function EditorActions(props: { readonly busy: boolean; readonly onCancel: () => void }) {
+  const t = useT();
   return (
     <div className="form-actions">
       <button type="button" className="btn" onClick={props.onCancel}>
-        Cancel
+        {t('common.cancel')}
       </button>
       <button type="submit" className="btn primary" disabled={props.busy}>
-        {props.busy ? 'Saving…' : 'Save as new version'}
+        {props.busy ? t('common.saving') : t('pc.saveNew')}
       </button>
     </div>
   );
@@ -231,6 +220,7 @@ function EditorActions(props: { readonly busy: boolean; readonly onCancel: () =>
 
 /** Edits the main script fields; saving creates a new version. */
 export function ScriptEditor({ script }: { readonly script: ScriptVersionDto }) {
+  const t = useT();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -259,7 +249,7 @@ export function ScriptEditor({ script }: { readonly script: ScriptVersionDto }) 
       return;
     }
     close();
-    toast('Saved as a new script version.');
+    toast(t('pc.scriptSaved'));
     router.refresh();
   }
 
@@ -272,29 +262,29 @@ export function ScriptEditor({ script }: { readonly script: ScriptVersionDto }) 
           setOpen(true);
         }}
       >
-        <Icon name="edit" /> Edit script
+        <Icon name="edit" /> {t('pc.editScript')}
       </button>
       <Modal
         open={open}
         onClose={close}
-        title={`Edit script v${String(script.version)}`}
-        description="Saving never changes this version: it creates a new one for review."
+        title={t('pc.editScriptTitle', { version: script.version })}
+        description={t('pc.editScriptDesc')}
       >
-        <form className="form" onSubmit={(e) => void save(e)} aria-label="Edit script">
+        <form className="form" onSubmit={(e) => void save(e)} aria-label={t('pc.editScript')}>
           <label className="field">
-            Title
+            {t('pc.title')}
             <input name="title" defaultValue={script.content.title} required maxLength={120} />
           </label>
           <label className="field">
-            Hook
+            {t('pc.hook')}
             <input name="hook" defaultValue={script.content.hook} required maxLength={300} />
           </label>
           <label className="field">
-            Voice-over
+            {t('pc.voiceOver')}
             <textarea name="voiceOver" defaultValue={script.content.voiceOver} required rows={6} />
           </label>
           <label className="field">
-            Call to action
+            {t('pc.cta')}
             <input
               name="callToAction"
               defaultValue={script.content.callToAction}
@@ -316,6 +306,7 @@ export function ScriptEditor({ script }: { readonly script: ScriptVersionDto }) 
 
 /** Edits one scene; saving creates a new storyboard version. */
 export function SceneEditor({ scene }: { readonly scene: StoryboardSceneDto }) {
+  const t = useT();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -345,7 +336,7 @@ export function SceneEditor({ scene }: { readonly scene: StoryboardSceneDto }) {
       return;
     }
     close();
-    toast('Saved as a new storyboard version.');
+    toast(t('pc.boardSaved'));
     router.refresh();
   }
 
@@ -358,29 +349,29 @@ export function SceneEditor({ scene }: { readonly scene: StoryboardSceneDto }) {
           setOpen(true);
         }}
       >
-        Edit scene {scene.sceneNumber}
+        {t('pc.editScene', { number: scene.sceneNumber })}
       </button>
       <Modal
         open={open}
         onClose={close}
-        title={`Edit scene ${String(scene.sceneNumber)}`}
-        description="Saving creates a new storyboard version; the current one stays as it is."
+        title={t('pc.editScene', { number: scene.sceneNumber })}
+        description={t('pc.editSceneDesc')}
       >
         <form
           className="form"
           onSubmit={(e) => void save(e)}
-          aria-label={`Edit scene ${String(scene.sceneNumber)}`}
+          aria-label={t('pc.editScene', { number: scene.sceneNumber })}
         >
           <label className="field">
-            Image prompt
+            {t('pc.imagePrompt')}
             <textarea name="imagePrompt" defaultValue={scene.imagePrompt} required rows={4} />
           </label>
           <label className="field">
-            Voice-over segment
+            {t('pc.voiceSegment')}
             <textarea name="voiceOverSegment" defaultValue={scene.voiceOverSegment} rows={3} />
           </label>
           <label className="field">
-            Duration (seconds)
+            {t('pc.durationSeconds')}
             <input
               name="durationSeconds"
               type="number"
@@ -413,6 +404,7 @@ export function SceneReferencesButton(props: {
   readonly scene: StoryboardSceneDto;
   readonly projectId: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -429,7 +421,7 @@ export function SceneReferencesButton(props: {
       return;
     }
     setError(null);
-    toast('References saved as a new storyboard version.');
+    toast(t('pc.refsSaved'));
     router.refresh();
   }
 
@@ -442,14 +434,14 @@ export function SceneReferencesButton(props: {
           setOpen(true);
         }}
       >
-        References ({current.length})
+        {t('pc.references', { count: current.length })}
       </button>
       {open && (
         <AssetPicker
           projectId={props.projectId}
           open
           multiple
-          title={`References for scene ${String(props.scene.sceneNumber)}`}
+          title={t('pc.refsFor', { number: props.scene.sceneNumber })}
           types={REFERENCE_TYPES}
           selected={current}
           onClose={() => {

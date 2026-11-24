@@ -6,7 +6,9 @@ import { jobError } from './job-errors';
 type Platform = NonNullable<ContentItemDto['targetPlatform']>;
 
 /** Platform names (brand names stay as they are; "Other" is translated). */
-export function platformOptions(t: Translate): { readonly value: Platform; readonly label: string }[] {
+export function platformOptions(
+  t: Translate,
+): { readonly value: Platform; readonly label: string }[] {
   return [
     { value: 'tiktok', label: 'TikTok' },
     { value: 'instagram_reels', label: 'Instagram Reels' },
@@ -20,7 +22,7 @@ export function platformLabel(t: Translate, platform: Platform | null): string {
 }
 
 export function formatLabel(t: Translate, format: ContentItemDto['format']): string {
-  return format === 'short_video' ? t('format.short_video') : format;
+  return t(`format.${format}`);
 }
 
 /** "30s · 9:16 · VI" (prototype specification column). */
