@@ -46,6 +46,7 @@ import { buildSceneRows, nextStep } from '@/lib/scene-board';
 import { AudioPlan } from './audio-plan';
 import { HistoryDrawer } from './history-drawer';
 import { JobActivity } from './job-activity';
+import { KeyframeReview, type SceneBrief } from './keyframe-review';
 import { LiveRefresh } from './live-refresh';
 import { NextStepBar } from './next-step-bar';
 import {
@@ -780,27 +781,57 @@ export default async function ContentPage({
     </section>
   );
 
+  const sceneBriefs: Record<string, SceneBrief> = Object.fromEntries(
+    (board && imageData && board.id === imageData.storyboardVersionId ? board.scenes : []).map(
+      (sc) => [
+        sc.id,
+        {
+          title:
+            sc.visualDescription.length > 90
+              ? `${sc.visualDescription.slice(0, 88)}…`
+              : sc.visualDescription,
+          detail: `${String(sc.durationSeconds)} s · ${sc.shotType} · ${sc.cameraMovement}`,
+        },
+      ],
+    ),
+  );
   const scenesPanel = (
-    <ScenesTab
-      contentId={content.id}
-      canEdit={canEdit}
-      images={imageData}
-      videos={videoData}
-      voiceovers={voiceData}
-      locked={!images || !videos || !voiceovers}
-      loadFailed={
-        Boolean(images && !imageData) ||
-        Boolean(videos && !videoData) ||
-        Boolean(voiceovers && !voiceData)
-      }
-      generating={content.status === 'generating_assets'}
-      imageModels={optionsOf(imageModels)}
-      videoModels={optionsOf(videoModels)}
-      profiles={profileList}
-      initialStage={initialStage}
-      voiceEnabled={content.voiceEnabled}
-      confirmThresholdUsd={threshold}
-    />
+    <>
+      {canEdit && imageData && imageData.scenes.length > 0 && (
+        <KeyframeReview
+          images={imageData}
+          scenes={sceneBriefs}
+          subtitle={`${content.title} · ${projectName}`}
+          clips={{ done: clipCount, total: sceneCount }}
+          voice={{
+            done: voiceCount,
+            total: voiceScenes.length,
+            enabled: content.voiceEnabled,
+          }}
+          confirmThresholdUsd={threshold}
+        />
+      )}
+      <ScenesTab
+        contentId={content.id}
+        canEdit={canEdit}
+        images={imageData}
+        videos={videoData}
+        voiceovers={voiceData}
+        locked={!images || !videos || !voiceovers}
+        loadFailed={
+          Boolean(images && !imageData) ||
+          Boolean(videos && !videoData) ||
+          Boolean(voiceovers && !voiceData)
+        }
+        generating={content.status === 'generating_assets'}
+        imageModels={optionsOf(imageModels)}
+        videoModels={optionsOf(videoModels)}
+        profiles={profileList}
+        initialStage={initialStage}
+        voiceEnabled={content.voiceEnabled}
+        confirmThresholdUsd={threshold}
+      />
+    </>
   );
 
   const renderPanel = (

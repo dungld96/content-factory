@@ -54,7 +54,7 @@ const GATES: Partial<
     gate: 3,
     reason: 'todo.reason.scenes',
     action: 'todo.action.reviewScenes',
-    hash: '#scenes',
+    hash: '#scenes?focus=1',
     priority: 22,
   },
   quality_review: {

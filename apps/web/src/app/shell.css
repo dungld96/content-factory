@@ -2153,3 +2153,170 @@ body.focus-open {
     overflow-x: auto;
   }
 }
+
+/* --- Keyframe review, gate 3 (canvas "Gate 3 · Pick keyframes") ------------------------------ */
+.ds .kf-bar {
+  margin-bottom: 16px;
+}
+
+.ds .kf-review:focus {
+  outline: none;
+}
+
+.ds .kf-progress {
+  gap: 8px;
+  min-width: 200px;
+}
+
+.ds .kf-progress .meter {
+  flex: 1;
+}
+
+.ds .kf-strip {
+  display: flex;
+  gap: 10px;
+  padding: 14px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  align-items: center;
+}
+
+.ds .sc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  flex: none;
+  cursor: pointer;
+}
+
+.ds .sc.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.ds .sc-thumb {
+  width: 22px;
+  height: 39px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--sunken);
+}
+
+.ds .sc-thumb.empty {
+  display: block;
+  border: 1.5px dashed var(--line-strong);
+}
+
+.ds .sc .ok-ic {
+  color: var(--success);
+}
+
+.ds .kf-strip .row {
+  gap: 4px;
+  flex: none;
+}
+
+.ds .kf-main {
+  flex: 999 1 560px;
+  min-width: 0;
+  gap: 16px;
+}
+
+.ds .kf-scene-head {
+  gap: 10px;
+}
+
+.ds .kf-scene-head h2 {
+  font-size: 22px;
+}
+
+.ds .kf-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 220px));
+  gap: 16px;
+}
+
+.ds .cand {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ds .cand-img {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 9 / 16;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--sunken);
+  color: var(--info);
+}
+
+.ds .cand-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ds .cand-img.sel {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ds .cand-img.empty {
+  border: 1.5px dashed var(--line-strong);
+}
+
+.ds .cand-img .knum {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+}
+
+.ds .cand-img .tag {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+
+.ds .kf-actions {
+  gap: 10px;
+}
+
+.ds .kf-actions .btn kbd {
+  margin-left: auto;
+}
+
+.ds .kf-gate {
+  gap: 8px;
+}
+
+.ds .check-ic.muted {
+  color: var(--muted);
+}
