@@ -1610,3 +1610,508 @@ body.focus-open {
   gap: 16px;
   margin-top: 16px;
 }
+
+/* --- Library (canvas "Library") -------------------------------------------------------------- */
+.ds .lib-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.ds .lib-rail {
+  flex: 1 1 200px;
+  max-width: 220px;
+  padding: 10px;
+  gap: 2px;
+}
+
+.ds .lib-rail .eyebrow {
+  padding: 6px 10px;
+}
+
+.ds .lib-rail .divider {
+  margin: 8px 0;
+}
+
+.ds .coll {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  text-decoration: none;
+}
+
+.ds .coll:hover {
+  background: var(--surface-2);
+}
+
+.ds .coll.on {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.ds .coll .n {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ds .coll-hint {
+  padding: 4px 10px;
+}
+
+.ds .lib-rail form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 10px;
+}
+
+.ds .lib-rail form .field {
+  font-size: 12px;
+}
+
+.ds .lib-main {
+  flex: 999 1 640px;
+  min-width: 0;
+  gap: 14px;
+}
+
+.ds .lib-head {
+  gap: 10px;
+}
+
+.ds .lib-head h1 {
+  font: 800 24px/32px var(--font-display);
+}
+
+.ds .lib-head a.chip {
+  text-decoration: none;
+}
+
+.ds .lib-filters .content-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+}
+
+.ds .lib-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.ds .agrid,
+.ds .alist {
+  flex: 999 1 420px;
+  min-width: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ds .agrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 14px;
+}
+
+.ds .alist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ds .asset {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.ds .alist .asset {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.ds .asset-visual {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 3 / 4;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+}
+
+.ds .alist .asset-visual {
+  width: 56px;
+  flex: none;
+}
+
+.ds .asset-visual img,
+.ds .asset-visual video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ds .asset.sel .asset-visual {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ds .asset .tp {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  background: rgb(10 14 22 / 72%);
+  color: #fff;
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ds .asset-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  align-items: flex-start;
+}
+
+.ds .asset-meta b {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.ds .lib-aside {
+  flex: 1 1 300px;
+  min-width: 0;
+  position: sticky;
+  top: 80px;
+}
+
+.ds .lib-detail-body {
+  gap: 14px;
+}
+
+.ds .lib-preview {
+  width: 100%;
+  max-width: 240px;
+  align-self: center;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+
+.ds .lib-detail .kv {
+  margin: 0;
+  grid-template-columns: auto 1fr;
+}
+
+.ds .lib-detail .kv dd {
+  text-align: left;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+@media (width <= 900px) {
+  .ds .lib-rail {
+    max-width: none;
+  }
+
+  .ds .lib-aside {
+    position: static;
+  }
+}
+
+/* --- Operations (canvas "Operations") -------------------------------------------------------- */
+.ds .health {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 14px;
+}
+
+.ds .hcell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+}
+
+.ds .hcell .big {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 700 17px var(--font-display);
+}
+
+.ds .hcell.ok .big .icon {
+  color: var(--success);
+}
+
+.ds .hcell.warn .big .icon {
+  color: var(--info);
+}
+
+.ds .hcell.bad {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+
+.ds .hcell.bad .big {
+  color: var(--danger);
+}
+
+.ds .ops-bottom {
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.ds .ops-queues {
+  flex: 2 1 520px;
+  min-width: 0;
+}
+
+.ds .ops-24h {
+  flex: 1 1 300px;
+  min-width: 0;
+}
+
+.ds .ops-24h .card-body {
+  gap: 12px;
+}
+
+.ds .ops-budgets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 6px;
+}
+
+.ds .load-cell {
+  width: 160px;
+}
+
+.ds .bad-num {
+  color: var(--danger);
+}
+
+/* --- Costs (canvas "Costs & budgets") -------------------------------------------------------- */
+.ds .kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  gap: 14px;
+}
+
+.ds .kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+}
+
+.ds .kpi .v {
+  font: 800 26px/32px var(--font-display);
+}
+
+.ds .kpi.unknown {
+  border-color: var(--review);
+}
+
+.ds .kpi.unknown .v {
+  color: var(--review);
+}
+
+.ds .costs-mid {
+  gap: 20px;
+  align-items: stretch;
+}
+
+.ds .costs-chart {
+  flex: 3 1 560px;
+  min-width: 0;
+}
+
+.ds .costs-chart .card-body {
+  gap: 14px;
+}
+
+.ds .plot {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  height: 220px;
+  padding: 8px 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.ds .bar-col {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  height: 100%;
+  padding-bottom: 6px;
+}
+
+.ds .bar {
+  width: min(44px, 70%);
+  border-radius: 4px 4px 0 0;
+  background: color-mix(in srgb, var(--accent) 55%, var(--surface));
+}
+
+.ds .bar.now {
+  background: var(--accent);
+}
+
+.ds .bar-v {
+  color: var(--text-2);
+}
+
+.ds .costs-budgets {
+  flex: 2 1 380px;
+  min-width: 0;
+}
+
+.ds .costs-budgets .card-body {
+  gap: 18px;
+}
+
+.ds .budget-row {
+  gap: 6px;
+}
+
+.ds .budget-row .sw {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.ds .warn-text {
+  color: var(--review);
+}
+
+.ds .legend {
+  gap: 14px;
+}
+
+.ds .legend .row {
+  gap: 6px;
+}
+
+.ds .legend .key {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--text-2);
+}
+
+.ds .legend .key.reserved {
+  background: var(--review);
+}
+
+/* --- Settings (canvas "Settings › Models & prices") ----------------------------------------- */
+.ds .settings-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.ds .settings-nav {
+  flex: 1 1 200px;
+  max-width: 220px;
+  gap: 2px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  position: sticky;
+  top: 80px;
+}
+
+.ds .settings-nav .eyebrow {
+  padding: 14px 10px 6px;
+}
+
+.ds .settings-nav .eyebrow:first-child {
+  padding-top: 6px;
+}
+
+.ds .snav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  text-decoration: none;
+}
+
+.ds .snav:hover {
+  background: var(--surface);
+}
+
+.ds .snav.on {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+  box-shadow: var(--shadow-1);
+}
+
+.ds .settings-main {
+  flex: 999 1 600px;
+  min-width: 0;
+  gap: 16px;
+}
+
+@media (width <= 760px) {
+  .ds .settings-nav {
+    display: none;
+  }
+}
+
+.ds .settings-section-select {
+  display: none;
+}
+
+@media (width <= 760px) {
+  .ds .settings-section-select {
+    display: flex;
+    flex: 1 1 100%;
+  }
+}

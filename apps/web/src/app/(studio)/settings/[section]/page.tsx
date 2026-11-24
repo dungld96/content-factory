@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { Fragment } from 'react';
 
 import type {
   AiModelDto,
@@ -16,8 +17,10 @@ import type {
 } from '@acf/contracts';
 
 import { ProjectSettingsForm } from '@/components/forms';
+import { Icon, type IconName } from '@/components/icon';
 import { LocalTime } from '@/components/local-time';
 import { QueryFilters } from '@/components/query-filters';
+import { PageCrumbs } from '@/components/shell/page-crumbs';
 import { Pill } from '@/components/status-pill';
 import { VoiceProfilesCard } from '@/components/voice-profiles';
 import { routeReadiness } from '@/lib/ai-settings-view';
@@ -61,6 +64,27 @@ const OPERATOR_ONLY: ReadonlySet<Section> = new Set(['activity']);
 
 const label = (s: Section): MessageKey => `set.s.${s}`;
 
+/** Menu groups of the canvas: Workspace, AI, System. */
+const GROUPS: readonly {
+  readonly id: 'workspace' | 'ai' | 'system';
+  readonly sections: readonly Section[];
+}[] = [
+  { id: 'workspace', sections: ['general', 'profile', 'budgets', 'voices'] },
+  { id: 'ai', sections: ['ai', 'models'] },
+  { id: 'system', sections: ['activity', 'system'] },
+];
+
+const SECTION_ICON: Readonly<Record<Section, IconName>> = {
+  general: 'folder',
+  profile: 'language',
+  budgets: 'costs',
+  voices: 'mic',
+  ai: 'generate',
+  models: 'dollar',
+  activity: 'history',
+  system: 'operations',
+};
+
 function hrefFor(section: Section, projectId?: string): string {
   return projectId ? `/settings/${section}?project=${projectId}` : `/settings/${section}`;
 }
@@ -87,26 +111,31 @@ export default async function SettingsSectionPage(props: {
 
   return (
     <>
-      <div className="page-heading">
-        <div>
-          <div className="eyebrow">{t('set.eyebrow')}</div>
-          <h1>{t('set.title')}</h1>
-          <p>{t('set.lead')}</p>
-        </div>
-      </div>
-
+      <PageCrumbs
+        items={[{ label: t('set.title'), href: '/settings' }, { label: t(label(section)) }]}
+      />
       <div className="settings-layout">
-        <nav className="settings-nav" aria-label={t('set.sections')}>
-          {visible.map((s) => (
-            <Link
-              key={s}
-              href={hrefFor(s, selected?.id)}
-              aria-current={s === section ? 'page' : undefined}
-            >
-              <b>{t(label(s))}</b>
-              <span>{t(`set.s.${s}.hint`)}</span>
-            </Link>
-          ))}
+        <nav className="col settings-nav" aria-label={t('set.sections')}>
+          {GROUPS.map((group) => {
+            const items = group.sections.filter((s) => visible.includes(s));
+            if (items.length === 0) return null;
+            return (
+              <Fragment key={group.id}>
+                <span className="eyebrow">{t(`set.group.${group.id}`)}</span>
+                {items.map((s) => (
+                  <Link
+                    key={s}
+                    className={s === section ? 'snav on' : 'snav'}
+                    href={hrefFor(s, selected?.id)}
+                    aria-current={s === section ? 'page' : undefined}
+                  >
+                    <Icon name={SECTION_ICON[s]} />
+                    {t(label(s))}
+                  </Link>
+                ))}
+              </Fragment>
+            );
+          })}
         </nav>
 
         <SectionSelect
@@ -118,11 +147,13 @@ export default async function SettingsSectionPage(props: {
           }))}
         />
 
-        <div className="settings-main">
-          <header className="settings-section-head">
-            <h2>{t(label(section))}</h2>
-            <p>{t(`set.s.${section}.text`)}</p>
-          </header>
+        <div className="col settings-main">
+          <div className="page-head">
+            <div>
+              <h1>{t(label(section))}</h1>
+              <p>{t(`set.s.${section}.text`)}</p>
+            </div>
+          </div>
           {section === 'general' && (
             <GeneralSection
               t={t}

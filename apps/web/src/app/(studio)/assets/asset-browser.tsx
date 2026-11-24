@@ -389,145 +389,156 @@ function LineagePanel({
   const locale = useLocale();
   const provenance = useProvenance(asset);
   return (
-    <section className="card card-pad" style={{ marginTop: 18 }} aria-label={t('library.lineage')}>
-      <div className="section-head">
-        <div>
-          <h2>{t('library.lineage')}</h2>
-          <p>{t('library.lineageHint')}</p>
-        </div>
+    <section className="card lib-detail" aria-label={t('library.lineage')}>
+      <div className="card-head">
+        <h3>{nameOf(asset)}</h3>
+        <span className="spacer" />
         <ApprovalPill status={asset.approvalStatus} />
       </div>
-      <MediaPreview asset={asset} />
-      {asset.canEdit && (
-        <AssetActions
-          key={asset.id}
-          asset={asset}
-          collections={collections.filter((c) => c.projectId === asset.projectId)}
-          activeCollectionId={activeCollectionId}
-        />
-      )}
-      <div className="brief-box">
-        <span className="box-label">{t('library.selected', { name: nameOf(asset) })}</span>
-        <dl className="lineage">
-          <dt>{t('library.dt.project')}</dt>
-          <dd>{asset.projectName}</dd>
-          <dt>{t('library.dt.source')}</dt>
-          <dd>
-            {t(SOURCE_LABEL[asset.sourceType])} {asset.assetType}
-            {asset.sourceNote ? ` · ${asset.sourceNote}` : ''}
-          </dd>
-          <dt>{t('library.dt.file')}</dt>
-          <dd>
-            {mediaTypeLabel(asset.mimeType, locale)} · {formatBytes(asset.sizeBytes)}
-            {asset.width && asset.height ? ` · ${String(asset.width)}×${String(asset.height)}` : ''}
-          </dd>
-          <dt>{t('library.dt.checksum')}</dt>
-          <dd>
-            <code>sha256:{asset.checksumSha256.slice(0, 12)}…</code>
-          </dd>
-          <dt>{t('library.dt.created')}</dt>
-          <dd>
-            <LocalTime iso={asset.createdAt} />
-          </dd>
-          {asset.contentItemId && (
-            <>
-              <dt>{t('library.dt.content')}</dt>
-              <dd>
-                <Link href={`/content/${asset.contentItemId}`}>{t('library.openWorkspace')}</Link>
-                {asset.storyboardSceneId && ` ${t('library.sceneCandidate')}`}
-              </dd>
-            </>
-          )}
-          {provenance === 'loading' ? (
-            <>
-              <dt>{t('library.dt.provenance')}</dt>
-              <dd aria-busy="true">{t('common.loading')}</dd>
-            </>
-          ) : (
-            provenance && (
+      <div className="card-body col lib-detail-body">
+        {isImage(asset) ? (
+          // eslint-disable-next-line @next/next/no-img-element -- authenticated API stream
+          <img className="lib-preview" src={assetContentUrl(asset.id)} alt={nameOf(asset)} />
+        ) : (
+          <MediaPreview asset={asset} />
+        )}
+        {asset.canEdit && (
+          <AssetActions
+            key={asset.id}
+            asset={asset}
+            collections={collections.filter((c) => c.projectId === asset.projectId)}
+            activeCollectionId={activeCollectionId}
+          />
+        )}
+        <div className="col">
+          <span className="eyebrow">{t('library.lineage')}</span>
+          <dl className="kv lineage">
+            <dt>{t('library.dt.project')}</dt>
+            <dd>{asset.projectName}</dd>
+            <dt>{t('library.dt.source')}</dt>
+            <dd>
+              {t(SOURCE_LABEL[asset.sourceType])} {asset.assetType}
+              {asset.sourceNote ? ` · ${asset.sourceNote}` : ''}
+            </dd>
+            <dt>{t('library.dt.file')}</dt>
+            <dd>
+              {mediaTypeLabel(asset.mimeType, locale)} · {formatBytes(asset.sizeBytes)}
+              {asset.width && asset.height
+                ? ` · ${String(asset.width)}×${String(asset.height)}`
+                : ''}
+            </dd>
+            <dt>{t('library.dt.checksum')}</dt>
+            <dd>
+              <code>sha256:{asset.checksumSha256.slice(0, 12)}…</code>
+            </dd>
+            <dt>{t('library.dt.created')}</dt>
+            <dd>
+              <LocalTime iso={asset.createdAt} />
+            </dd>
+            {asset.contentItemId && (
               <>
-                {provenance.job && (
-                  <>
-                    <dt>{t('library.dt.job')}</dt>
-                    <dd>
-                      {provenance.job.kind} · {provenance.job.status} ·{' '}
-                      <code>{provenance.job.id.slice(0, 8)}…</code>
-                    </dd>
-                    <dt>{t('library.dt.model')}</dt>
-                    <dd>{provenance.job.modelKey}</dd>
-                    <dt>{t('library.dt.template')}</dt>
-                    <dd>{provenance.job.promptTemplateId}</dd>
-                    <dt>{t('library.dt.cost')}</dt>
-                    <dd>
-                      {formatUsd(
-                        addUsd(provenance.job.cost.reportedUsd, provenance.job.cost.estimatedUsd),
-                      )}
-                      {provenance.job.cost.unknownCalls > 0
-                        ? ` ${t('library.unknownCalls', { count: provenance.job.cost.unknownCalls })}`
-                        : ''}
-                    </dd>
-                  </>
-                )}
-                <dt>{t('library.dt.madeFrom')}</dt>
+                <dt>{t('library.dt.content')}</dt>
                 <dd>
-                  {provenance.inputs.length === 0
-                    ? t('library.noInputs')
-                    : provenance.inputs.map((i, n) => (
-                        <span key={i.asset.id}>
-                          {n > 0 ? ', ' : ''}
-                          {nameOf(i.asset)} ({t(ROLE_LABEL(i.role))})
-                        </span>
-                      ))}
-                </dd>
-                <dt>{t('library.dt.usedIn')}</dt>
-                <dd>
-                  {provenance.production.length === 0
-                    ? t('library.notUsed')
-                    : provenance.production.map((u, n) => (
-                        <span
-                          key={`${u.kind}-${u.assetId ?? u.storyboardSceneId ?? u.renderId ?? String(n)}`}
-                        >
-                          {n > 0 ? ', ' : ''}
-                          {u.contentItemId ? (
-                            <Link href={`/content/${u.contentItemId}`}>{usageText(t, u)}</Link>
-                          ) : (
-                            usageText(t, u)
-                          )}
-                        </span>
-                      ))}
-                </dd>
-                <dt>{t('library.dt.derived')}</dt>
-                <dd>
-                  {provenance.ancestors.length === 0
-                    ? t('library.original')
-                    : provenance.ancestors.map(nameOf).join(' ← ')}
-                </dd>
-                <dt>{t('library.dt.brand')}</dt>
-                <dd>
-                  {provenance.usages.length === 0
-                    ? t('library.noBrand')
-                    : provenance.usages
-                        .map((u) => `${u.kind} v${String(u.version)} (${u.reference}, ${u.status})`)
-                        .join(', ')}
+                  <Link href={`/content/${asset.contentItemId}`}>{t('library.openWorkspace')}</Link>
+                  {asset.storyboardSceneId && ` ${t('library.sceneCandidate')}`}
                 </dd>
               </>
-            )
-          )}
-        </dl>
+            )}
+            {provenance === 'loading' ? (
+              <>
+                <dt>{t('library.dt.provenance')}</dt>
+                <dd aria-busy="true">{t('common.loading')}</dd>
+              </>
+            ) : (
+              provenance && (
+                <>
+                  {provenance.job && (
+                    <>
+                      <dt>{t('library.dt.job')}</dt>
+                      <dd>
+                        {provenance.job.kind} · {provenance.job.status} ·{' '}
+                        <code>{provenance.job.id.slice(0, 8)}…</code>
+                      </dd>
+                      <dt>{t('library.dt.model')}</dt>
+                      <dd>{provenance.job.modelKey}</dd>
+                      <dt>{t('library.dt.template')}</dt>
+                      <dd>{provenance.job.promptTemplateId}</dd>
+                      <dt>{t('library.dt.cost')}</dt>
+                      <dd>
+                        {formatUsd(
+                          addUsd(provenance.job.cost.reportedUsd, provenance.job.cost.estimatedUsd),
+                        )}
+                        {provenance.job.cost.unknownCalls > 0
+                          ? ` ${t('library.unknownCalls', { count: provenance.job.cost.unknownCalls })}`
+                          : ''}
+                      </dd>
+                    </>
+                  )}
+                  <dt>{t('library.dt.madeFrom')}</dt>
+                  <dd>
+                    {provenance.inputs.length === 0
+                      ? t('library.noInputs')
+                      : provenance.inputs.map((i, n) => (
+                          <span key={i.asset.id}>
+                            {n > 0 ? ', ' : ''}
+                            {nameOf(i.asset)} ({t(ROLE_LABEL(i.role))})
+                          </span>
+                        ))}
+                  </dd>
+                  <dt>{t('library.dt.usedIn')}</dt>
+                  <dd>
+                    {provenance.production.length === 0
+                      ? t('library.notUsed')
+                      : provenance.production.map((u, n) => (
+                          <span
+                            key={`${u.kind}-${u.assetId ?? u.storyboardSceneId ?? u.renderId ?? String(n)}`}
+                          >
+                            {n > 0 ? ', ' : ''}
+                            {u.contentItemId ? (
+                              <Link href={`/content/${u.contentItemId}`}>{usageText(t, u)}</Link>
+                            ) : (
+                              usageText(t, u)
+                            )}
+                          </span>
+                        ))}
+                  </dd>
+                  <dt>{t('library.dt.derived')}</dt>
+                  <dd>
+                    {provenance.ancestors.length === 0
+                      ? t('library.original')
+                      : provenance.ancestors.map(nameOf).join(' ← ')}
+                  </dd>
+                  <dt>{t('library.dt.brand')}</dt>
+                  <dd>
+                    {provenance.usages.length === 0
+                      ? t('library.noBrand')
+                      : provenance.usages
+                          .map(
+                            (u) => `${u.kind} v${String(u.version)} (${u.reference}, ${u.status})`,
+                          )
+                          .join(', ')}
+                  </dd>
+                </>
+              )
+            )}
+          </dl>
+        </div>
       </div>
     </section>
   );
 }
 
-/** Asset grid; selecting an asset shows its lineage. */
+/** Asset grid (or list) with the selected asset's details and lineage beside it. */
 export function AssetBrowser({
   assets,
   collections = [],
   activeCollectionId = null,
+  view = 'grid',
 }: {
   readonly assets: readonly AssetRow[];
   readonly collections?: readonly CollectionDto[];
   readonly activeCollectionId?: string | null;
+  readonly view?: 'grid' | 'list';
 }) {
   const t = useT();
   const locale = useLocale();
@@ -537,21 +548,34 @@ export function AssetBrowser({
   if (assets.length === 0) {
     return (
       <section className="card empty">
-        <h2>{t('library.noAssets')}</h2>
-        {t('library.noAssetsHint')}
+        <span className="em-ic">
+          <Icon name="assets" size={22} />
+        </span>
+        <h3>{t('library.noAssets')}</h3>
+        <p className="muted t-13">{t('library.noAssetsHint')}</p>
       </section>
     );
   }
+  const kindTag = (a: AssetDto) =>
+    a.mimeType.startsWith('video/')
+      ? t('library.tag.clip')
+      : a.mimeType.startsWith('audio/')
+        ? t('library.tag.audio')
+        : a.assetType === 'reference'
+          ? t('library.tag.photo')
+          : isImage(a)
+            ? t('library.tag.image')
+            : t('library.tag.file');
   return (
-    <>
-      <ul className="asset-grid" aria-label={t('library.gridLabel')}>
+    <div className="lib-content">
+      <ul className={view === 'list' ? 'alist' : 'agrid'} aria-label={t('library.gridLabel')}>
         {assets.map((asset) => {
           const name = nameOf(asset);
           return (
             <li key={asset.id}>
               <button
                 type="button"
-                className="asset"
+                className={asset.id === selectedId ? 'asset sel' : 'asset'}
                 aria-pressed={asset.id === selectedId}
                 onClick={() => {
                   setSelectedId(asset.id === selectedId ? null : asset.id);
@@ -585,32 +609,42 @@ export function AssetBrowser({
                       {asset.durationMs ? ` · ${formatSeconds(asset.durationMs)}` : ''}
                     </span>
                   )}
+                  <span className="tp" aria-hidden="true">
+                    {kindTag(asset)}
+                  </span>
                 </span>
                 <span className="asset-meta">
                   <b>{name}</b>
-                  <span>
+                  <span className="t-12 muted">
                     {asset.assetType === 'reference'
                       ? t('library.reference')
                       : t(SOURCE_LABEL[asset.sourceType])}{' '}
                     · {formatBytes(asset.sizeBytes)} · {asset.projectName}
                   </span>
+                  <ApprovalPill status={asset.approvalStatus} />
                 </span>
               </button>
             </li>
           );
         })}
       </ul>
-      {selected ? (
-        <LineagePanel
-          asset={selected}
-          collections={collections}
-          activeCollectionId={activeCollectionId}
-        />
-      ) : (
-        <p className="muted small-text" style={{ marginTop: 14 }}>
-          {t('library.selectHint')} <Pill tone="green">{t('library.traceability')}</Pill>
-        </p>
-      )}
-    </>
+      <aside className="lib-aside">
+        {selected ? (
+          <LineagePanel
+            asset={selected}
+            collections={collections}
+            activeCollectionId={activeCollectionId}
+          />
+        ) : (
+          <section className="card pad empty">
+            <span className="em-ic">
+              <Icon name="eye" size={22} />
+            </span>
+            <p className="t-13 muted">{t('library.selectHint')}</p>
+            <Pill tone="green">{t('library.traceability')}</Pill>
+          </section>
+        )}
+      </aside>
+    </div>
   );
 }

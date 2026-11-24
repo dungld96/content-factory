@@ -71,7 +71,8 @@ test('owner: To-do, search, Productions list and board, masters and asset lineag
   await expect(lineage).toContainText('Uploaded reference');
   await expect(lineage).toContainText('Nothing (original asset)');
 
-  await page.getByLabel('Asset type').selectOption({ label: 'Generated images' });
+  const rail = page.getByRole('navigation', { name: 'Collections' });
+  await rail.getByRole('link', { name: 'Generated images' }).click();
   await expect(page).toHaveURL(/type=image/);
   await expect(assets.getByRole('button', { name: /desk-reference\.png/ })).toHaveCount(0);
   // A scene image (the render's thumbnail is also a generated image, made by the renderer).
@@ -84,7 +85,7 @@ test('owner: To-do, search, Productions list and board, masters and asset lineag
   await expect(lineage).toContainText('Open content workspace');
 
   // Renders (M6) are listed with their lineage: the local renderer, no provider cost.
-  await page.getByLabel('Asset type').selectOption({ label: 'Renders' });
+  await rail.getByRole('link', { name: 'Renders' }).click();
   // Wait for the filtered list before clicking (the previous list is still on screen briefly).
   const render = assets.getByRole('button', { name: /^\d+ s\s*Render\b|^Render\b/ });
   await expect(render).toHaveCount(1);
@@ -150,7 +151,7 @@ test('owner: switches the interface to Vietnamese and back (R-D6)', async ({ pag
   await page.goto('/settings/profile');
   await page.getByRole('radio', { name: 'Theo trình duyệt' }).check();
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Profile & language' })).toBeVisible();
 });
 
 test('phone (390 px): bottom bar and no horizontal scroll, in both languages (R7)', async ({

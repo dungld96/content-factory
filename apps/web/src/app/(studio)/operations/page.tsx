@@ -6,6 +6,7 @@ import { Icon, type IconName } from '@/components/icon';
 import { JobErrorLine } from '@/components/job-error';
 import { LocalTime } from '@/components/local-time';
 import { ResumeRunButton } from '@/components/resume-run';
+import { PageCrumbs } from '@/components/shell/page-crumbs';
 import { Pill } from '@/components/status-pill';
 import { loadOpsSummary } from '@/lib/ops-summary';
 import { jobKindLabel } from '@/lib/format';
@@ -32,32 +33,7 @@ const QUEUE_LABEL: Readonly<Record<string, MessageKey>> = {
   'generation-dlq': 'queue.dlq',
 };
 
-const CIRCUIT_TONE = { closed: 'green', half_open: 'amber', open: 'red' } as const;
-
 type Health = 'ok' | 'warn' | 'bad';
-
-function HealthTile(props: {
-  readonly icon: IconName;
-  readonly label: string;
-  readonly value: string;
-  readonly health: Health;
-}) {
-  return (
-    <div className={`health-tile ${props.health}`}>
-      <span className="health-icon" aria-hidden="true">
-        <Icon
-          name={props.health === 'ok' ? 'check' : props.health === 'warn' ? 'warning' : 'failed'}
-        />
-      </span>
-      <span>
-        <b>
-          <Icon name={props.icon} size={14} /> {props.label}
-        </b>
-        <span>{props.value}</span>
-      </span>
-    </div>
-  );
-}
 
 /**
  * Operations (M7 design §8, B8; redesign R6): a health strip first, then failures with Resume,
@@ -84,23 +60,29 @@ export default async function OperationsPage() {
   const queuesBusy = s.queues === null || queuedNow > 0 || s.queues.some((q) => q.failed > 0);
   const warnBudgets = s.budgets.filter((b) => b.warning).length;
 
+  const attention = s.failedJobs.length + s.heldReservations.length;
+  const kinds = [...new Set(s.jobs24h.map((j) => j.kind))];
+  const count24 = (status: string) =>
+    s.jobs24h.filter((j) => j.status === status).reduce((n, j) => n + j.count, 0);
+  const maxLoad = Math.max(1, ...(s.queues ?? []).map((q) => q.waiting + q.active + q.delayed));
+
   return (
-    <div className="stack">
-      <div className="page-heading">
+    <>
+      <PageCrumbs items={[{ label: t('ops.title') }]} />
+      <div className="page-head">
         <div>
-          <div className="eyebrow">{t('ops.eyebrow')}</div>
           <h1>{t('ops.title')}</h1>
           <p>
-            {t('ops.lead')} <LocalTime iso={s.generatedAt} />.
+            {t('ops.leadShort')} · <LocalTime iso={s.generatedAt} />
           </p>
         </div>
       </div>
 
-      <section className="health-strip" aria-label={t('ops.health')}>
-        <HealthTile
-          icon="operations"
+      <section className="health" aria-label={t('ops.health')}>
+        <HealthCell
           label={t('ops.health.queues')}
           health={s.queues === null ? 'bad' : queuedNow > 0 ? 'warn' : 'ok'}
+          icon="operations"
           value={
             s.queues === null
               ? t('ops.health.queuesDown')
@@ -108,76 +90,75 @@ export default async function OperationsPage() {
                 ? t('ops.health.queuesBusy', { count: queuedNow })
                 : t('ops.health.queuesOk')
           }
+          note={t('ops.health.queuesNote', {
+            count: (s.queues ?? []).reduce((n, q) => n + q.failed, 0),
+          })}
         />
-        <HealthTile
-          icon="generate"
+        <HealthCell
           label={t('ops.health.providers')}
           health={openCircuits.length > 0 ? 'bad' : 'ok'}
+          icon="generate"
           value={
             openCircuits.length > 0
               ? t('ops.health.providersDown', { count: openCircuits.length })
               : t('ops.health.providersOk')
           }
+          note={
+            s.circuits.length > 0
+              ? s.circuits.map((c) => `${c.providerName}: ${t(`circuit.${c.state}`)}`).join(' · ')
+              : t('ops.noProviderFailures')
+          }
         />
-        <HealthTile
-          icon="costs"
+        <HealthCell
           label={t('ops.health.budgets')}
           health={warnBudgets > 0 ? 'warn' : 'ok'}
+          icon="costs"
           value={
             warnBudgets > 0
               ? t('ops.health.budgetsWarn', { count: warnBudgets })
               : t('ops.health.budgetsOk')
           }
+          note={t('ops.health.heldNote', { count: s.heldReservations.length })}
         />
-        <HealthTile
-          icon="warning"
+        <HealthCell
           label={t('ops.health.failures')}
           health={failed24h > 0 ? 'bad' : 'ok'}
-          value={String(failed24h)}
+          icon="warning"
+          value={t('ops.health.failuresValue', { count: failed24h })}
+          note={t('ops.health.failuresNote', { count: done24h })}
         />
       </section>
 
       {openCircuits.length > 0 && (
-        <p className="notice" role="status">
+        <p className="callout review t-13" role="status">
           {t('ops.circuitNotice', {
             providers: openCircuits.map((c) => c.providerName).join(', '),
           })}
         </p>
       )}
 
-      <section className="stats" aria-label={t('ops.last24')}>
-        <div className="card stat">
-          <div className="stat-top">{t('ops.succeeded')}</div>
-          <div className="stat-value">{done24h}</div>
-          <div className="stat-foot">{t('ops.succeededFoot')}</div>
+      <section className="card" aria-labelledby="ops-attention">
+        <div className="card-head">
+          <h3 id="ops-attention">{t('ops.attention')}</h3>
+          <span className={attention > 0 ? 'badge danger' : 'badge neutral'}>{attention}</span>
+          <span className="spacer" />
+          <span className="t-13 muted">{t('ops.attentionOrder')}</span>
         </div>
-        <div className="card stat">
-          <div className="stat-top">{t('ops.failed')}</div>
-          <div className="stat-value">{failed24h}</div>
-          <div className="stat-foot">{t('ops.failedFoot')}</div>
-        </div>
-        <div className="card stat">
-          <div className="stat-top">{t('ops.held')}</div>
-          <div className="stat-value">{s.heldReservations.length}</div>
-          <div className="stat-foot">{t('ops.heldFoot')}</div>
-        </div>
-      </section>
-
-      <section className="card card-pad">
-        <h2>{t('ops.failedJobs')}</h2>
-        {s.failedJobs.length === 0 ? (
-          <p className="muted small-text">{t('ops.noFailed')}</p>
+        {attention === 0 ? (
+          <div className="card-body">
+            <p className="muted t-13">{t('ops.noFailed')}</p>
+          </div>
         ) : (
-          <div className="table-wrap">
+          <div className="table-box">
             <table className="table" aria-label={t('ops.failedJobs')}>
               <thead>
                 <tr>
-                  <th scope="col">{t('ops.colContent')}</th>
-                  <th scope="col">{t('ops.colStage')}</th>
-                  <th scope="col">{t('ops.colError')}</th>
-                  <th scope="col">{t('ops.colFailed')}</th>
-                  <th scope="col">
-                    <span className="sr-only">{t('ops.colActions')}</span>
+                  <th scope="col">{t('ops.colProblem')}</th>
+                  <th scope="col">{t('ops.colWhere')}</th>
+                  <th scope="col">{t('ops.colWhy')}</th>
+                  <th scope="col">{t('ops.colWhen')}</th>
+                  <th scope="col" className="r">
+                    {t('ops.colRecovery')}
                   </th>
                 </tr>
               </thead>
@@ -185,23 +166,64 @@ export default async function OperationsPage() {
                 {s.failedJobs.map((j) => (
                   <tr key={j.jobId}>
                     <td>
-                      <Link href={`/content/${j.contentItemId}`}>{j.contentTitle}</Link>
-                      <br />
-                      <span className="muted small-text">{j.projectName}</span>
+                      <span className="badge danger">
+                        <Icon name="warning" size={13} />
+                        {t('ops.problem.failed')}
+                      </span>
                     </td>
-                    <td>{jobKindLabel(t, j.kind)}</td>
                     <td>
+                      <Link href={`/content/${j.contentItemId}`}>
+                        <b>{j.contentTitle}</b>
+                      </Link>
+                      <div className="t-12 muted">
+                        {jobKindLabel(t, j.kind)} · {j.projectName} ·{' '}
+                        {t('ops.attempts', { count: j.attempt })}
+                      </div>
+                    </td>
+                    <td className="t-13">
                       {j.errorCode ? (
                         <JobErrorLine code={j.errorCode} message={j.errorMessage} />
                       ) : (
                         '—'
                       )}
                     </td>
-                    <td>
+                    <td className="t-13 muted">
                       <LocalTime iso={j.failedAt} />
                     </td>
-                    <td>
+                    <td className="r">
                       <ResumeRunButton runId={j.productionRunId} />
+                    </td>
+                  </tr>
+                ))}
+                {s.heldReservations.map((r) => (
+                  <tr key={r.id}>
+                    <td>
+                      <span className="badge review">
+                        <Icon name="lock" size={13} />
+                        {t('ops.problem.held')}
+                      </span>
+                    </td>
+                    <td>
+                      <Link href={`/content/${r.contentItemId}`}>
+                        <b>{r.contentTitle}</b>
+                      </Link>
+                      <div className="t-12 muted">
+                        {jobKindLabel(t, r.jobKind)} · {r.projectName}
+                      </div>
+                    </td>
+                    <td className="t-13">
+                      {t('ops.heldWhy', { amount: formatUsd(r.amountUsd) })}
+                      {r.jobErrorCode ? ` · ${r.jobErrorCode}` : ''}
+                    </td>
+                    <td className="t-13 muted">
+                      <LocalTime iso={r.createdAt} />
+                    </td>
+                    <td className="r">
+                      {r.canResolve ? (
+                        <ReservationActions reservationId={r.id} label={formatUsd(r.amountUsd)} />
+                      ) : (
+                        <span className="t-12 muted">{t('ops.ownerResolves')}</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -211,72 +233,68 @@ export default async function OperationsPage() {
         )}
       </section>
 
-      <section className="card card-pad">
-        <h2>{t('ops.heldTitle')}</h2>
-        <p className="muted small-text">{t('ops.heldHint')}</p>
-        {s.heldReservations.length === 0 ? (
-          <p className="muted small-text">{t('ops.nothingToResolve')}</p>
-        ) : (
-          <ul className="plain-list" aria-label={t('ops.heldTitle')}>
-            {s.heldReservations.map((r) => (
-              <li key={r.id}>
-                <b>{formatUsd(r.amountUsd)}</b> ·{' '}
-                {t('ops.heldOf', { kind: jobKindLabel(t, r.jobKind) })}{' '}
-                <Link href={`/content/${r.contentItemId}`}>{r.contentTitle}</Link> ({r.projectName})
-                {r.jobErrorCode ? ` · ${r.jobErrorCode}` : ''} · <LocalTime iso={r.createdAt} />{' '}
-                {r.canResolve ? (
-                  <ReservationActions reservationId={r.id} label={formatUsd(r.amountUsd)} />
-                ) : (
-                  <span className="muted small-text">{t('ops.ownerResolves')}</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="card card-pad">
-        <details open={queuesBusy}>
-          <summary>
-            <h2 className="inline-heading">{t('ops.queues')}</h2>{' '}
-            <span className="muted small-text">
+      <div className="row wrap ops-bottom">
+        <section className="card ops-queues" aria-labelledby="ops-queues">
+          <div className="card-head">
+            <h3 id="ops-queues">{t('ops.queues')}</h3>
+            <span className="spacer" />
+            <span className="t-13 muted">
               {s.queues === null
                 ? t('ops.queuesDown')
                 : queuesBusy
                   ? t('ops.queuesBusy', { count: queuedNow })
                   : t('ops.queuesIdle')}
             </span>
-          </summary>
+          </div>
           {s.queues === null ? (
-            <p className="notice error" role="alert">
-              {t('ops.queuesDownBody')}
-            </p>
+            <div className="card-body">
+              <p className="callout danger t-13" role="alert">
+                {t('ops.queuesDownBody')}
+              </p>
+            </div>
           ) : (
-            <div className="table-wrap">
+            <div className="table-box">
               <table className="table" aria-label={t('ops.queues')}>
                 <thead>
                   <tr>
                     <th scope="col">{t('ops.colQueue')}</th>
-                    <th scope="col">{t('ops.colWaiting')}</th>
-                    <th scope="col">{t('ops.colActive')}</th>
-                    <th scope="col">{t('ops.colDelayed')}</th>
-                    <th scope="col">{t('ops.colDead')}</th>
+                    <th scope="col" className="r">
+                      {t('ops.colWaiting')}
+                    </th>
+                    <th scope="col" className="r">
+                      {t('ops.colActive')}
+                    </th>
+                    <th scope="col" className="r">
+                      {t('ops.colDelayed')}
+                    </th>
+                    <th scope="col" className="r">
+                      {t('ops.colDead')}
+                    </th>
+                    <th scope="col">{t('ops.colLoad')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {s.queues.map((q) => {
                     const label = QUEUE_LABEL[q.queue];
+                    const load = q.waiting + q.active + q.delayed;
                     return (
                       <tr key={q.queue}>
                         <td>
-                          {label ? t(label) : q.queue}
-                          <br />
-                          <code className="muted small-text">{q.queue}</code>
+                          <b>{label ? t(label) : q.queue}</b>
+                          <div className="mono muted">{q.queue}</div>
                         </td>
-                        <td>{q.waiting}</td>
-                        <td>{q.active}</td>
-                        <td>{q.delayed}</td>
-                        <td>{q.failed}</td>
+                        <td className="r num">{q.waiting}</td>
+                        <td className="r num">{q.active}</td>
+                        <td className="r num">{q.delayed}</td>
+                        <td className={q.failed > 0 ? 'r num bad-num' : 'r num'}>{q.failed}</td>
+                        <td className="load-cell">
+                          <span className="meter thin">
+                            <i
+                              className="run"
+                              style={{ width: `${String(Math.round((load / maxLoad) * 100))}%` }}
+                            />
+                          </span>
+                        </td>
                       </tr>
                     );
                   })}
@@ -284,52 +302,84 @@ export default async function OperationsPage() {
               </table>
             </div>
           )}
-        </details>
-      </section>
-      <section className="card card-pad">
-        <h2>{t('ops.providers')}</h2>
-        {s.circuits.length === 0 ? (
-          <p className="muted small-text">{t('ops.noProviderFailures')}</p>
-        ) : (
-          <ul className="plain-list" aria-label={t('ops.circuitsLabel')}>
-            {s.circuits.map((c) => (
-              <li key={c.providerKey}>
-                <Pill tone={CIRCUIT_TONE[c.state]}>{t(`circuit.${c.state}`)}</Pill> {c.providerName}
-                {c.consecutiveFailures > 0
-                  ? ` ${t('ops.failuresInRow', { count: c.consecutiveFailures })}`
-                  : ''}
-                {c.lastErrorCode ? ` ${t('ops.lastError', { code: c.lastErrorCode })}` : ''}
-                {c.retryAt && c.state === 'open' && (
-                  <>
-                    {' '}
-                    {t('ops.retriesAfter')} <LocalTime iso={c.retryAt} />
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        </section>
+        <section className="card ops-24h" aria-label={t('ops.last24')}>
+          <div className="card-head">
+            <h3>{t('ops.last24')}</h3>
+          </div>
+          <div className="card-body col">
+            <div className="row">
+              <span className="t-13">{t('ops.succeeded')}</span>
+              <span className="spacer" />
+              <b className="num">{done24h}</b>
+            </div>
+            <div className="row">
+              <span className="t-13">{t('ops.failed')}</span>
+              <span className="spacer" />
+              <b className={failed24h > 0 ? 'num bad-num' : 'num'}>{failed24h}</b>
+            </div>
+            <div className="row">
+              <span className="t-13">{t('ops.running24')}</span>
+              <span className="spacer" />
+              <b className="num">{count24('running') + count24('queued')}</b>
+            </div>
+            <div className="row">
+              <span className="t-13">{t('ops.held')}</span>
+              <span className="spacer" />
+              <b className="num">{s.heldReservations.length}</b>
+            </div>
+            <p className="t-12 muted">
+              {t('ops.kinds', { kinds: kinds.map((k) => jobKindLabel(t, k)).join(', ') || '—' })}
+            </p>
+            <div className="divider" />
+            <h4 className="t-13">{t('ops.budgets')}</h4>
+            {s.budgets.length === 0 ? (
+              <p className="muted t-13">{t('ops.noMembership')}</p>
+            ) : (
+              <ul className="col plain-list ops-budgets" aria-label={t('ops.budgetsLabel')}>
+                {s.budgets.map((b) => (
+                  <li key={b.projectId} className="row t-13">
+                    <Link href={`/projects/${b.projectId}/costs`}>{b.projectName}</Link>
+                    <span className="spacer" />
+                    <span className="num">
+                      {t('ops.budgetLine', {
+                        used: formatUsd(b.usedUsd),
+                        limit: formatUsd(b.limitUsd),
+                      })}
+                    </span>
+                    {b.warning && <Pill tone="amber">{t('costs.warning80')}</Pill>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Link className="t-13" href="/costs">
+              {t('ops.openCosts')}
+            </Link>
+          </div>
+        </section>
+      </div>
+    </>
+  );
+}
 
-      <section className="card card-pad">
-        <h2>{t('ops.budgets')}</h2>
-        {s.budgets.length === 0 ? (
-          <p className="muted small-text">{t('ops.noMembership')}</p>
-        ) : (
-          <ul className="plain-list" aria-label={t('ops.budgetsLabel')}>
-            {s.budgets.map((b) => (
-              <li key={b.projectId}>
-                <Link href={`/projects/${b.projectId}/costs`}>{b.projectName}</Link>:{' '}
-                {t('ops.budgetLine', { used: formatUsd(b.usedUsd), limit: formatUsd(b.limitUsd) })}
-                {b.heldUsd !== '0'
-                  ? ` ${t('ops.heldAmount', { amount: formatUsd(b.heldUsd) })}`
-                  : ''}{' '}
-                {b.warning && <Pill tone="amber">{t('costs.warning80')}</Pill>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+function HealthCell(props: {
+  readonly label: string;
+  readonly value: string;
+  readonly note: string;
+  readonly icon: IconName;
+  readonly health: Health;
+}) {
+  return (
+    <div className={`card hcell ${props.health}`}>
+      <span className="eyebrow">{props.label}</span>
+      <span className="big">
+        <Icon
+          name={props.health === 'ok' ? 'check' : props.health === 'warn' ? props.icon : 'warning'}
+          size={20}
+        />
+        {props.value}
+      </span>
+      <span className="t-13 muted">{props.note}</span>
     </div>
   );
 }

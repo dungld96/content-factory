@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import type { AssetDto, CollectionListDto, Page, ProjectDto } from '@acf/contracts';
 
 import { UploadAssetButton } from '@/components/forms';
+import { Icon, type IconName } from '@/components/icon';
 import { QueryFilters } from '@/components/query-filters';
+import { PageCrumbs } from '@/components/shell/page-crumbs';
 import { apiGet } from '@/lib/api-server';
 import { param, type SearchParams } from '@/lib/content-filters';
 import { getT } from '@/lib/i18n/server';
@@ -76,83 +79,159 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const writable = writableProjects(projects.data.items);
 
+  const href = (changes: Record<string, string | null>) => {
+    const next = new URLSearchParams();
+    for (const name of ['q', 'type', 'review', 'project', 'collection', 'view']) {
+      const value = param(query, name);
+      if (value) next.set(name, value);
+    }
+    for (const [name, value] of Object.entries(changes)) {
+      if (value === null) next.delete(name);
+      else next.set(name, value);
+    }
+    return next.size > 0 ? `/assets?${next.toString()}` : '/assets';
+  };
+  const activeCollection = collectionList.find((c) => c.id === collectionId);
+  const heading = activeCollection
+    ? activeCollection.name
+    : type
+      ? t(`library.type.${type}`)
+      : t('library.allAssets');
+  const list = param(query, 'view') === 'list';
+
   return (
     <>
-      <div className="page-heading">
-        <div>
-          <div className="eyebrow">{t('library.eyebrow')}</div>
-          <h1>{t('library.title')}</h1>
-          <p>{t('library.lead')}</p>
-        </div>
-        <div className="actions">
-          <UploadAssetButton
-            projects={writable}
-            projectId={writable.some((p) => p.id === projectId) ? projectId : undefined}
-          />
-        </div>
-      </div>
+      <PageCrumbs
+        items={[
+          { label: t('library.title'), href: '/assets' },
+          ...(selectedProject ? [{ label: selectedProject.name }] : []),
+        ]}
+      />
+      <div className="lib-layout">
+        <nav className="card col lib-rail" aria-label={t('library.collections')}>
+          <span className="eyebrow">{t('library.collections')}</span>
+          <Link
+            className={!collectionId && !type ? 'coll on' : 'coll'}
+            href={href({ collection: null, type: null })}
+            aria-current={!collectionId && !type ? 'true' : undefined}
+          >
+            <Icon name="assets" />
+            {t('library.allAssets')}
+          </Link>
+          {selectedProject ? (
+            collectionList.map((c) => (
+              <Link
+                key={c.id}
+                className={c.id === collectionId ? 'coll on' : 'coll'}
+                href={href({ collection: c.id, type: null })}
+                aria-current={c.id === collectionId ? 'true' : undefined}
+              >
+                <Icon name="folder" />
+                {c.name}
+                <span className="n">{c.itemCount}</span>
+              </Link>
+            ))
+          ) : (
+            <p className="t-12 muted coll-hint">{t('library.pickProject')}</p>
+          )}
+          {selectedProject && writable.some((p) => p.id === selectedProject.id) && (
+            <NewCollectionForm projectId={selectedProject.id} />
+          )}
+          <div className="divider" />
+          <span className="eyebrow">{t('library.generated')}</span>
+          {TYPES.map((value) => (
+            <Link
+              key={value}
+              className={type === value ? 'coll on' : 'coll'}
+              href={href({ type: value, collection: null })}
+              aria-current={type === value ? 'true' : undefined}
+            >
+              <Icon name={TYPE_ICON[value]} />
+              {t(`library.type.${value}`)}
+            </Link>
+          ))}
+        </nav>
 
-      <QueryFilters
-        search={{ name: 'q', placeholder: t('library.search') }}
-        selects={[
-          {
-            name: 'type',
-            label: t('library.type'),
-            allLabel: t('library.allTypes'),
-            options: TYPES.map((value) => ({ value, label: t(`library.type.${value}`) })),
-          },
-          {
-            name: 'review',
-            label: t('library.review'),
-            allLabel: t('library.anyReview'),
-            options: [{ value: 'pending', label: t('library.needsReview') }],
-          },
-          {
-            name: 'project',
-            label: t('filter.project'),
-            allLabel: t('filter.allProjects'),
-            // Two projects can share a name: add the slug then (UX review F13).
-            options: projects.data.items.map((p, _, all) => ({
-              value: p.id,
-              label:
-                all.filter((x) => x.name === p.name).length > 1 ? `${p.name} (${p.slug})` : p.name,
-            })),
-          },
-          ...(selectedProject
-            ? [
+        <section className="col lib-main" aria-label={heading}>
+          <div className="row wrap lib-head">
+            <h1>{heading}</h1>
+            <span className="badge neutral">{assets.length}</span>
+            <span className="spacer" />
+            <Link className={!review ? 'chip on' : 'chip'} href={href({ review: null })}>
+              {t('library.chip.all')}
+            </Link>
+            <Link className={review ? 'chip on' : 'chip'} href={href({ review: 'pending' })}>
+              {t('library.needsReview')}
+            </Link>
+            <nav className="seg" aria-label={t('library.views')}>
+              <Link
+                href={href({ view: null })}
+                className={list ? undefined : 'on'}
+                aria-label={t('library.viewGrid')}
+              >
+                <Icon name="board" />
+              </Link>
+              <Link
+                href={href({ view: 'list' })}
+                className={list ? 'on' : undefined}
+                aria-label={t('library.viewList')}
+              >
+                <Icon name="list" />
+              </Link>
+            </nav>
+            <UploadAssetButton
+              projects={writable}
+              projectId={writable.some((p) => p.id === projectId) ? projectId : undefined}
+            />
+          </div>
+          <div className="row wrap lib-filters">
+            <QueryFilters
+              search={{ name: 'q', placeholder: t('library.search') }}
+              selects={[
                 {
-                  name: 'collection',
-                  label: t('picker.collection'),
-                  allLabel: t('picker.allAssets'),
-                  options: collectionList.map((c) => ({
-                    value: c.id,
-                    label: `${c.name} (${String(c.itemCount)})`,
+                  name: 'project',
+                  label: t('filter.project'),
+                  allLabel: t('filter.allProjects'),
+                  // Two projects can share a name: add the slug then (UX review F13).
+                  options: projects.data.items.map((p, _, all) => ({
+                    value: p.id,
+                    label:
+                      all.filter((x) => x.name === p.name).length > 1
+                        ? `${p.name} (${p.slug})`
+                        : p.name,
                   })),
                 },
-              ]
-            : []),
-        ]}
-        count={t('library.count', { count: assets.length })}
-      />
-
-      {truncated && (
-        <p className="muted small-text" role="status">
-          {t('library.truncated', { size: PAGE_SIZE })}
-        </p>
-      )}
-      {failed && (
-        <p className="notice error" role="alert">
-          {t('library.partial')}
-        </p>
-      )}
-      {selectedProject && writable.some((p) => p.id === selectedProject.id) && (
-        <NewCollectionForm projectId={selectedProject.id} />
-      )}
-      <AssetBrowser
-        assets={assets}
-        collections={collectionList}
-        activeCollectionId={collectionId ?? null}
-      />
+              ]}
+              count={t('library.count', { count: assets.length })}
+            />
+          </div>
+          {truncated && (
+            <p className="t-12 muted" role="status">
+              {t('library.truncated', { size: PAGE_SIZE })}
+            </p>
+          )}
+          {failed && (
+            <p className="callout danger t-13" role="alert">
+              {t('library.partial')}
+            </p>
+          )}
+          <AssetBrowser
+            assets={assets}
+            collections={collectionList}
+            activeCollectionId={collectionId ?? null}
+            view={list ? 'list' : 'grid'}
+          />
+        </section>
+      </div>
     </>
   );
 }
+
+const TYPE_ICON: Readonly<Record<(typeof TYPES)[number], IconName>> = {
+  reference: 'image',
+  image: 'generate',
+  video: 'film',
+  audio: 'mic',
+  render: 'render',
+  subtitle: 'edit',
+};

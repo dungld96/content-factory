@@ -77,11 +77,8 @@ test('operations page: queues, failures, providers and budgets', async ({ page }
     .getByRole('link', { name: 'Operations' })
     .click();
   await expect(page.getByRole('heading', { level: 1, name: 'Operations' })).toBeVisible();
-  // The queue table is folded away while every queue is idle (e.g. right after Redis starts).
-  const queues = page.getByRole('table', { name: 'Queues' });
-  if (!(await queues.isVisible())) await page.locator('summary', { hasText: 'Queues' }).click();
-  await expect(queues).toContainText('generation-dlq');
-  await expect(page.getByRole('heading', { name: 'Held reservations' })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Queues' })).toContainText('generation-dlq');
+  await expect(page.getByRole('heading', { name: 'Needs attention' })).toBeVisible();
   await expect(page.getByRole('list', { name: 'Project budgets' })).toContainText('Demo Studio');
 });
 
@@ -89,8 +86,10 @@ test('workspace costs: every project against its monthly limit', async ({ page }
   await signIn(page, OWNER, passwordOf('OWNER'));
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Costs' }).click();
   await expect(page).toHaveURL(/\/costs$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Costs' })).toBeVisible();
-  await expect(page.getByRole('table', { name: 'By project' })).toContainText('Demo Studio');
+  await expect(page.getByRole('heading', { level: 1, name: /^Costs/ })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Budgets this month' })).toContainText(
+    'Demo Studio',
+  );
 });
 
 test('owner: cost-confirmation threshold per project, workspace default for operators (R-D4)', async ({
