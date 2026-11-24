@@ -293,7 +293,7 @@ test('editor: render → QC → approve (gate 5) → export the package', async 
   await card.getByRole('button', { name: 'Export package' }).click();
   await expect(page.getByLabel('Content status')).toHaveText('Exported');
 
-  const downloads = card.getByRole('list', { name: 'Package downloads' });
+  const downloads = card.getByRole('table', { name: 'Package downloads' });
   for (const name of [
     'video.mp4',
     'captions.srt',

@@ -1444,3 +1444,169 @@ body.focus-open {
 .ds .scene-board > :not(.section-head, .board-filters) {
   flex: 1 1 100%;
 }
+
+/* --- Render & export (canvas "Render") ------------------------------------------------------- */
+.ds .render-layout {
+  gap: 16px;
+}
+
+.ds .render-blockers {
+  list-style: none;
+  margin: 0;
+  gap: 4px;
+}
+
+.ds .render-top {
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.ds .render-settings {
+  flex: 1 1 340px;
+  min-width: 0;
+  gap: 14px;
+}
+
+.ds .render-review {
+  flex: 2 1 620px;
+  min-width: 0;
+}
+
+.ds .step-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ds .step-h h3 {
+  font-size: 16px;
+}
+
+.ds .render-step-2 {
+  margin-top: 8px;
+}
+
+.ds .step-n {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--sunken);
+  color: var(--muted);
+  flex: none;
+}
+
+.ds .step-n.done {
+  background: var(--success);
+  color: #fff;
+}
+
+.ds .step-n.cur {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.ds .layer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  cursor: default;
+}
+
+.ds .layer-name {
+  width: 84px;
+}
+
+.ds .layer select.input,
+.ds .layer input.input {
+  flex: 1 1 140px;
+  height: 32px;
+}
+
+.ds .render-settings .audio-section,
+.ds .render-settings details {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+}
+
+.ds .render-card {
+  overflow: hidden;
+}
+
+.ds .render-body {
+  gap: 20px;
+  padding: 20px;
+  align-items: flex-start;
+}
+
+.ds .render-player-col {
+  gap: 10px;
+  width: 240px;
+  flex: none;
+}
+
+.ds .render-player {
+  width: 240px;
+  aspect-ratio: 9 / 16;
+  border-radius: 14px;
+  background: #0d1118;
+  object-fit: contain;
+}
+
+.ds .render-checks {
+  gap: 14px;
+  flex: 1 1 300px;
+  min-width: 0;
+}
+
+.ds .render-qc {
+  gap: 8px;
+}
+
+.ds .render-qc .plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 6px;
+}
+
+.ds .qc {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  align-items: flex-start;
+}
+
+.ds .render-decision {
+  gap: 10px;
+}
+
+.ds .render-export {
+  border-top: 1px solid var(--line);
+}
+
+.ds .render-export .card-head {
+  border-bottom: 0;
+}
+
+.ds .file-cell {
+  gap: 0;
+}
+
+.ds .earlier-renders summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.ds .earlier-renders > .col {
+  gap: 16px;
+  margin-top: 16px;
+}

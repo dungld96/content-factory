@@ -804,7 +804,7 @@ export default async function ContentPage({
   );
 
   const renderPanel = (
-    <section className="card work-card">
+    <section>
       {!plan ? (
         <p className="notice error" role="alert">
           {t('ws.renderPlanError')}

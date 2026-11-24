@@ -19,7 +19,7 @@ import { Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { mutate } from '@/lib/api-client';
 import { assetContentUrl } from '@/lib/asset-url';
-import { formatSeconds, jobErrorText } from '@/lib/format';
+import { formatBytes, formatSeconds, jobErrorText } from '@/lib/format';
 import type { MessageKey, Translate } from '@/lib/i18n';
 import { formatUsd } from '@/lib/money';
 import { audioRequest, DEFAULT_AUDIO, VOICE_BLOCKERS, type AudioState } from '@/lib/render-audio';
@@ -122,145 +122,176 @@ export function RenderPanel(props: {
     }
   }
 
+  const [latest, ...older] = renders;
   return (
-    <div aria-label={t('rp.controls')}>
-      <div className="section-head">
-        <div>
-          <h2>{t('rp.title')}</h2>
-          <p>{t('rp.hint')}</p>
-        </div>
-        <span className={ready ? 'status green' : 'status gray'} aria-label={t('rp.readiness')}>
-          {plan.renderInProgress
-            ? t('rp.rendering')
-            : ready
-              ? t('rp.ready', { scenes: plan.scenes.length, seconds: plan.totalSeconds })
-              : t('rp.toFix', { count: blockers.length })}
-        </span>
-      </div>
-
+    <div className="col render-layout" aria-label={t('rp.controls')}>
       {blockers.length > 0 && (
-        <ul className="plain-list" aria-label={t('rp.blockers')}>
+        <ul className="callout danger col render-blockers" aria-label={t('rp.blockers')}>
           {blockers.map((b) => (
-            <li key={`${b.code}-${String(b.sceneNumber)}`} className="form-error">
+            <li key={`${b.code}-${String(b.sceneNumber)}`}>
               {b.message}{' '}
-              <a href={`#${BLOCKER_TAB[b.code]}`} className="small-text">
+              <a href={`#${BLOCKER_TAB[b.code]}`} className="t-13">
                 {t('rp.fix')}
               </a>
             </li>
           ))}
         </ul>
       )}
-      {plan.upscaledFrom && (
-        <p className="muted small-text">{t('rp.upscaled', { from: plan.upscaledFrom })}</p>
-      )}
-
-      {canEdit && (
-        <h3 className="render-step">
-          <span aria-hidden="true">1</span> {t('rp.settings')}
-        </h3>
-      )}
-      {canEdit && (
-        <div className="image-toolbar">
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={burnIn}
-              onChange={(e) => {
-                setBurnIn(e.target.checked);
-              }}
-            />
-            {t('rp.burnIn')}
-          </label>
-          <label className="field">
-            {t('rp.music')}
-            <select
-              value={musicId}
-              onChange={(e) => {
-                setMusicId(e.target.value);
-              }}
+      <div className="row wrap render-top">
+        <section className="card pad col render-settings" aria-label={t('rp.settings')}>
+          <div className="step-h">
+            <span className={canEdit ? 'step-n' : 'step-n done'}>
+              {canEdit ? '1' : <Icon name="check" size={12} />}
+            </span>
+            <h3>
+              {canEdit ? '1 · ' : ''}
+              {t('rp.settings')}
+            </h3>
+          </div>
+          {canEdit ? (
+            <>
+              <label className="layer">
+                <input
+                  type="checkbox"
+                  checked={burnIn}
+                  onChange={(e) => {
+                    setBurnIn(e.target.checked);
+                  }}
+                />
+                <b className="t-13">{t('rp.burnIn')}</b>
+              </label>
+              <label className="layer">
+                <Icon name="music" />
+                <b className="t-13 layer-name">{t('rp.music')}</b>
+                <select
+                  className="input"
+                  value={musicId}
+                  onChange={(e) => {
+                    setMusicId(e.target.value);
+                  }}
+                >
+                  <option value="">{t('rp.noMusic')}</option>
+                  {plan.musicOptions.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.originalFilename ?? m.label ?? m.id.slice(0, 8)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {musicId && (
+                <label className="layer">
+                  <b className="t-13 layer-name">{t('rp.musicLevel')}</b>
+                  <input
+                    className="input"
+                    type="number"
+                    min={-40}
+                    max={0}
+                    step={1}
+                    value={volume}
+                    onChange={(e) => {
+                      setVolume(Number(e.target.value));
+                    }}
+                  />
+                </label>
+              )}
+              {plan.scenes.length > 0 && (
+                <RenderAudioSection
+                  plan={plan}
+                  state={audio}
+                  hasMusic={musicId !== ''}
+                  onChange={setAudio}
+                  voiceLocked={!contentVoice}
+                />
+              )}
+              {plan.musicOptions.length === 0 && <p className="t-12 muted">{t('rp.musicHint')}</p>}
+            </>
+          ) : (
+            <p className="t-13 muted">{t('rp.readOnly')}</p>
+          )}
+          <div className="step-h render-step-2">
+            <span className="step-n">2</span>
+            <h3>2 · {t('rp.render')}</h3>
+            <span className="spacer" />
+            <span
+              className={ready ? 'badge success' : 'badge neutral'}
+              aria-label={t('rp.readiness')}
             >
-              <option value="">{t('rp.noMusic')}</option>
-              {plan.musicOptions.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.originalFilename ?? m.label ?? m.id.slice(0, 8)}
-                </option>
-              ))}
-            </select>
-          </label>
-          {musicId && (
-            <label className="field">
-              {t('rp.musicLevel')}
-              <input
-                type="number"
-                min={-40}
-                max={0}
-                step={1}
-                value={volume}
-                onChange={(e) => {
-                  setVolume(Number(e.target.value));
-                }}
-              />
-            </label>
+              {plan.renderInProgress
+                ? t('rp.rendering')
+                : ready
+                  ? t('rp.ready', { scenes: plan.scenes.length, seconds: plan.totalSeconds })
+                  : t('rp.toFix', { count: blockers.length })}
+            </span>
+          </div>
+          {plan.upscaledFrom && (
+            <p className="t-12 muted">{t('rp.upscaled', { from: plan.upscaledFrom })}</p>
+          )}
+          {canEdit && (
+            <div className="row wrap">
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy || !ready}
+                onClick={() => void render()}
+              >
+                <Icon name="render" /> {t('rp.renderVideo')}
+              </button>
+              <span className="t-12 muted">{t('rp.free')}</span>
+            </div>
+          )}
+          {error && (
+            <p className="err-text" role="alert">
+              {error}
+            </p>
+          )}
+        </section>
+        <div className="col render-review">
+          {latest ? (
+            <RenderCard
+              render={latest}
+              index={renders.length}
+              cost={props.cost}
+              canEdit={canEdit}
+              busy={busy}
+              onApprove={(note) =>
+                void act(`/renders/${latest.id}/approve`, note ? { note } : {}, t('rp.approved'))
+              }
+              onReject={(note) =>
+                void act(`/renders/${latest.id}/reject`, { note }, t('rp.rejected'))
+              }
+              onExport={() => void act(`/renders/${latest.id}/export`, undefined, t('rp.exported'))}
+            />
+          ) : (
+            <section className="card pad empty">
+              <span className="em-ic">
+                <Icon name="render" size={22} />
+              </span>
+              <p className="muted t-13">{t('rp.none')}</p>
+            </section>
           )}
         </div>
-      )}
-      {canEdit && plan.scenes.length > 0 && (
-        <RenderAudioSection
-          plan={plan}
-          state={audio}
-          hasMusic={musicId !== ''}
-          onChange={setAudio}
-          voiceLocked={!contentVoice}
-        />
-      )}
-      {canEdit && plan.musicOptions.length === 0 && (
-        <p className="muted small-text">{t('rp.musicHint')}</p>
-      )}
-      {canEdit && (
-        <>
-          <h3 className="render-step">
-            <span aria-hidden="true">2</span> {t('rp.render')}
-          </h3>
-          <div className="render-action">
-            <button
-              type="button"
-              className="btn primary"
-              disabled={busy || !ready}
-              onClick={() => void render()}
-            >
-              <Icon name="render" /> {t('rp.renderVideo')}
-            </button>
-            <span className="muted small-text">{t('rp.free')}</span>
+      </div>
+      {older.length > 0 && (
+        <details className="card pad earlier-renders">
+          <summary>{t('rp.earlier', { count: older.length })}</summary>
+          <div className="col">
+            {older.map((r, i) => (
+              <RenderCard
+                key={r.id}
+                render={r}
+                index={renders.length - 1 - i}
+                cost={null}
+                canEdit={canEdit}
+                busy={busy}
+                onApprove={(note) =>
+                  void act(`/renders/${r.id}/approve`, note ? { note } : {}, t('rp.approved'))
+                }
+                onReject={(note) => void act(`/renders/${r.id}/reject`, { note }, t('rp.rejected'))}
+                onExport={() => void act(`/renders/${r.id}/export`, undefined, t('rp.exported'))}
+              />
+            ))}
           </div>
-        </>
-      )}
-      {error && (
-        <p className="form-error" role="alert">
-          {error}
-        </p>
-      )}
-
-      <h3 className="render-step">
-        <span aria-hidden="true">{canEdit ? '3' : '1'}</span> {t('rp.review')}
-      </h3>
-      {renders.length === 0 ? (
-        <div className="empty">{t('rp.none')}</div>
-      ) : (
-        renders.map((r, i) => (
-          <RenderCard
-            key={r.id}
-            render={r}
-            index={renders.length - i}
-            cost={i === 0 ? props.cost : null}
-            canEdit={canEdit}
-            busy={busy}
-            onApprove={(note) =>
-              void act(`/renders/${r.id}/approve`, note ? { note } : {}, t('rp.approved'))
-            }
-            onReject={(note) => void act(`/renders/${r.id}/reject`, { note }, t('rp.rejected'))}
-            onExport={() => void act(`/renders/${r.id}/export`, undefined, t('rp.exported'))}
-          />
-        ))
+        </details>
       )}
     </div>
   );
@@ -304,36 +335,100 @@ function RenderCard(props: {
       document.getElementById(`render-note-${r.id}`)?.focus();
     }
   }
+  const exported = Boolean(r.exportedAt);
+  const short = (sha: string) => `sha256 ${sha.slice(0, 4)}…${sha.slice(-4)}`;
+  const packageFiles: readonly {
+    readonly name: string;
+    readonly label: MessageKey;
+    readonly href: string;
+    readonly details: string;
+    readonly checksum: string | null;
+    readonly size: string | null;
+  }[] = [
+    ...(r.video
+      ? [
+          {
+            name: 'video.mp4',
+            label: 'rp.file.video' as const,
+            href: assetContentUrl(r.video.id),
+            details: `${String(r.video.width ?? '?')}×${String(r.video.height ?? '?')} · H.264 · AAC${
+              r.durationMs ? ` · ${formatSeconds(r.durationMs)}` : ''
+            }`,
+            checksum: short(r.video.checksumSha256),
+            size: formatBytes(r.video.sizeBytes),
+          },
+        ]
+      : []),
+    ...(r.subtitles
+      ? [
+          {
+            name: 'captions.srt',
+            label: 'rp.file.subtitles' as const,
+            href: assetContentUrl(r.subtitles.id),
+            details: r.burnInCaptions ? t('rp.captionsBurned') : t('rp.captionsSrt'),
+            checksum: short(r.subtitles.checksumSha256),
+            size: formatBytes(r.subtitles.sizeBytes),
+          },
+        ]
+      : []),
+    ...(r.thumbnail
+      ? [
+          {
+            name: 'thumbnail.jpg',
+            label: 'rp.file.thumbnail' as const,
+            href: assetContentUrl(r.thumbnail.id),
+            details: `${String(r.thumbnail.width ?? '?')}×${String(r.thumbnail.height ?? '?')}`,
+            checksum: short(r.thumbnail.checksumSha256),
+            size: formatBytes(r.thumbnail.sizeBytes),
+          },
+        ]
+      : []),
+    {
+      name: 'manifest.json',
+      label: 'rp.file.manifest',
+      href: `/api/v1/renders/${r.id}/manifest`,
+      details: t('rp.file.manifestDetails'),
+      checksum: null,
+      size: null,
+    },
+    {
+      name: 'cost-report.json',
+      label: 'rp.file.cost',
+      href: `/api/v1/renders/${r.id}/cost-report`,
+      details: t('rp.file.costDetails'),
+      checksum: null,
+      size: null,
+    },
+  ];
   return (
-    <article className="scene-images" aria-label={t('rp.renderN', { index: props.index })}>
-      <div className="section-head">
-        <div>
-          <h3>
-            {t('rp.renderN', { index: props.index })}{' '}
-            {r.status === 'succeeded' ? (
-              r.reviewStatus === 'approved' ? (
-                <Pill tone="green">
-                  {r.exportedAt ? t('rp.approvedExported') : t('rp.approvedPill')}
-                </Pill>
-              ) : r.reviewStatus === 'rejected' ? (
-                <Pill tone="red">{t('rp.rejectedPill')}</Pill>
-              ) : (
-                <Pill tone="amber">{t('rp.reviewRequired')}</Pill>
-              )
-            ) : r.status === 'failed' || r.status === 'canceled' ? (
-              <Pill tone="red">{r.status === 'failed' ? t('rp.failed') : t('rp.canceled')}</Pill>
-            ) : (
-              <Pill tone="purple">{t('rp.renderingPill')}</Pill>
-            )}
-            {r.isApproved && <Pill tone="green">{t('rp.current')}</Pill>}
-          </h3>
-          <p>
-            <LocalTime iso={r.createdAt} /> ·{' '}
-            {r.burnInCaptions ? t('rp.captionsBurned') : t('rp.captionsSrt')}
-            {r.musicAssetId ? ` ${t('rp.withMusic')}` : ''}
-            {r.durationMs ? ` · ${formatSeconds(r.durationMs)}` : ''}
-            {r.upscaledFrom ? ` ${t('rp.upscaledFrom', { from: r.upscaledFrom })}` : ''}
-          </p>
+    <article className="card render-card" aria-label={t('rp.renderN', { index: props.index })}>
+      <div className="card-head">
+        <span className="step-n cur">3</span>
+        <h3>{t('rp.reviewN', { index: props.index })}</h3>
+        {r.status === 'succeeded' ? (
+          r.reviewStatus === 'approved' ? (
+            <Pill tone="green">
+              {r.exportedAt ? t('rp.approvedExported') : t('rp.approvedPill')}
+            </Pill>
+          ) : r.reviewStatus === 'rejected' ? (
+            <Pill tone="red">{t('rp.rejectedPill')}</Pill>
+          ) : (
+            <Pill tone="amber">{t('rp.reviewRequired')}</Pill>
+          )
+        ) : r.status === 'failed' || r.status === 'canceled' ? (
+          <Pill tone="red">{r.status === 'failed' ? t('rp.failed') : t('rp.canceled')}</Pill>
+        ) : (
+          <Pill tone="purple">{t('rp.renderingPill')}</Pill>
+        )}
+        {r.isApproved && <Pill tone="green">{t('rp.current')}</Pill>}
+        <span className="spacer" />
+        <span className="t-12 muted">
+          <LocalTime iso={r.createdAt} />
+          {r.upscaledFrom ? ` · ${t('rp.upscaledFrom', { from: r.upscaledFrom })}` : ''}
+        </span>
+      </div>
+      {(r.status === 'queued' || r.status === 'running' || r.job.errorCode || r.reviewNote) && (
+        <div className="card-body col">
           {(r.status === 'queued' || r.status === 'running') && (
             <p role="status">{stageKey ? t(stageKey) : (r.stage ?? t('rp.waiting'))}…</p>
           )}
@@ -341,58 +436,69 @@ function RenderCard(props: {
             <CancelRunButton runId={r.job.productionRunId} what={t('rp.thisRender')} />
           )}
           {r.job.errorCode && (
-            <p className="form-error" role="alert">
+            <p className="err-text" role="alert">
               {jobErrorText(r.job.errorCode, locale)}
               {r.job.errorMessage ? ` (${r.job.errorMessage})` : ''}
             </p>
           )}
           {r.reviewNote && (
-            <p className="muted small-text">{t('rp.reviewNote', { note: r.reviewNote })}</p>
+            <p className="t-12 muted">{t('rp.reviewNote', { note: r.reviewNote })}</p>
           )}
         </div>
-      </div>
+      )}
 
       {r.video && (
-        <div className="render-body">
-          <video
-            className="render-player"
-            src={assetContentUrl(r.video.id)}
-            poster={r.thumbnail ? assetContentUrl(r.thumbnail.id) : undefined}
-            controls
-            preload="metadata"
-            playsInline
-            aria-label={t('rp.play', { index: props.index })}
-          />
-          <div className="render-side">
-            <h4>{t('rp.qc')}</h4>
-            <p className="small-text">
-              {errors.length === 0 ? (
-                <>
-                  <Icon name="check" /> {t('rp.passed')}
-                </>
+        <div className="row wrap render-body">
+          <div className="col render-player-col">
+            <video
+              className="render-player"
+              src={assetContentUrl(r.video.id)}
+              poster={r.thumbnail ? assetContentUrl(r.thumbnail.id) : undefined}
+              controls
+              preload="metadata"
+              playsInline
+              aria-label={t('rp.play', { index: props.index })}
+            />
+            <span className="t-12 muted">
+              {r.burnInCaptions ? t('rp.captionsBurned') : t('rp.captionsSrt')}
+              {r.musicAssetId ? ` ${t('rp.withMusic')}` : ''}
+            </span>
+          </div>
+          <div
+            className="col render-checks"
+            tabIndex={-1}
+            onKeyDown={reviewable && props.canEdit ? onReviewKey : undefined}
+          >
+            <div className="col render-qc">
+              <span className="eyebrow">{t('rp.qc')}</span>
+              <div className="qc">
+                <span className={errors.length === 0 ? 'check-ic ok' : 'check-ic danger'}>
+                  <Icon name={errors.length === 0 ? 'check' : 'failed'} />
+                </span>
+                <span>
+                  <b>{errors.length === 0 ? t('rp.passed') : t('rp.qcFailed')}</b>{' '}
+                  <span className="muted">
+                    · {r.qc?.measured.width ?? '?'}×{r.qc?.measured.height ?? '?'} ·{' '}
+                    {r.qc?.measured.fps ?? '?'} fps · {r.qc?.measured.integratedLufs ?? '?'} LUFS
+                  </span>
+                </span>
+              </div>
+              {warnings.length > 0 ? (
+                <ul className="col plain-list" aria-label={t('rp.qcWarnings')}>
+                  {groupWarnings(t, warnings).map((g) => (
+                    <li key={g.key} className="qc">
+                      <span className="check-ic review">
+                        <Icon name="warning" />
+                      </span>
+                      <span>{g.text}</span>
+                    </li>
+                  ))}
+                </ul>
               ) : (
-                <>
-                  <Icon name="failed" /> {t('rp.qcFailed')}
-                </>
-              )}{' '}
-              · {r.qc?.measured.width ?? '?'}×{r.qc?.measured.height ?? '?'} ·{' '}
-              {r.qc?.measured.fps ?? '?'} fps · {r.qc?.measured.integratedLufs ?? '?'} LUFS
-            </p>
-            {warnings.length > 0 ? (
-              <ul className="plain-list small-text" aria-label={t('rp.qcWarnings')}>
-                {groupWarnings(t, warnings).map((g) => (
-                  <li key={g.key}>
-                    <Icon name="warning" /> {g.text}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="muted small-text">{t('rp.noWarnings')}</p>
-            )}
-            {props.cost && (
-              <>
-                <h4>{t('rp.cost')}</h4>
-                <p className="small-text" aria-label={t('rp.costSummary')}>
+                <p className="t-12 muted">{t('rp.noWarnings')}</p>
+              )}
+              {props.cost && (
+                <p className="t-12 muted" aria-label={t('rp.costSummary')}>
                   {t('rp.costLine', {
                     reported: formatUsd(props.cost.total.reportedUsd),
                     estimated: formatUsd(props.cost.total.estimatedUsd),
@@ -403,109 +509,131 @@ function RenderCard(props: {
                     render: formatUsd(props.cost.renderCostUsd),
                   })}
                 </p>
-              </>
+              )}
+            </div>
+            {props.canEdit && reviewable && (
+              <section className="col render-decision" aria-label={t('review.decision')}>
+                <div className="row">
+                  <span className="eyebrow">{t('rp.gate')}</span>
+                  <span className="spacer" />
+                  <button
+                    type="button"
+                    className="btn sm"
+                    onClick={checklist.checkAll}
+                    aria-keyshortcuts="C"
+                  >
+                    <Icon name="check" /> {t('review.checkAll')} <kbd aria-hidden="true">C</kbd>
+                  </button>
+                </div>
+                <ReviewChecklist items={items} state={checklist} />
+                <label className="field">
+                  {t('rp.note')} <span className="hint">{t('rp.noteHint')}</span>
+                  <input
+                    id={`render-note-${r.id}`}
+                    className="input"
+                    value={note}
+                    maxLength={2000}
+                    onChange={(e) => {
+                      setNote(e.target.value);
+                    }}
+                  />
+                </label>
+                <div className="row wrap">
+                  <button
+                    type="button"
+                    className="btn success"
+                    disabled={props.busy}
+                    aria-keyshortcuts="A"
+                    onClick={() => {
+                      props.onApprove(note.trim());
+                    }}
+                  >
+                    <Icon name="check" /> {t('rp.approve')} <kbd aria-hidden="true">A</kbd>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={props.busy || note.trim() === ''}
+                    onClick={() => {
+                      props.onReject(note.trim());
+                    }}
+                  >
+                    <Icon name="message" /> {t('rp.reject')} <kbd aria-hidden="true">R</kbd>
+                  </button>
+                </div>
+                {checklist.unchecked > 0 && (
+                  <p className="t-12 muted">
+                    {t('review.uncheckedHint', { count: checklist.unchecked })}
+                  </p>
+                )}
+              </section>
             )}
           </div>
         </div>
       )}
 
-      {props.canEdit && reviewable && (
-        <section
-          className="review-panel"
-          aria-label={t('review.decision')}
-          tabIndex={-1}
-          onKeyDown={onReviewKey}
-        >
-          <span className="eyebrow">{t('rp.gate')}</span>
-          <ReviewChecklist items={items} state={checklist} />
-          {checklist.unchecked > 0 && (
-            <p className="muted small-text">
-              {t('review.uncheckedHint', { count: checklist.unchecked })}
-            </p>
-          )}
-          <label className="field">
-            {t('rp.note')} <small>{t('rp.noteHint')}</small>
-            <input
-              id={`render-note-${r.id}`}
-              value={note}
-              maxLength={2000}
-              onChange={(e) => {
-                setNote(e.target.value);
-              }}
-            />
-          </label>
-          <div className="review-actions">
-            <button
-              type="button"
-              className="btn primary"
-              disabled={props.busy}
-              aria-keyshortcuts="A"
-              onClick={() => {
-                props.onApprove(note.trim());
-              }}
-            >
-              <Icon name="check" /> {t('rp.approve')}
-            </button>
-            <button
-              type="button"
-              className="btn danger"
-              disabled={props.busy || note.trim() === ''}
-              onClick={() => {
-                props.onReject(note.trim());
-              }}
-            >
-              <Icon name="reject" /> {t('rp.reject')}
-            </button>
+      {r.video && (
+        <section className="render-export" aria-label={t('rp.exportTitle')}>
+          <div className="card-head">
+            <span className={exported ? 'step-n done' : 'step-n'}>
+              {exported ? <Icon name="check" size={12} /> : '4'}
+            </span>
+            <h3>{t('rp.exportTitle')}</h3>
+            {!exported && r.reviewStatus !== 'approved' && (
+              <span className="badge neutral">
+                <Icon name="lock" size={13} />
+                {t('rp.exportLocked')}
+              </span>
+            )}
+            <span className="spacer" />
+            {props.canEdit && r.reviewStatus === 'approved' && !exported && (
+              <button
+                type="button"
+                className="btn primary"
+                disabled={props.busy}
+                onClick={props.onExport}
+              >
+                <Icon name="download" /> {t('rp.export')}
+              </button>
+            )}
           </div>
-          <p className="muted small-text review-keys">{t('review.keys')}</p>
+          <div className="table-box">
+            <table
+              className="table"
+              aria-label={exported ? t('rp.downloads') : t('rp.packageFiles')}
+            >
+              <thead>
+                <tr>
+                  <th>{t('rp.col.file')}</th>
+                  <th>{t('rp.col.details')}</th>
+                  <th>{t('rp.col.checksum')}</th>
+                  <th className="r">{t('rp.col.size')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {packageFiles.map((f) => (
+                  <tr key={f.name}>
+                    <td>
+                      <span className="col file-cell">
+                        <b>{t(f.label)}</b>
+                        {exported ? (
+                          <a href={f.href} download={f.name} className="t-12">
+                            {f.name}
+                          </a>
+                        ) : (
+                          <span className="t-12 muted">{f.name}</span>
+                        )}
+                      </span>
+                    </td>
+                    <td className="muted">{f.details}</td>
+                    <td className="mono muted">{f.checksum ?? '—'}</td>
+                    <td className="r num">{f.size ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
-      )}
-      {props.canEdit && r.reviewStatus === 'approved' && !r.exportedAt && (
-        <div className="review-actions">
-          <button
-            type="button"
-            className="btn primary"
-            disabled={props.busy}
-            onClick={props.onExport}
-          >
-            {t('rp.export')}
-          </button>
-        </div>
-      )}
-      {r.exportedAt && (
-        <ul className="plain-list small-text" aria-label={t('rp.downloads')}>
-          {r.video && (
-            <li>
-              <a href={assetContentUrl(r.video.id)} download="video.mp4">
-                video.mp4
-              </a>
-            </li>
-          )}
-          {r.subtitles && (
-            <li>
-              <a href={assetContentUrl(r.subtitles.id)} download="captions.srt">
-                captions.srt
-              </a>
-            </li>
-          )}
-          {r.thumbnail && (
-            <li>
-              <a href={assetContentUrl(r.thumbnail.id)} download="thumbnail.jpg">
-                thumbnail.jpg
-              </a>
-            </li>
-          )}
-          <li>
-            <a href={`/api/v1/renders/${r.id}/manifest`} download="manifest.json">
-              manifest.json
-            </a>
-          </li>
-          <li>
-            <a href={`/api/v1/renders/${r.id}/cost-report`} download="cost-report.json">
-              cost-report.json
-            </a>
-          </li>
-        </ul>
       )}
     </article>
   );
