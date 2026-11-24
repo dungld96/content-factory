@@ -197,7 +197,7 @@ export async function resetDatabase(db: pg.Client): Promise<void> {
     environment_version_assets, assets, content_items, ai_providers, ai_models,
     ai_model_capabilities, ai_model_prices, ai_invocations, ai_usage_records, production_runs,
     generation_jobs, job_events, script_versions, storyboard_versions, storyboard_scenes,
-    storyboard_scene_assets, ai_task_routes RESTART IDENTITY CASCADE`);
+    storyboard_scene_assets, ai_task_routes, workspace_settings RESTART IDENTITY CASCADE`);
 }
 
 export function userAdmin(): { users: UserAdminService; prisma: PrismaClient } {

@@ -17,6 +17,7 @@ import { ApiError } from '../common/api-error.js';
 import { API_ENV } from '../config/api-config.module.js';
 import { PrismaService } from '../infrastructure/prisma.service.js';
 import { ProjectAccess } from '../projects/project-access.service.js';
+import { SpendingSettingsService } from './spending-settings.service.js';
 
 /** One job's share of a request: its estimate (null = unknown) and how many calls it may make. */
 export interface ReservationRequest {
@@ -41,6 +42,7 @@ export class BudgetsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: ProjectAccess,
+    private readonly spending: SpendingSettingsService,
     @Inject(API_ENV) private readonly env: ApiEnv,
   ) {}
 
@@ -146,6 +148,9 @@ export class BudgetsService {
         data.requestLimitUsd = input.request.limitUsd;
         data.requestMode = input.request.mode;
       }
+      if (input.confirmThresholdUsd !== undefined) {
+        data.confirmThresholdUsd = input.confirmThresholdUsd;
+      }
       const after = await tx.projectBudget.update({ where: { projectId }, data });
       await tx.budgetEvent.create({
         data: {
@@ -168,8 +173,12 @@ export class BudgetsService {
   }
 
   private async toDto(projectId: string): Promise<BudgetDto> {
-    const budget = await this.prisma.client.$transaction((tx) => this.lock(tx, projectId));
+    const [budget, workspaceThreshold] = await Promise.all([
+      this.prisma.client.$transaction((tx) => this.lock(tx, projectId)),
+      this.spending.threshold(),
+    ]);
     const u = await budgetUsage(this.prisma.client, projectId, null, new Date());
+    const override = usd(budget.confirmThresholdUsd)?.toString() ?? null;
     const monthly = usd(budget.monthlyLimitUsd) ?? UsdAmount.ZERO;
     const used = u.limits.month;
     const remaining = monthly.minusOrZero(used);
@@ -189,6 +198,8 @@ export class BudgetsService {
       unknownCalls: u.unknownCalls,
       remainingUsd: dec(remaining),
       warning: atWarning(used, monthly),
+      confirmThresholdUsd: override,
+      effectiveConfirmThresholdUsd: override ?? workspaceThreshold,
       updatedAt: budget.updatedAt.toISOString(),
     };
   }
@@ -202,6 +213,7 @@ function limitsJson(b: ProjectBudget): Prisma.InputJsonObject {
     itemMode: b.itemMode,
     requestLimitUsd: b.requestLimitUsd?.toString() ?? null,
     requestMode: b.requestMode,
+    confirmThresholdUsd: b.confirmThresholdUsd?.toString() ?? null,
   };
 }
 

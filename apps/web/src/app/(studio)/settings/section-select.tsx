@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 
+import { useT } from '@/components/i18n-provider';
+
 /** Settings sections as a menu on small screens, where the side navigation is hidden. */
 export function SectionSelect(props: {
   readonly current: string;
@@ -11,10 +13,11 @@ export function SectionSelect(props: {
     readonly label: string;
   }[];
 }) {
+  const t = useT();
   const router = useRouter();
   return (
     <label className="field settings-section-select">
-      Section
+      {t('settings.section')}
       <select
         value={props.current}
         onChange={(e) => {

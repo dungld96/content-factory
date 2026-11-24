@@ -12,6 +12,7 @@ import { ApiConfigModule } from './config/api-config.module.js';
 import { GenerationModule } from './generation/generation.module.js';
 import { HealthModule } from './health/health.module.js';
 import { InfrastructureModule } from './infrastructure/infrastructure.module.js';
+import { LiveModule } from './live/live.module.js';
 import { ContentModule } from './content/content.module.js';
 import { OperationsModule } from './operations/operations.module.js';
 import { OpenApiModule } from './openapi/openapi.module.js';
@@ -33,6 +34,7 @@ export class AppModule {
         ContentModule,
         BrandModule,
         AssetsModule,
+        LiveModule,
         AiModule,
         BudgetsModule,
         GenerationModule,

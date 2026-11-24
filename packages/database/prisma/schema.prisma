@@ -172,23 +172,24 @@ model User {
   reviewedStoryboards StoryboardVersion[] @relation("StoryboardReviewedBy")
   updatedTaskRoutes   AiTaskRoute[]
 
-  reviewedAssets     Asset[]                @relation("AssetReviewedBy")
-  selectedKeyframes  SceneKeyframe[]
-  keyframeEvents     SceneKeyframeEvent[]
-  selectedClips      SceneClip[]
-  clipEvents         SceneClipEvent[]
-  selectedVoiceovers SceneVoiceover[]
-  voiceoverEvents    SceneVoiceoverEvent[]
-  voiceProfiles      VoiceProfile[]
-  rendersReviewed    Render[]               @relation("RenderReviewedBy")
-  rendersExported    Render[]               @relation("RenderExportedBy")
-  rendersCreated     Render[]               @relation("RenderCreatedBy")
-  budgetsUpdated     ProjectBudget[]        @relation("BudgetUpdatedBy")
-  budgetEvents       BudgetEvent[]          @relation("BudgetEventActor")
-  circuitEvents      ProviderCircuitEvent[] @relation("CircuitEventActor")
-  registryEvents        AiRegistryEvent[]    @relation("RegistryEventActor")
-  createdCollections    AssetCollection[]    @relation("CollectionCreatedBy")
-  addedCollectionItems  AssetCollectionItem[] @relation("CollectionItemAddedBy")
+  reviewedAssets           Asset[]                @relation("AssetReviewedBy")
+  selectedKeyframes        SceneKeyframe[]
+  keyframeEvents           SceneKeyframeEvent[]
+  selectedClips            SceneClip[]
+  clipEvents               SceneClipEvent[]
+  selectedVoiceovers       SceneVoiceover[]
+  voiceoverEvents          SceneVoiceoverEvent[]
+  voiceProfiles            VoiceProfile[]
+  rendersReviewed          Render[]               @relation("RenderReviewedBy")
+  rendersExported          Render[]               @relation("RenderExportedBy")
+  rendersCreated           Render[]               @relation("RenderCreatedBy")
+  budgetsUpdated           ProjectBudget[]        @relation("BudgetUpdatedBy")
+  workspaceSettingsUpdated WorkspaceSettings[]    @relation("WorkspaceSettingsUpdatedBy")
+  budgetEvents             BudgetEvent[]          @relation("BudgetEventActor")
+  circuitEvents            ProviderCircuitEvent[] @relation("CircuitEventActor")
+  registryEvents           AiRegistryEvent[]      @relation("RegistryEventActor")
+  createdCollections       AssetCollection[]      @relation("CollectionCreatedBy")
+  addedCollectionItems     AssetCollectionItem[]  @relation("CollectionItemAddedBy")
 
   @@map("users")
 }
@@ -232,15 +233,15 @@ model Project {
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  createdBy     User            @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  members       ProjectMember[]
-  channels      Channel[]
-  characters    Character[]
-  environments  Environment[]
+  createdBy        User              @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  members          ProjectMember[]
+  channels         Channel[]
+  characters       Character[]
+  environments     Environment[]
   assetCollections AssetCollection[]
-  assets        Asset[]
-  contentItems  ContentItem[]
-  aiInvocations AiInvocation[]
+  assets           Asset[]
+  contentItems     ContentItem[]
+  aiInvocations    AiInvocation[]
 
   contentMasters     ContentMaster[]
   productionRuns     ProductionRun[]
@@ -1085,6 +1086,7 @@ model JobEvent {
   job GenerationJob @relation(fields: [projectId, jobId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([jobId, createdAt])
+  @@index([createdAt])
   @@map("job_events")
 }
 
@@ -1501,16 +1503,18 @@ enum ReservationStatus {
 
 /// Spending limits of a project (M7 design §3). One row per project; amounts in exact USD.
 model ProjectBudget {
-  projectId       String     @id @map("project_id") @db.Uuid
-  monthlyLimitUsd Decimal    @map("monthly_limit_usd") @db.Decimal(14, 6)
-  monthlyMode     BudgetMode @default(hard) @map("monthly_mode")
-  itemLimitUsd    Decimal?   @map("item_limit_usd") @db.Decimal(14, 6)
-  itemMode        BudgetMode @default(soft) @map("item_mode")
-  requestLimitUsd Decimal?   @map("request_limit_usd") @db.Decimal(14, 6)
-  requestMode     BudgetMode @default(hard) @map("request_mode")
-  updatedById     String?    @map("updated_by_id") @db.Uuid
-  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  projectId           String     @id @map("project_id") @db.Uuid
+  monthlyLimitUsd     Decimal    @map("monthly_limit_usd") @db.Decimal(14, 6)
+  monthlyMode         BudgetMode @default(hard) @map("monthly_mode")
+  itemLimitUsd        Decimal?   @map("item_limit_usd") @db.Decimal(14, 6)
+  itemMode            BudgetMode @default(soft) @map("item_mode")
+  requestLimitUsd     Decimal?   @map("request_limit_usd") @db.Decimal(14, 6)
+  requestMode         BudgetMode @default(hard) @map("request_mode")
+  /// Cost-confirmation threshold override (redesign R-D4); NULL uses the workspace's.
+  confirmThresholdUsd Decimal?   @map("confirm_threshold_usd") @db.Decimal(14, 6)
+  updatedById         String?    @map("updated_by_id") @db.Uuid
+  createdAt           DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   project   Project @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   updatedBy User?   @relation("BudgetUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -1679,4 +1683,18 @@ model AssetCollectionItem {
   @@index([assetId])
   @@index([addedById])
   @@map("asset_collection_items")
+}
+
+/// Workspace-wide settings, one row (id = 1). Redesign R-D4: the cost-confirmation threshold.
+model WorkspaceSettings {
+  id                  Int      @id @default(1) @db.SmallInt
+  confirmThresholdUsd Decimal  @default(1) @map("confirm_threshold_usd") @db.Decimal(14, 6)
+  updatedById         String?  @map("updated_by_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  updatedBy User? @relation("WorkspaceSettingsUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([updatedById])
+  @@map("workspace_settings")
 }

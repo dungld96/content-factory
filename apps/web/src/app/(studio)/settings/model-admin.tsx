@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import type { AiModelDto, ImportAiModelsResponseDto } from '@acf/contracts';
 
+import { useT } from '@/components/i18n-provider';
 import { Icon } from '@/components/icon';
 import { Modal } from '@/components/modal';
 import { Pill } from '@/components/status-pill';
@@ -12,12 +13,7 @@ import { toast } from '@/components/toast';
 import { errorText, mutate } from '@/lib/api-client';
 import { countedLines } from '@/lib/format';
 
-const CATALOGS = [
-  { id: 'llm', label: 'Text (LLM)' },
-  { id: 'image', label: 'Image' },
-  { id: 'video', label: 'Video' },
-  { id: 'tts', label: 'Speech (TTS)' },
-] as const;
+const CATALOGS = ['llm', 'image', 'video', 'tts'] as const;
 
 const METRICS = [
   'input_tokens',
@@ -50,8 +46,9 @@ const ACTION_TONE = {
  * appended. Same code as `pnpm ai:registry model import-openrouter*`; every change is audited.
  */
 export function ImportModelsPanel() {
+  const t = useT();
   const router = useRouter();
-  const [catalog, setCatalog] = useState<(typeof CATALOGS)[number]['id']>('llm');
+  const [catalog, setCatalog] = useState<(typeof CATALOGS)[number]>('llm');
   const [keys, setKeys] = useState('');
   const [tier, setTier] = useState('economy');
   const [result, setResult] = useState<ImportAiModelsResponseDto | null>(null);
@@ -78,7 +75,7 @@ export function ImportModelsPanel() {
     }
     setResult(r.data);
     if (apply) {
-      toast('Import finished. New models are disabled until you enable them.');
+      toast(t('import.done'));
       router.refresh();
     }
   }
@@ -87,16 +84,13 @@ export function ImportModelsPanel() {
     <section className="card card-pad" aria-labelledby="ai-import">
       <div className="section-head">
         <div>
-          <h3 id="ai-import">Import from OpenRouter</h3>
-          <p>
-            Reads the public catalog (no key, no cost). Preview first; importing creates disabled
-            models and appends prices, never changing earlier ones.
-          </p>
+          <h3 id="ai-import">{t('import.title')}</h3>
+          <p>{t('import.hint')}</p>
         </div>
       </div>
       <div className="import-form">
         <label className="field">
-          Catalog
+          {t('import.catalog')}
           <select
             value={catalog}
             onChange={(e) => {
@@ -105,14 +99,14 @@ export function ImportModelsPanel() {
             }}
           >
             {CATALOGS.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
+              <option key={c} value={c}>
+                {t(`import.cat.${c}`)}
               </option>
             ))}
           </select>
         </label>
         <label className="field import-keys">
-          Model keys <small>(author/slug, one per line, up to 10)</small>
+          {t('import.keys')} <small>{t('import.keysHint')}</small>
           <textarea
             rows={3}
             value={keys}
@@ -124,16 +118,16 @@ export function ImportModelsPanel() {
           />
         </label>
         <label className="field">
-          Tier for new models
+          {t('import.tier')}
           <select
             value={tier}
             onChange={(e) => {
               setTier(e.target.value);
             }}
           >
-            <option value="economy">Economy</option>
-            <option value="balanced">Balanced</option>
-            <option value="premium">Premium</option>
+            <option value="economy">{t('import.tier.economy')}</option>
+            <option value="balanced">{t('import.tier.balanced')}</option>
+            <option value="premium">{t('import.tier.premium')}</option>
           </select>
         </label>
       </div>
@@ -144,7 +138,7 @@ export function ImportModelsPanel() {
           disabled={busy || modelKeys.length === 0 || modelKeys.length > 10}
           onClick={() => void send(false)}
         >
-          Preview
+          {t('import.preview')}
         </button>
         <button
           type="button"
@@ -152,7 +146,7 @@ export function ImportModelsPanel() {
           disabled={busy || result === null || result.applied || !result.entries.some((e) => e.ok)}
           onClick={() => void send(true)}
         >
-          <Icon name="upload" /> Import
+          <Icon name="upload" /> {t('import.import')}
         </button>
       </div>
       {error && (
@@ -161,19 +155,19 @@ export function ImportModelsPanel() {
         </p>
       )}
       {result && (
-        <ul className="plain-list import-result" aria-label="Import preview">
+        <ul className="plain-list import-result" aria-label={t('import.previewLabel')}>
           {result.entries.map((e) => (
             <li key={e.modelKey}>
               <b className="mono">{e.modelKey}</b>{' '}
               {e.action ? (
                 <Pill tone={ACTION_TONE[e.action]}>
-                  {e.action}
-                  {e.newPrices ? ` · ${String(e.newPrices)} new price(s)` : ''}
+                  {t(`import.action.${e.action}`)}
+                  {e.newPrices ? ` ${t('import.newPrices', { count: e.newPrices })}` : ''}
                 </Pill>
               ) : e.ok ? (
-                <Pill tone="green">Ready</Pill>
+                <Pill tone="green">{t('import.ready')}</Pill>
               ) : (
-                <Pill tone="red">Cannot import</Pill>
+                <Pill tone="red">{t('import.cannot')}</Pill>
               )}
               <div className="small-text">{e.summary ?? e.reason}</div>
               {countedLines([...e.warnings, ...e.detail]).map((w) => (
@@ -192,6 +186,7 @@ export function ImportModelsPanel() {
 
 /** Append one price to a model (P1d, operators). Earlier prices are kept for history. */
 export function AddPriceButton({ model }: { readonly model: AiModelDto }) {
+  const t = useT();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [metric, setMetric] = useState<(typeof METRICS)[number]>('input_tokens');
@@ -216,7 +211,7 @@ export function AddPriceButton({ model }: { readonly model: AiModelDto }) {
       return;
     }
     setOpen(false);
-    toast('Price added.');
+    toast(t('price.added'));
     router.refresh();
   }
 
@@ -229,19 +224,19 @@ export function AddPriceButton({ model }: { readonly model: AiModelDto }) {
           setOpen(true);
         }}
       >
-        Add price
+        {t('price.add')}
       </button>
       <Modal
         open={open}
         onClose={() => {
           setOpen(false);
         }}
-        title={`Add a price · ${model.displayName}`}
-        description="USD per unit, as published. The new price applies from now; earlier prices stay in the history."
+        title={t('price.title', { name: model.displayName })}
+        description={t('price.desc')}
       >
         <div className="form">
           <label className="field">
-            Metric
+            {t('price.metric')}
             <select
               value={metric}
               onChange={(e) => {
@@ -256,7 +251,7 @@ export function AddPriceButton({ model }: { readonly model: AiModelDto }) {
             </select>
           </label>
           <label className="field">
-            USD per unit
+            {t('price.usd')}
             <input
               inputMode="decimal"
               value={usd}
@@ -267,20 +262,20 @@ export function AddPriceButton({ model }: { readonly model: AiModelDto }) {
             />
           </label>
           <label className="field">
-            Source
+            {t('price.source')}
             <select
               value={source}
               onChange={(e) => {
                 setSource(e.target.value);
               }}
             >
-              <option value="official_page">Official pricing page</option>
-              <option value="official_api">Official API</option>
-              <option value="manual_estimate">Manual estimate</option>
+              <option value="official_page">{t('price.source.official_page')}</option>
+              <option value="official_api">{t('price.source.official_api')}</option>
+              <option value="manual_estimate">{t('price.source.manual_estimate')}</option>
             </select>
           </label>
           <label className="field">
-            Source URL
+            {t('price.url')}
             <input
               type="url"
               value={url}
@@ -303,7 +298,7 @@ export function AddPriceButton({ model }: { readonly model: AiModelDto }) {
                 setOpen(false);
               }}
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -311,7 +306,7 @@ export function AddPriceButton({ model }: { readonly model: AiModelDto }) {
               disabled={busy || !/^\d+(\.\d+)?$/.test(usd.trim()) || !url.trim()}
               onClick={() => void save()}
             >
-              Add price
+              {t('price.add')}
             </button>
           </div>
         </div>

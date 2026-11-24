@@ -33,10 +33,23 @@ export const budgetSchema = z
     remainingUsd: usdAmountSchema,
     /** At least 80 % of the monthly budget is used or reserved. */
     warning: z.boolean(),
+    /**
+     * Cost-confirmation threshold of this project (redesign R-D4): `null` uses the workspace's.
+     * Paid actions above the effective threshold, or with an unknown price, ask first.
+     */
+    confirmThresholdUsd: usdAmountSchema.nullable(),
+    effectiveConfirmThresholdUsd: usdAmountSchema,
     updatedAt: isoDateTimeSchema,
   })
   .meta({ id: 'Budget' });
 export type BudgetDto = z.infer<typeof budgetSchema>;
+
+/** A cost-confirmation threshold: 0–1000 USD with at most two decimals (redesign R-D4). */
+export const confirmThresholdSchema = z
+  .string()
+  .regex(/^\d{1,4}(\.\d{1,2})?$/, 'up to 1000 USD with at most two decimals')
+  .refine((v) => Number(v) <= 1000, { message: 'at most 1000 USD' })
+  .meta({ id: 'ConfirmThreshold' });
 
 const optionalLimit = z.strictObject({
   limitUsd: usdAmountSchema.nullable(),
@@ -48,6 +61,8 @@ export const updateBudgetRequestSchema = z
     monthly: z.strictObject({ limitUsd: usdAmountSchema, mode: budgetModeSchema }).optional(),
     item: optionalLimit.optional(),
     request: optionalLimit.optional(),
+    /** `null` clears the project override (the workspace threshold applies). */
+    confirmThresholdUsd: confirmThresholdSchema.nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: 'at least one limit is required' })
   .meta({ id: 'UpdateBudgetRequest' });
@@ -64,3 +79,17 @@ export const budgetBreachSchema = z
   })
   .meta({ id: 'BudgetBreach' });
 export type BudgetBreachDto = z.infer<typeof budgetBreachSchema>;
+
+/** `GET/PUT /settings/spending`: workspace spending settings (redesign R-D4). */
+export const spendingSettingsSchema = z
+  .object({
+    confirmThresholdUsd: usdAmountSchema,
+    updatedAt: isoDateTimeSchema.nullable(),
+  })
+  .meta({ id: 'SpendingSettings' });
+export type SpendingSettingsDto = z.infer<typeof spendingSettingsSchema>;
+
+export const updateSpendingSettingsRequestSchema = z
+  .strictObject({ confirmThresholdUsd: confirmThresholdSchema })
+  .meta({ id: 'UpdateSpendingSettingsRequest' });
+export type UpdateSpendingSettingsRequest = z.output<typeof updateSpendingSettingsRequestSchema>;
