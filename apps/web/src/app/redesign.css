@@ -733,3 +733,17 @@
 .input-prefix input {
   max-width: 160px;
 }
+
+/* Phone top bar (R7): the page title is the h1 below; give the search the room. */
+@media (max-width: 480px) {
+  .topbar .crumb {
+    display: none;
+  }
+  .topbar .search {
+    flex: 1;
+  }
+}
+
+.segmented a {
+  font-size: 13px;
+}

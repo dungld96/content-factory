@@ -26,7 +26,7 @@ milestone packages in `docs/design/` and ADR-0010, ADR-0011, ADR-0012.
 
 | Table | Purpose |
 |---|---|
-| `users`, `sessions` | Accounts; sessions store only `SHA-256(session ID)` (ADR-0009) |
+| `users`, `sessions` | Accounts; sessions store only `SHA-256(session ID)` (ADR-0009). `users.locale` (`en`/`vi`, nullable = follow the browser) is the interface language (redesign R-D6) |
 | `projects`, `project_members` | Projects and roles (`owner`, `editor`, `viewer`). Every project keeps at least one owner (`AC007`) |
 | `channels` | Publishing channel per project (`tiktok`, `instagram_reels`, `youtube_shorts`, `other`) |
 
@@ -78,7 +78,7 @@ cannot lose its approval or be archived while selected (`AC015`, `AC016`, `AC008
 |---|---|
 | `production_runs` | One per generate request; `resumed_from_run_id` for a resume |
 | `generation_jobs` | Job intent, written before enqueueing: kind (`script_generation`, `storyboard_generation`, `image_generation`, `video_generation`, `tts_generation`, `render`), status (`queued`, `running`, `succeeded`, `failed`, `canceled`), `active_key` (one active job per item or scene and kind), idempotency key, execution key, inputs, prompt template and resolved prompt snapshot, model, attempts, result, sanitized error. Video jobs also hold the submission intent (written **before** the paid submit) and the provider job (`provider_job_id` unique, status, poll schedule). Video and TTS jobs record the paid output as delivered, before validation (P3d: `delivered_at`, `staged_asset_id`, `staged_object_key`, `staged_sha256`, `staged_mime_type`; write-once, `AC011`); a finish job points at the failed job it completes (`recover_from_job_id`) |
-| `job_events` | Append-only state transitions |
+| `job_events` | Append-only state transitions; indexed by `created_at` for the live job tailer (redesign R-D5, `GET /events`) |
 
 Rules: job and run identity are immutable, terminal jobs never change, a provider job ID once set
 is frozen (`AC011`).
@@ -101,7 +101,8 @@ the price is known; `cost_status` matches the stored amounts.
 
 | Table | Purpose |
 |---|---|
-| `project_budgets` | One per project: monthly, per-item and per-request limits (`DECIMAL(14,6)` USD), each `hard` or `soft`. Locked `FOR UPDATE` while a request reserves |
+| `project_budgets` | One per project: monthly, per-item and per-request limits (`DECIMAL(14,6)` USD), each `hard` or `soft`; `confirm_threshold_usd` (nullable, 0–1000, redesign R-D4) overrides the workspace's cost-confirmation threshold. Locked `FOR UPDATE` while a request reserves |
+| `workspace_settings` | One row (`id = 1`, CHECK): `confirm_threshold_usd` (`DECIMAL(14,6)`, default 1, 0–1000), who changed it and when. Created on the first change (redesign R-D4) |
 | `budget_events` | Append-only: `changed`, `override`, `blocked`, `settled`, `released` |
 | `budget_reservations` | One per paid job, written with the job: amount (estimate, or USD 0.50 placeholder for unknown cost), status `open` → `settled`/`released`/`held` (`held` → `settled`/`released`), `settled_charge_usd` for a held charge an owner confirmed |
 | `provider_circuits`, `provider_circuit_events` | Circuit per provider (`closed`, `open`, `half_open`), failure counts, retry time, trial job; append-only transitions |

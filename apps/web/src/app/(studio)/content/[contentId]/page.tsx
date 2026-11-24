@@ -968,7 +968,7 @@ export default async function ContentPage({
       </div>
 
       {next ? (
-        <section className="card action-bar next-step" aria-label={t('ws.nextStep')}>
+        <section className="card action-bar" aria-label={t('ws.nextStep')}>
           <span className="next-text">
             <span className="eyebrow">{t('ws.nextStep')}</span>
             <b>{next.title}</b>
@@ -988,7 +988,7 @@ export default async function ContentPage({
           </a>
         </section>
       ) : (
-        <section className="card action-bar next-step" aria-label={t('ws.nextStep')}>
+        <section className="card action-bar" aria-label={t('ws.nextStep')}>
           <span className="next-text">
             <span className="eyebrow">{t('ws.allDoneTitle')}</span>
             <b>{t('ws.allDoneBody')}</b>

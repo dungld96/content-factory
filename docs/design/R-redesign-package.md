@@ -2,6 +2,7 @@
 
 - Status: **Revision 1, approved by the owner (2026-11-23)**: R-D1–R-D6 as recorded in §1. The
   owner asked to implement every slice in order until done ("làm tới khi xong toàn bộ").
+  **Implemented 2026-11-24** (§10).
 - Visual design (canvas, 25 artboards, pages 1–5): https://claude.ai/artifact/FrE8554N1wPbduxMke3sLE
 - Builds on: `UX-review-package.md` (U1–U8, 2026-11-21). U8 ("English, all strings behind `t()`")
   is superseded by R-D6 (bilingual).
@@ -158,4 +159,53 @@ immediately with that total; otherwise it opens the dialog.
 
 ## 10. Implementation notes
 
-_Filled in per slice as it lands._
+All slices are implemented (2026-11-24). Lint, typecheck, unit tests, build, the API integration
+suites touched by the redesign and the full E2E suite (23 tests, English and Vietnamese, phone
+390 px) pass.
+
+- **R0 Foundations + i18n.** `lib/i18n/{en,vi}.ts` (same keys; `i18n.test.ts` checks parity and
+  placeholders), `getT()`/`getLocale()` on the server (profile → `acf_locale` cookie →
+  `Accept-Language` → English), `useT()`/`useLocale()` in client components, `<html lang>`.
+  `users.locale` and `PATCH /auth/me/preferences`. Be Vietnam Pro replaces DM Sans. Status badge
+  with icon + label + tone (`components/status-badge.tsx`); tokens `--info`, `--review` (contrast
+  checked in `design-tokens.test.ts`). Job error texts have Vietnamese versions. New components'
+  CSS lives in `app/redesign.css`; `globals.css` was not split (no broad refactor).
+- **R1 Shell & IA.** Seven menu entries, phone bottom bar with four destinations and Menu,
+  `/productions` (list, `?view=board`), `/costs` (workspace), project tabs (Content, Brand,
+  Masters, Costs, Library); `/content` and `/pipeline` redirect with their query strings.
+- **R2 To-do.** `lib/todo.ts` (unit tested) builds the queue from the content lists and the
+  operations summary: failures first, held reservations, input needed, open gates, budgets near
+  their limit; side panels Running now and Ready to download.
+- **R3 Workspace spine.** Stage rail (Brief & script, Storyboard, Scenes, Render & export; gates
+  1–4) replaces the stepper and the tabs; the Next-step action bar sits under the title (sticky
+  above the bottom bar on phones); Activity and version history moved to a drawer (`#activity`
+  opens it). The six-step stepper's "Keyframes" and "Clips & voice" are the Scenes stage.
+- **R4 Review mode.** `ReviewPanel` for gates 1–2 and the render gate: checklist (R-D3: automatic
+  items pre-ticked, "Check all", ticks in `localStorage` per version), Approve, Request changes
+  with a required note (sent as the rejection note), keys A / R / C inside the panel; word diff of
+  the voice-over against the previous script version. Gate 3 keeps per-asset review on the Scenes
+  board, with J / K between scene rows. Earlier versions keep their plain approve buttons.
+- **R5 Live jobs and cost confirmation.** ADR-0022. API: `GET /events`, `GET /jobs/changes`,
+  `GET /jobs/active` (`apps/api/src/live/`), index `job_events(created_at)`; integration tests in
+  `apps/api/test/live/`. Web: `lib/live/` (reducer with unit tests, store, leader tab,
+  BroadcastChannel, polling fallback), Jobs tray in the top bar, workspace and job list refresh on
+  events; the two-second `AutoRefresh` loop and the per-component polls are gone. Thresholds:
+  `workspace_settings`, `project_budgets.confirm_threshold_usd`, `GET/PUT /settings/spending`;
+  images, clips and voice-overs show the estimate on their button and ask with
+  `CostConfirmDialog` above the threshold or with an unknown price (`lib/cost-confirm.ts`, exact
+  decimal comparison, unit tested). Money stays `DECIMAL(14,6)` USD, as in `project_budgets`
+  (ADR-0012), instead of integer micros.
+- **R6 Settings, Library, Operations.** `/settings/<section>` (General, Profile & language,
+  Budgets & spending, Voice profiles, AI providers, Models & prices, Change log, System status);
+  `/settings?section=` redirects. Operations starts with a health strip. Library labels and
+  lineage are translated.
+- **R7 Phone, dark, Vietnamese QA.** E2E: language switch and persistence, phone layout without
+  horizontal scroll on eight pages in both languages; screenshots checked in light, dark and
+  phone. Remaining English by design: see KNOWN_LIMITATIONS.md "Interface language".
+
+Not done / follow-ups:
+
+- Model import dry-run diff and per-price source column in Models & prices (listed in the visual
+  design) are unchanged from P1d.
+- No pseudo-locale run; Vietnamese itself is checked at 390 px instead.
+- Staging: confirm the Jobs tray shows **Live** behind Caddy after the next deploy.

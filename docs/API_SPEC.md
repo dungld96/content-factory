@@ -91,9 +91,18 @@ Revokes the session immediately and clears the cookies. `204`.
 ```json
 {
   "user": { "id": "uuid", "email": "owner@example.com", "displayName": "Owner" },
+  "isOperator": false,
+  "locale": "vi",
   "memberships": [{ "projectId": "uuid", "projectSlug": "ngan-khanh", "projectName": "Ngân Khánh", "role": "owner" }]
 }
 ```
+
+`locale` is the interface language the user chose (`en` or `vi`, redesign R-D6); `null` follows
+the browser.
+
+### `PATCH /auth/me/preferences`
+`{ "locale": "en" | "vi" | null }` → the updated `GET /auth/me` body. The signed-in user's own
+preferences only; CSRF token required.
 
 ### `GET /auth/csrf`
 `{ "csrfToken": "…" }` for the current session.
@@ -547,7 +556,16 @@ in USD (`unitPriceUsd`), never a JSON number (ADR-0012).
 | Endpoint | Viewer | Editor | Owner | Notes |
 |---|---|---|---|---|
 | `GET /projects/:projectId/budget` | ✓ | ✓ | ✓ | Limits and modes; this UTC month's `spentUsd` (ledger, reported else estimated), `reservedUsd` (open reservations), `heldUsd`, `unknownCalls`, `remainingUsd`, `warning` (≥ 80 % used or reserved) |
-| `PUT /projects/:projectId/budget` | 403 | 403 | ✓ | `{ monthly?: { limitUsd, mode }, item?: { limitUsd \| null, mode }, request?: { limitUsd \| null, mode } }` (at least one); recorded as a `changed` budget event |
+| `PUT /projects/:projectId/budget` | 403 | 403 | ✓ | `{ monthly?: { limitUsd, mode }, item?: { limitUsd \| null, mode }, request?: { limitUsd \| null, mode }, confirmThresholdUsd?: string \| null }` (at least one); recorded as a `changed` budget event |
+| `GET /settings/spending` | ✓ | ✓ | ✓ | Workspace `{ confirmThresholdUsd, updatedAt }`; `"1"` and `null` until an operator changes it |
+| `PUT /settings/spending` | operators only (`OPERATOR_EMAILS`) | | | `{ confirmThresholdUsd }` |
+
+**Cost-confirmation threshold (redesign R-D4).** The budget also returns `confirmThresholdUsd`
+(the project's override, `null` = none) and `effectiveConfirmThresholdUsd` (override, else the
+workspace's). Thresholds are 0–1000 USD with at most two decimals (`400 VALIDATION_FAILED`
+otherwise). The studio generates in one click when an estimate is known and at or below the
+effective threshold; above it, or with any unknown price, it asks first. The API's own checks
+(confirmed clip estimates, `acceptUnknownCost`, budgets) are unchanged.
 
 Every paid generate request (scripts, storyboards, images, clips, voice-overs) reserves its cost in
 the transaction that queues its jobs: the estimate (text: the worst case of prompt allowance plus
@@ -571,6 +589,20 @@ Both carry `error.current = { scope: request|item|month, mode, limitUsd, spentUs
 | `GET /projects/:projectId/costs?month=YYYY-MM` | viewer | Month total vs the monthly limit; by content item, stage (job kind) and provider/model; `retryCost` (calls that did not produce their job's result); `costPerApprovedVideo` (all-time cost of items whose render was approved that month, per item); six-month `trend`. Every figure is `{ calls, reportedUsd, estimatedUsd, unknownCalls, heldUsd, totalUsd }`; unknown-cost calls are counted, never priced; a held reservation replaces the ledger rows it covers. |
 
 Circuits are changed only by operators: `pnpm ai:registry circuit list|open|close <providerKey>`.
+
+### Live job tracking (redesign R-D5)
+
+| Endpoint | Notes |
+|---|---|
+| `GET /jobs/active` | `{ cursor, jobs: ActiveJob[] }`: the caller's queued and running jobs (at most 200) with content title, kind, scene number, status, attempt, and the cursor to follow changes from |
+| `GET /events?since=<cursor>` | `text/event-stream`. `event: job` with a `LiveJobEvent` (`id` = cursor, job, project, content and title, run, kind, scene number, `from` → `to`, attempt, time); `event: ready` (no `since`); `event: resync` when the gap is over 15 minutes or 1,000 events (reload the snapshot); `event: ping` every 25 s; `retry: 5000`. `Last-Event-ID` takes precedence over `since`. Headers `Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no` |
+| `GET /jobs/changes?since=<cursor>` | Polling fallback: `{ cursor, events, resync }`, `ETag`; `304` with a matching `If-None-Match` |
+
+Events are read from `job_events` after commit by one shared tailer per API process (once a
+second, only while a stream is open), filtered to the caller's projects (a project joined after
+the stream opened is checked on its first event). Cursors are `<createdAt ms>-<event id>`; readers
+re-read a 5-second overlap and clients de-duplicate by event id. Schemas:
+`packages/contracts/src/live.ts`.
 
 ## 11. Errors
 

@@ -467,6 +467,30 @@ const ROWS: Record<string, Row> = {
     path: (f) => `/projects/${f.projectId}/costs`,
     expect: [401, 404, 200, 200, 200],
   },
+  // Redesign R-D4/R-D5: workspace spending settings (operators change them; none here) and live
+  // jobs (each caller sees only their projects; the stream itself is covered by test/live).
+  'GET /settings/spending': {
+    method: 'GET',
+    path: () => '/settings/spending',
+    expect: [401, 200, 200, 200, 200],
+  },
+  'PUT /settings/spending': {
+    method: 'PUT',
+    path: () => '/settings/spending',
+    body: () => ({ confirmThresholdUsd: '2' }),
+    expect: [401, 403, 403, 403, 403],
+  },
+  'GET /jobs/active': {
+    method: 'GET',
+    path: () => '/jobs/active',
+    expect: [401, 200, 200, 200, 200],
+  },
+  'GET /jobs/changes': {
+    method: 'GET',
+    path: () =>
+      `/jobs/changes?since=${String(Date.now()).padStart(13, '0')}-00000000-0000-0000-0000-000000000000`,
+    expect: [401, 200, 200, 200, 200],
+  },
   // Renders (M6c). The fixture has a finished, unreviewed render; its storyboard is pending, so a
   // new render is blocked (409); export needs an approved render (409).
   'GET /content/:contentId/render-plan': {
@@ -768,6 +792,9 @@ const EXEMPT = new Set([
   'POST /auth/logout',
   'GET /auth/me',
   'GET /auth/csrf',
+  'PATCH /auth/me/preferences',
+  // A long-lived stream (test/live).
+  'GET /events',
   'GET /health',
   'GET /health/ready',
   'GET /openapi.json',

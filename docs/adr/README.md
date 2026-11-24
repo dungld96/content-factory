@@ -26,6 +26,7 @@ numbered sequentially. Never rewrite an accepted ADR — supersede it with a new
 | [0019](0019-budgets-reservations-and-circuit-breakers.md) | Budgets with reservations, provider circuit breakers, resume and redaction | Accepted (M7 package, rev. 1) |
 | [0020](0020-backup-and-restore.md) | Backup and restore of database and object storage | Accepted (M8 package, rev. 1) |
 | [0021](0021-ubuntu-vps-staging-deployment.md) | Staging on a generic Ubuntu VPS; off-server backups with rclone | Accepted (owner, 2026-11-20) |
+| [0022](0022-live-job-events-sse.md) | Live job events over Server-Sent Events, read from PostgreSQL | Accepted (owner R-D5, 2026-11-23) |
 
 ## Template
 

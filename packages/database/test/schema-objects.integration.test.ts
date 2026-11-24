@@ -157,6 +157,7 @@ const EXPECTED_CHECKS = [
   'project_budgets.project_budgets_item_nonnegative',
   'project_budgets.project_budgets_monthly_nonnegative',
   'project_budgets.project_budgets_request_nonnegative',
+  'project_budgets.project_budgets_threshold_range',
   'provider_circuit_events.provider_circuit_events_reason_known',
   'provider_circuits.provider_circuits_failures_nonnegative',
   'provider_circuits.provider_circuits_open_consistent',
@@ -189,11 +190,14 @@ const EXPECTED_CHECKS = [
   'storyboard_versions.storyboard_versions_source_consistent',
   'storyboard_versions.storyboard_versions_version_positive',
   'users.users_email_normalized',
+  'users.users_locale_known',
   'voice_profiles.voice_profiles_instructions_nonempty',
   'voice_profiles.voice_profiles_language_format',
   'voice_profiles.voice_profiles_name_nonempty',
   'voice_profiles.voice_profiles_speed_range',
   'voice_profiles.voice_profiles_voice_nonempty',
+  'workspace_settings.workspace_settings_singleton',
+  'workspace_settings.workspace_settings_threshold_range',
 ];
 
 describe('integrity layer presence', () => {
@@ -304,7 +308,7 @@ describe('role separation (U3)', () => {
       `SELECT tablename, has_table_privilege(current_user, 'public.' || tablename, 'SELECT, INSERT, UPDATE, DELETE') AS ok
        FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`,
     );
-    expect(rows.length).toBe(45); // M1–M3: 27; R0: content_masters; M4: 3 image tables; M5: 5 media tables; M6: renders; M7: 3 budget + 2 circuit tables; P1: ai_registry_events; P2b: 2 collection tables
+    expect(rows.length).toBe(46); // M1–M3: 27; R0: content_masters; M4: 3 image tables; M5: 5 media tables; M6: renders; M7: 3 budget + 2 circuit tables; P1: ai_registry_events; P2b: 2 collection tables; redesign R-D4: workspace_settings
     expect(rows.filter((r) => !r.ok)).toEqual([]);
   });
 });

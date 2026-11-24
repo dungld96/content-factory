@@ -349,6 +349,16 @@ Every project starts with a monthly budget of USD 10 (hard), USD 3 per content i
 2 per request (hard); owners change them on the project's **Costs** page. Defaults for new projects
 come from `DEFAULT_MONTHLY_BUDGET_USD`, `DEFAULT_ITEM_BUDGET_USD` and `DEFAULT_REQUEST_BUDGET_USD`.
 
+**Cost confirmation (redesign R-D4).** A paid action whose estimate is above the workspace's
+cost-confirmation threshold (USD 1 until an operator changes it in **Settings › Budgets &
+spending**), or whose price is unknown, asks before it runs; owners can set a project's own
+threshold on its Costs page.
+
+**Live updates (ADR-0022).** Browsers follow jobs over `GET /api/v1/events` (Server-Sent
+Events). Caddy flushes event streams as they come; if a proxy in front of Caddy buffers them, the
+studio falls back to polling by itself. After a deploy, open a content item, start a generation
+and check that the top bar's **Jobs** tray says **Live**.
+
 The **Operations** page (sidebar) shows queues, failed jobs (with **Resume**), provider circuits,
 budgets and held reservations. A held reservation is a provider call whose outcome is unknown:
 check the provider's dashboard or invoice, then record it as **Charged** or **Not charged**.

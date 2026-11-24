@@ -75,3 +75,15 @@ workflow gaps it found (`docs/design/M8.5-design-review-package.md`).
   paging.
 - Accounts are created by an operator (CLI); there is no self-service sign-up or password reset by
   email.
+
+## Interface language
+
+- The studio is bilingual (English, Vietnamese; redesign R-D6). Error messages that come from the
+  API (validation details, budget messages, the worker's own job messages) and the brief check's
+  findings stay in English; job error codes have Vietnamese texts.
+- Technical terms stay English on purpose (scene, keyframe, storyboard, render, prompt), as do
+  model price units in Settings (e.g. "1M tokens").
+- Money is always shown in US dollars ("$1.50") in both languages.
+- Live updates push job state changes only (ADR-0022): another person's approval or selection
+  appears after a navigation or the next job event.
+

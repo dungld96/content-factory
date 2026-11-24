@@ -175,11 +175,17 @@ describe('session guard', () => {
     await login(jar, OWNER);
     const token = csrfOf(await call(jar, 'GET', '/auth/csrf'));
     const headers = { 'x-csrf-token': token };
-    const set = await call(jar, 'PATCH', '/auth/me/preferences', { headers, body: { locale: 'vi' } });
+    const set = await call(jar, 'PATCH', '/auth/me/preferences', {
+      headers,
+      body: { locale: 'vi' },
+    });
     expect(set.status).toBe(200);
     expect((set.json as { locale: string }).locale).toBe('vi');
     expect(((await call(jar, 'GET', '/auth/me')).json as { locale: string }).locale).toBe('vi');
-    const bad = await call(jar, 'PATCH', '/auth/me/preferences', { headers, body: { locale: 'fr' } });
+    const bad = await call(jar, 'PATCH', '/auth/me/preferences', {
+      headers,
+      body: { locale: 'fr' },
+    });
     expect(bad.status).toBe(400);
     const reset = await call(jar, 'PATCH', '/auth/me/preferences', {
       headers,

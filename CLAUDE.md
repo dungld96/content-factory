@@ -160,6 +160,14 @@ Settings (P1 package §11); product photos in the brief, sent with every keyfram
 §12). All implemented; unit, integration and E2E suites pass except the
 backup drill, which fails on the local SeaweedFS running out of volumes (environment).
 
+**2026-11-23 redesign R (owner approved R-D1–R-D6; "làm tới khi xong toàn bộ"):** design package
+`docs/design/R-redesign-package.md` (visual design in the linked canvas). Bilingual UI (EN/VI,
+`lib/i18n/`, every UI string through `t()`), 7-entry menu with To-do as home, Productions
+(list/board), workspace Costs, stage rail + Next-step bar + history drawer, review mode for the
+gates, live job events over SSE (ADR-0022) with a Jobs tray, configurable cost-confirmation
+threshold, settings sub-routes. All slices implemented; lint, typecheck, unit, build, live/auth
+integration and E2E (EN, VI, phone) pass.
+
 Open items:
 - Off-server backups wait for the backup destination (rclone remote).
 - The paid image benchmark (G2) waits for an OpenRouter API key.
