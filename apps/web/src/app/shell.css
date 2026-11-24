@@ -2320,3 +2320,60 @@ body.focus-open {
 .ds .check-ic.muted {
   color: var(--muted);
 }
+
+/* Scene board selection (canvas: checkboxes, "n selected", Retry selected, Generate · ~$). */
+.ds .scene-board .board-head,
+.ds .scene-board .board-row {
+  grid-template-columns: 30px 56px repeat(3, minmax(0, 1fr)) 120px;
+}
+
+.ds .cb {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid var(--line-strong);
+  background: var(--surface);
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  cursor: pointer;
+}
+
+.ds .cb.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.ds .scene-board > .batch-actions {
+  flex: 0 1 auto;
+  gap: 8px;
+  padding: 14px 20px 14px 0;
+  border-bottom: 1px solid var(--line);
+  align-self: stretch;
+}
+
+.ds .scene-board > .board-filters {
+  border-bottom: 1px solid var(--line);
+}
+
+@media (width <= 760px) {
+  .ds .scene-board .board-row {
+    grid-template-columns: 30px 1fr auto;
+  }
+
+  .ds .scene-board .board-row > .board-select {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .ds .scene-board .board-row > .board-scene {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .ds .scene-board .board-row > .board-status {
+    grid-row: 1;
+    grid-column: 3;
+  }
+}

@@ -32,6 +32,7 @@ import {
   type Stage,
 } from '@/lib/scene-board';
 
+import { BatchActions } from './batch-actions';
 import { SceneClipsPanel } from './scene-clips';
 import { SceneImagesPanel } from './scene-images';
 import { SceneVoiceoversPanel } from './scene-voiceovers';
@@ -120,6 +121,7 @@ export function ScenesTab(props: {
   const stage: Stage = !props.voiceEnabled && chosenStage === 'voiceover' ? 'clips' : chosenStage;
   const [filter, setFilter] = useState<BoardFilter>('all');
   const [focus, setFocus] = useState<string | null>(null);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const rows = useMemo(
     () => buildSceneRows(props.images, props.videos, props.voiceovers, props.voiceEnabled, t),
     [props.images, props.videos, props.voiceovers, props.voiceEnabled, t],
@@ -167,6 +169,20 @@ export function ScenesTab(props: {
   const count = (f: BoardFilter) => rows.filter((r) => matchesFilter(r, f)).length;
   const done = rows.filter((r) => r.status === 'done').length;
   const focusRow = rows.find((r) => r.sceneId === focus) ?? null;
+  const picked = rows.filter((r) => selected.has(r.sceneId));
+  const toggle = (sceneId: string) => {
+    setSelected((was) => {
+      const next = new Set(was);
+      if (next.has(sceneId)) next.delete(sceneId);
+      else next.add(sceneId);
+      return next;
+    });
+  };
+  const allVisible = visible.length > 0 && visible.every((r) => selected.has(r.sceneId));
+  const retryRequests = (['keyframes', 'clips', 'voiceover'] as const).flatMap((st, i) => {
+    const ids = picked.filter((r) => r.cells[i]?.state === 'failed').map((r) => r.sceneId);
+    return ids.length > 0 ? [{ stage: st, sceneIds: ids, regenerate: true }] : [];
+  });
 
   function open(row: SceneRow, cell: Cell) {
     setStage(cell.stage);
@@ -181,6 +197,15 @@ export function ScenesTab(props: {
   function onBoardKey(event: KeyboardEvent<HTMLDivElement>) {
     if (typing(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
     const key = event.key.toLowerCase();
+    if (key === 'x') {
+      const row = (event.target as HTMLElement).closest<HTMLElement>('.board-row');
+      const id = row?.dataset['scene'];
+      if (id) {
+        event.preventDefault();
+        toggle(id);
+      }
+      return;
+    }
     if (key !== 'j' && key !== 'k') return;
     event.preventDefault();
     const rowsEls = [...(tableRef.current?.querySelectorAll<HTMLElement>('.board-row') ?? [])];
@@ -248,6 +273,26 @@ export function ScenesTab(props: {
             </button>
           ))}
         </div>
+        {props.canEdit && (
+          <BatchActions
+            storyboards={{
+              keyframes: props.images?.storyboardVersionId ?? null,
+              clips: props.videos?.storyboardVersionId ?? null,
+              voiceover: props.voiceovers?.storyboardVersionId ?? null,
+            }}
+            retry={retryRequests}
+            generate={
+              picked.length > 0
+                ? { stage, sceneIds: picked.map((r) => r.sceneId), regenerate: false }
+                : null
+            }
+            selectedCount={picked.length}
+            confirmThresholdUsd={props.confirmThresholdUsd}
+            onDone={() => {
+              setSelected(new Set());
+            }}
+          />
+        )}
         <div
           className="board-table"
           role="table"
@@ -256,6 +301,22 @@ export function ScenesTab(props: {
           onKeyDown={onBoardKey}
         >
           <div className="board-head" role="row">
+            <span role="columnheader">
+              {props.canEdit && (
+                <button
+                  type="button"
+                  className={allVisible ? 'cb on' : 'cb'}
+                  role="checkbox"
+                  aria-checked={allVisible}
+                  aria-label={t('batch.selectAll')}
+                  onClick={() => {
+                    setSelected(allVisible ? new Set() : new Set(visible.map((r) => r.sceneId)));
+                  }}
+                >
+                  {allVisible && <Icon name="check" size={12} />}
+                </button>
+              )}
+            </span>
             <span role="columnheader">{t('st.colScene')}</span>
             <span role="columnheader">{t('st.keyframe')}</span>
             <span role="columnheader">{t('st.clip')}</span>
@@ -270,8 +331,25 @@ export function ScenesTab(props: {
                 key={row.sceneId}
                 role="row"
                 className={row.sceneId === focus ? 'board-row focused' : 'board-row'}
+                data-scene={row.sceneId}
                 aria-label={t('st.rowLabel', { number: row.sceneNumber, status: row.statusLabel })}
               >
+                <span role="cell" className="board-select">
+                  {props.canEdit && (
+                    <button
+                      type="button"
+                      className={selected.has(row.sceneId) ? 'cb on' : 'cb'}
+                      role="checkbox"
+                      aria-checked={selected.has(row.sceneId)}
+                      aria-label={t('batch.select', { number: row.sceneNumber })}
+                      onClick={() => {
+                        toggle(row.sceneId);
+                      }}
+                    >
+                      {selected.has(row.sceneId) && <Icon name="check" size={12} />}
+                    </button>
+                  )}
+                </span>
                 <span role="rowheader" className="board-scene">
                   <b>{String(row.sceneNumber).padStart(2, '0')}</b>
                 </span>

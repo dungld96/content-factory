@@ -108,6 +108,14 @@ test('editor: scene images → review → keyframes (gate 3)', async ({ page }) 
   const panel = page.getByLabel('Scene image controls');
   await expect(panel).toBeVisible();
 
+  // Scene board selection (canvas): nothing failed, so Retry selected stays off.
+  const batch = page.getByLabel('Selected scenes');
+  await page.getByRole('checkbox', { name: 'Select scene 1' }).click();
+  await expect(batch).toContainText('1 selected');
+  await expect(batch.getByRole('button', { name: 'Retry selected' })).toBeDisabled();
+  await page.getByRole('checkbox', { name: 'Select scene 1' }).click();
+  await expect(batch).toContainText('0 selected');
+
   // The price is on the button (R-D4): the seeded mock image model is free ($0, never "?"), so
   // it is within the cost threshold and generates in one click.
   const generate = panel.getByRole('button', { name: /^Generate images · ~\$0$/ });
