@@ -21,7 +21,7 @@ test('owner: To-do, search, Productions list and board, masters and asset lineag
   await signIn(page);
 
   // To-do (R2): the queue of decisions; the exported demo item is ready to download.
-  await expect(page.getByRole('heading', { level: 1, name: 'To-do' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /need(s)? you/ })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Decisions waiting' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Ready to download' })).toContainText(
     '5 useful desk gadgets',
@@ -138,7 +138,7 @@ test('owner: switches the interface to Vietnamese and back (R-D6)', async ({ pag
   const switcher = page.getByRole('group', { name: 'Interface language' });
   await switcher.getByRole('button', { name: 'VI' }).click();
   await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
-  await expect(page.getByRole('heading', { level: 1, name: 'Việc cần làm' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /cần bạn/ })).toBeVisible();
   await expect(
     page.getByRole('navigation', { name: 'Chính' }).getByRole('link', { name: 'Sản xuất' }),
   ).toBeVisible();
@@ -146,7 +146,7 @@ test('owner: switches the interface to Vietnamese and back (R-D6)', async ({ pag
   await page.context().clearCookies({ name: 'acf_locale' });
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
-  await expect(page.getByRole('heading', { level: 1, name: 'Việc cần làm' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /cần bạn/ })).toBeVisible();
   // Settings › Profile & language: follow the browser again (English here).
   await page.goto('/settings/profile');
   await page.getByRole('radio', { name: 'Theo trình duyệt' }).check();

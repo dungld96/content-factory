@@ -7,6 +7,7 @@ import { LanguageSwitch } from '@/components/language-switch';
 import { AppShell } from '@/components/shell/app-shell';
 import { LogoutButton } from '@/components/shell/logout-button';
 import { SidebarNav } from '@/components/shell/sidebar-nav';
+import { SidebarNavWithCounts, SidebarSpend } from '@/components/shell/sidebar-status';
 import { Topbar } from '@/components/shell/topbar';
 import { Toaster } from '@/components/toast';
 import { initials } from '@/lib/format';
@@ -62,8 +63,13 @@ export default async function StudioLayout({ children }: { readonly children: Re
               </span>
             </span>
           </div>
-          <SidebarNav />
+          <Suspense fallback={<SidebarNav />}>
+            <SidebarNavWithCounts />
+          </Suspense>
           <div className="sidebar-bottom">
+            <Suspense fallback={null}>
+              <SidebarSpend />
+            </Suspense>
             <div className="profile">
               <span className="avatar" aria-hidden="true">
                 {initials(user.displayName)}

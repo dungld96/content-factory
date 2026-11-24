@@ -2,19 +2,18 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import type { OpsSummaryDto } from '@acf/contracts';
-
 import { NewContentButton } from '@/components/forms';
 import { Icon, type IconName } from '@/components/icon';
 import { RelativeTime } from '@/components/local-time';
 import { StatusBadge, type BadgeState } from '@/components/status-badge';
 import { ContentStatusPill } from '@/components/status-pill';
-import { apiGet } from '@/lib/api-server';
+import { loadOpsSummary } from '@/lib/ops-summary';
 import { jobErrorText } from '@/lib/format';
 import type { MessageKey } from '@/lib/i18n';
 import { getLocale, getT } from '@/lib/i18n/server';
 import { formatUsd } from '@/lib/money';
 import { writableProjects } from '@/lib/project-options';
+import { loadMonthSpend } from '@/lib/spend';
 import { buildTodo, type TodoItem, type TodoKind } from '@/lib/todo';
 import { loadWorkspace } from '@/lib/workspace';
 
@@ -38,9 +37,10 @@ const KIND: Readonly<Record<TodoKind, { state: BadgeState; label: MessageKey; ic
  * primary action on the row; running work and finished videos sit beside it.
  */
 export default async function TodoPage() {
-  const [workspace, ops, t, locale] = await Promise.all([
+  const [workspace, ops, monthSpend, t, locale] = await Promise.all([
     loadWorkspace(),
-    apiGet<OpsSummaryDto>('/ops/summary'),
+    loadOpsSummary(),
+    loadMonthSpend(),
     getT(),
     getLocale(),
   ]);
@@ -55,6 +55,10 @@ export default async function TodoPage() {
   const { projects, content, truncated } = workspace.data;
   const todo = buildTodo(content, ops.kind === 'ok' ? ops.data : null);
   const writable = writableProjects(projects);
+  const spend = monthSpend && {
+    spent: formatUsd(monthSpend.spentUsd),
+    limit: formatUsd(monthSpend.limitUsd),
+  };
   const reasonText = (item: TodoItem) => {
     const detail =
       item.kind === 'held' || item.kind === 'budget'
@@ -71,8 +75,15 @@ export default async function TodoPage() {
       <div className="page-heading">
         <div>
           <div className="eyebrow">{t('todo.eyebrow')}</div>
-          <h1>{t('todo.title')}</h1>
-          <p>{t('todo.lead')}</p>
+          <h1>
+            {todo.items.length > 0
+              ? t('todo.headline', { count: todo.items.length })
+              : t('todo.headlineNone')}
+          </h1>
+          <p>
+            {t('todo.summary', { count: todo.running.length })}
+            {spend && ` · ${t('todo.summarySpend', spend)}`}
+          </p>
         </div>
         <div className="actions">
           <NewContentButton projects={writable} label={t('todo.create')} />

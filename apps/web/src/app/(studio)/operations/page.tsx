@@ -2,14 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import type { OpsSummaryDto } from '@acf/contracts';
-
 import { Icon, type IconName } from '@/components/icon';
 import { JobErrorLine } from '@/components/job-error';
 import { LocalTime } from '@/components/local-time';
 import { ResumeRunButton } from '@/components/resume-run';
 import { Pill } from '@/components/status-pill';
-import { apiGet } from '@/lib/api-server';
+import { loadOpsSummary } from '@/lib/ops-summary';
 import { jobKindLabel } from '@/lib/format';
 import type { MessageKey } from '@/lib/i18n';
 import { getT } from '@/lib/i18n/server';
@@ -67,7 +65,7 @@ function HealthTile(props: {
  * comes only from the caller's projects.
  */
 export default async function OperationsPage() {
-  const [summary, t] = await Promise.all([apiGet<OpsSummaryDto>('/ops/summary'), getT()]);
+  const [summary, t] = await Promise.all([loadOpsSummary(), getT()]);
   if (summary.kind === 'unauthenticated') redirect('/login');
   if (summary.kind === 'error') {
     return (

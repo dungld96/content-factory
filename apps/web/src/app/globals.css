@@ -1213,8 +1213,10 @@ input.filter {
 /* --- Pipeline board ------------------------------------------------------------------------- */
 .board {
   display: grid;
-  grid-template-columns: repeat(5, minmax(200px, 1fr));
-  gap: 14px;
+  /* One column per stage, always on one row; narrow screens scroll sideways. */
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(176px, 1fr);
+  gap: 12px;
   overflow-x: auto;
   padding-bottom: 6px;
 }
@@ -2655,10 +2657,6 @@ input.filter {
   .signout {
     font-size: 12px;
     padding: 4px 5px;
-  }
-
-  .board {
-    grid-template-columns: repeat(5, minmax(220px, 1fr));
   }
 
   .search kbd {

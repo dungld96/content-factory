@@ -17,7 +17,7 @@ import {
   statusSelect,
   type SearchParams,
 } from '@/lib/content-filters';
-import { STAGE_LABEL, statusInfo, type Stage } from '@/lib/content-status';
+import { STAGE_LABEL, needsReview, statusInfo, type Stage } from '@/lib/content-status';
 import type { MessageKey } from '@/lib/i18n';
 import { getT } from '@/lib/i18n/server';
 import { writableProjects } from '@/lib/project-options';
@@ -42,7 +42,10 @@ const COLUMNS: readonly { readonly stage: Stage; readonly hint: MessageKey }[] =
 function BoardCard({ item }: { readonly item: WorkspaceContent }) {
   return (
     <li>
-      <Link href={`/content/${item.id}`} className="card board-card">
+      <Link
+        href={`/content/${item.id}`}
+        className={needsReview(item.status) ? 'card board-card needs-you' : 'card board-card'}
+      >
         <b>{item.title}</b>
         <span className="subline">{item.projectName}</span>
         <span className="meta">
@@ -146,10 +149,18 @@ export default async function ProductionsPage(props: {
           <div className="board">
             {COLUMNS.map(({ stage, hint }) => {
               const items = byStage(stage);
+              const waiting = items.filter((i) => needsReview(i.status)).length;
               return (
                 <section key={stage} className="board-column" aria-label={t(STAGE_LABEL[stage])}>
                   <h2>
-                    {t(STAGE_LABEL[stage])} <span className="chip-count">{items.length}</span>
+                    <span>
+                      {t(STAGE_LABEL[stage])} <span className="chip-count">{items.length}</span>
+                    </span>
+                    {waiting > 0 && (
+                      <span className="board-waiting">
+                        {t('board.waiting', { count: waiting })}
+                      </span>
+                    )}
                   </h2>
                   <p className="muted small-text board-hint">{t(hint)}</p>
                   {items.length === 0 ? (

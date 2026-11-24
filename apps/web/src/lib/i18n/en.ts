@@ -34,6 +34,13 @@ export const EN = {
   'app.backToWorkspace': 'Back to the workspace',
 
   // --- Navigation (R-D1, R-D2) -------------------------------------------------------------
+  'nav.group.work': 'Work',
+  'nav.group.resources': 'Resources',
+  'nav.group.control': 'Control',
+  'nav.countLabel': '{count} open',
+  'nav.spend': '{month} spend',
+  'nav.spendOf': 'of {limit} · {reserved} reserved',
+  'nav.spendLabel': 'Spending this month',
   'nav.main': 'Main',
   'nav.todo': 'To-do',
   'nav.todoShort': 'To-do',
@@ -186,6 +193,7 @@ export const EN = {
   'board.hint.images': 'Gate 3: keyframes, clips and voice-overs',
   'board.hint.render': 'Gate 4: render review',
   'board.hint.done': 'Approved or exported',
+  'board.waiting': '{count} waiting',
 
   // --- Content table --------------------------------------------------------------------
   'table.content': 'Content',
@@ -274,6 +282,10 @@ export const EN = {
   // --- To-do (R2) -----------------------------------------------------------------------
   'todo.pageTitle': 'To-do · Content Studio',
   'todo.eyebrow': 'Your queue',
+  'todo.headline': '{count} thing needs you|{count} things need you',
+  'todo.headlineNone': 'Nothing needs you right now',
+  'todo.summary': '{count} running',
+  'todo.summarySpend': '{spent} of {limit} this month',
   'todo.title': 'To-do',
   'todo.lead': 'What needs you now: open approval gates, failures to fix and budgets to watch.',
   'todo.loadError': 'The workspace could not be loaded. Reload the page to try again.',
@@ -1107,6 +1119,8 @@ export const EN = {
   'ws.history': 'History',
   'ws.historyTitle': 'Activity & version history',
   'ws.subtitle': '{format} · {platform} · {seconds} seconds · Updated',
+  'ws.spent': 'spent',
+  'ws.budgetLeft': 'budget {amount} left',
   'ws.nextStep': 'Next step',
   'ws.allDoneTitle': 'All done',
   'ws.allDoneBody': 'Every gate is passed and the video is exported.',

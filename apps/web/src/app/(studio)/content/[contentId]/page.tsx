@@ -941,6 +941,28 @@ export default async function ContentPage({
     },
   ];
   const totalCost = costs.length > 0 ? sumJobCosts(costs) : null;
+  const nextBar = next ? (
+    <section className="card action-bar" aria-label={t('ws.nextStep')}>
+      <span className="next-text">
+        <span className="eyebrow">{t('ws.nextStep')}</span>
+        <b>{next.title}</b>
+        <span className="muted">{next.detail}</span>
+      </span>
+      <a
+        className="btn primary"
+        href={`#${next.tab}${next.filter ? `?filter=${next.filter}` : ''}`}
+      >
+        {next.action}
+      </a>
+    </section>
+  ) : (
+    <section className="card action-bar" aria-label={t('ws.nextStep')}>
+      <span className="next-text">
+        <span className="eyebrow">{t('ws.allDoneTitle')}</span>
+        <b>{t('ws.allDoneBody')}</b>
+      </span>
+    </section>
+  );
 
   return (
     <>
@@ -962,41 +984,26 @@ export default async function ContentPage({
           </p>
         </div>
         <div className="actions">
+          {totalCost && (
+            <span className="ws-spend">
+              <span>
+                <b>
+                  {formatUsd(addUsd(totalCost.reportedUsd, totalCost.estimatedUsd))}
+                  {totalCost.unknownCalls > 0 ? ' + ?' : ''}
+                </b>{' '}
+                {t('ws.spent')}
+              </span>
+              {budget.kind === 'ok' && (
+                <small>{t('ws.budgetLeft', { amount: formatUsd(budget.data.remainingUsd) })}</small>
+              )}
+            </span>
+          )}
           <ContentStatusPill status={content.status} label={t('ws.statusLabel')} />
           <HistoryDrawer>{historyPanel}</HistoryDrawer>
         </div>
       </div>
 
-      {next ? (
-        <section className="card action-bar" aria-label={t('ws.nextStep')}>
-          <span className="next-text">
-            <span className="eyebrow">{t('ws.nextStep')}</span>
-            <b>{next.title}</b>
-            <span className="muted">{next.detail}</span>
-          </span>
-          {totalCost && (
-            <span className="next-cost">
-              {t('ws.cost')}: {formatUsd(addUsd(totalCost.reportedUsd, totalCost.estimatedUsd))}
-              {totalCost.unknownCalls > 0 ? ' + ?' : ''}
-            </span>
-          )}
-          <a
-            className="btn primary"
-            href={`#${next.tab}${next.filter ? `?filter=${next.filter}` : ''}`}
-          >
-            {next.action}
-          </a>
-        </section>
-      ) : (
-        <section className="card action-bar" aria-label={t('ws.nextStep')}>
-          <span className="next-text">
-            <span className="eyebrow">{t('ws.allDoneTitle')}</span>
-            <b>{t('ws.allDoneBody')}</b>
-          </span>
-        </section>
-      )}
-
-      <StageRail initial={initialTab} stages={stages} />
+      <StageRail initial={initialTab} stages={stages} afterRail={nextBar} />
 
       <section className="card cost-card workspace-cost" aria-label={t('ws.cost')}>
         <CostBox costs={costs} t={t} />

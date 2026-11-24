@@ -35,6 +35,13 @@ export const VI: Readonly<Record<keyof typeof EN, string>> = {
   'app.backToWorkspace': 'Về không gian làm việc',
 
   // --- Navigation (R-D1, R-D2) -------------------------------------------------------------
+  'nav.group.work': 'Công việc',
+  'nav.group.resources': 'Tài nguyên',
+  'nav.group.control': 'Kiểm soát',
+  'nav.countLabel': '{count} mục',
+  'nav.spend': 'Chi tiêu {month}',
+  'nav.spendOf': 'trên {limit} · đã giữ {reserved}',
+  'nav.spendLabel': 'Chi tiêu tháng này',
   'nav.main': 'Chính',
   'nav.todo': 'Việc cần làm',
   'nav.todoShort': 'Cần làm',
@@ -186,6 +193,7 @@ export const VI: Readonly<Record<keyof typeof EN, string>> = {
   'board.hint.images': 'Cổng 3: keyframe, clip và lồng tiếng',
   'board.hint.render': 'Cổng 4: duyệt bản render',
   'board.hint.done': 'Đã duyệt hoặc đã xuất',
+  'board.waiting': '{count} đang chờ',
 
   // --- Content table --------------------------------------------------------------------
   'table.content': 'Nội dung',
@@ -274,6 +282,10 @@ export const VI: Readonly<Record<keyof typeof EN, string>> = {
   // --- To-do (R2) -----------------------------------------------------------------------
   'todo.pageTitle': 'Việc cần làm · Content Studio',
   'todo.eyebrow': 'Hàng đợi của bạn',
+  'todo.headline': '{count} việc cần bạn',
+  'todo.headlineNone': 'Hiện không có việc nào cần bạn',
+  'todo.summary': '{count} việc đang chạy',
+  'todo.summarySpend': '{spent} trên {limit} tháng này',
   'todo.title': 'Việc cần làm',
   'todo.lead':
     'Những việc đang chờ bạn: cổng duyệt đang mở, lỗi cần sửa và ngân sách cần theo dõi.',
@@ -1108,6 +1120,8 @@ export const VI: Readonly<Record<keyof typeof EN, string>> = {
   'ws.history': 'Lịch sử',
   'ws.historyTitle': 'Hoạt động & lịch sử phiên bản',
   'ws.subtitle': '{format} · {platform} · {seconds} giây · Cập nhật',
+  'ws.spent': 'đã chi',
+  'ws.budgetLeft': 'ngân sách còn {amount}',
   'ws.nextStep': 'Bước tiếp theo',
   'ws.allDoneTitle': 'Đã xong',
   'ws.allDoneBody': 'Đã qua mọi cổng duyệt và video đã được xuất.',

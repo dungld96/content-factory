@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { cache } from 'react';
+
 import type { ContentItemDto, Page, ProjectDto } from '@acf/contracts';
 
 import { apiGet, type ApiResult } from './api-server';
@@ -43,8 +45,9 @@ export interface Workspace {
 /**
  * The caller's projects and their content. There is no workspace-level endpoint (the API is
  * project-scoped), so this reads each project's list; the MVP has a handful of projects.
+ * Cached per request: the sidebar counts and the page share one read.
  */
-export async function loadWorkspace(): Promise<ApiResult<Workspace>> {
+export const loadWorkspace = cache(async (): Promise<ApiResult<Workspace>> => {
   const projects = await apiGetAll<ProjectDto>('/projects');
   if (projects.kind !== 'ok') return projects;
   const lists = await Promise.all(
@@ -62,4 +65,4 @@ export async function loadWorkspace(): Promise<ApiResult<Workspace>> {
   }
   content.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return { kind: 'ok', data: { projects: projects.data.items, content, truncated } };
-}
+});

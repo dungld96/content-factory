@@ -1,12 +1,18 @@
 import type { IconName } from '@/components/icon';
 import type { MessageKey } from '@/lib/i18n';
 
+export type NavGroup = 'work' | 'resources' | 'control';
+
+export const NAV_GROUPS: readonly NavGroup[] = ['work', 'resources', 'control'];
+
 export interface NavItem {
   readonly href: string;
   readonly label: MessageKey;
   /** Short label for the phone bottom bar. */
   readonly short: MessageKey;
   readonly icon: IconName;
+  /** Menu group (design canvas: Work, Resources, Control). */
+  readonly group: NavGroup;
   /** Whether a pathname belongs to this entry. */
   readonly match: (path: string) => boolean;
 }
@@ -17,6 +23,7 @@ const isContentWorkspace = (path: string) => /^\/content\/[^/]+/.test(path);
 export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: '/',
+    group: 'work',
     label: 'nav.todo',
     short: 'nav.todoShort',
     icon: 'todoList',
@@ -24,6 +31,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   },
   {
     href: '/productions',
+    group: 'work',
     label: 'nav.productions',
     short: 'nav.productions',
     icon: 'content',
@@ -31,6 +39,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   },
   {
     href: '/projects',
+    group: 'work',
     label: 'nav.projects',
     short: 'nav.projects',
     icon: 'projects',
@@ -38,6 +47,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   },
   {
     href: '/assets',
+    group: 'resources',
     label: 'nav.library',
     short: 'nav.library',
     icon: 'assets',
@@ -45,6 +55,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   },
   {
     href: '/costs',
+    group: 'control',
     label: 'nav.costs',
     short: 'nav.costs',
     icon: 'costs',
@@ -52,6 +63,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   },
   {
     href: '/operations',
+    group: 'control',
     label: 'nav.operations',
     short: 'nav.operationsShort',
     icon: 'operations',
@@ -59,6 +71,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   },
   {
     href: '/settings',
+    group: 'control',
     label: 'nav.settings',
     short: 'nav.settings',
     icon: 'settings',

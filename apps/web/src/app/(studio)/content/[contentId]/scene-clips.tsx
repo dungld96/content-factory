@@ -57,6 +57,7 @@ export function SceneClipsPanel(props: {
     reasons: ConfirmReason[];
   } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [priced, setPriced] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const withClip = videos.scenes.filter((s) => s.clip !== null).length;
 
@@ -93,7 +94,10 @@ export function SceneClipsPanel(props: {
     if (!canEdit) return;
     let live = true;
     void estimateFor({}).then((plan) => {
-      if (live) setEstimate(plan);
+      if (!live) return;
+      setEstimate(plan);
+      // Without an estimate the button still works: a click estimates again and shows why.
+      setPriced(true);
     });
     return () => {
       live = false;
@@ -220,7 +224,7 @@ export function SceneClipsPanel(props: {
             onClick={() => void start({})}
           >
             <Icon name="generate" /> {t('clips.generate')}
-            {estimate ? buttonPrice : ` · ${t('clips.pricing')}`}
+            {estimate ? buttonPrice : priced ? '' : ` · ${t('clips.pricing')}`}
           </button>
           <CancelActiveRuns jobs={videos.scenes.map((s) => s.activeJob)} video />
         </div>

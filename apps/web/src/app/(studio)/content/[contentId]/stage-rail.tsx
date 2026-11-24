@@ -30,6 +30,8 @@ export interface WorkspaceStage {
 export function StageRail(props: {
   readonly stages: readonly WorkspaceStage[];
   readonly initial: string;
+  /** Shown between the rail and the active panel (the Next-step bar, design canvas). */
+  readonly afterRail?: ReactNode;
 }) {
   const t = useT();
   const { stages } = props;
@@ -115,6 +117,7 @@ export function StageRail(props: {
           </button>
         ))}
       </div>
+      {props.afterRail}
       {stages.map((stage) => (
         <div
           key={stage.id}

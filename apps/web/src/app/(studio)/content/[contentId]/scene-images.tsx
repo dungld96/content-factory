@@ -54,6 +54,7 @@ export function SceneImagesPanel(props: {
     reasons: ConfirmReason[];
   } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [priced, setPriced] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const withKeyframe = images.scenes.filter((s) => s.keyframe !== null).length;
   const complete = withKeyframe === images.scenes.length;
@@ -89,7 +90,10 @@ export function SceneImagesPanel(props: {
     if (!canEdit) return;
     let live = true;
     void estimateFor({}).then((plan) => {
-      if (live) setEstimate(plan);
+      if (!live) return;
+      setEstimate(plan);
+      // Without an estimate the button still works: a click estimates again and shows why.
+      setPriced(true);
     });
     return () => {
       live = false;
@@ -194,7 +198,9 @@ export function SceneImagesPanel(props: {
               ? planned.length > 0
                 ? ` · ${estimateText(estimate.totalEstimatedUsd, estimate.unknownCost)}`
                 : ''
-              : ` · ${t('clips.pricing')}`}
+              : priced
+                ? ''
+                : ` · ${t('clips.pricing')}`}
           </button>
           <CancelActiveRuns jobs={images.scenes.map((s) => s.activeJob)} />
         </div>
