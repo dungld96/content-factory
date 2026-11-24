@@ -2377,3 +2377,31 @@ body.focus-open {
     grid-column: 3;
   }
 }
+
+/* Focus review header: version switch, changes, To-do position. */
+.ds .focus-head .seg {
+  flex: none;
+}
+
+.ds .focus-queue {
+  gap: 6px;
+}
+
+.ds .icon.flip {
+  transform: scaleX(-1);
+}
+
+.ds .focus-main.changes ins {
+  background: var(--success-bg);
+  color: var(--success);
+  text-decoration: none;
+}
+
+.ds .focus-main.changes del {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.ds .focus-previous {
+  gap: 12px;
+}

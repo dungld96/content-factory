@@ -41,6 +41,9 @@ import { getLocale, getT } from '@/lib/i18n/server';
 import { usableModels } from '@/lib/model-options';
 import { addUsd, formatUsd, sumJobCosts } from '@/lib/money';
 import { statusInfo } from '@/lib/content-status';
+import { loadOpsSummary } from '@/lib/ops-summary';
+import { buildTodo } from '@/lib/todo';
+import { loadWorkspace } from '@/lib/workspace';
 import { buildSceneRows, nextStep } from '@/lib/scene-board';
 
 import { AudioPlan } from './audio-plan';
@@ -353,6 +356,50 @@ export default async function ContentPage({
       ]
     : [];
 
+  // Position of this item among the To-do decisions (focus review header, oldest first).
+  const [workspaceForQueue, opsForQueue] = await Promise.all([loadWorkspace(), loadOpsSummary()]);
+  const decisions =
+    workspaceForQueue.kind === 'ok'
+      ? buildTodo(
+          workspaceForQueue.data.content,
+          opsForQueue.kind === 'ok' ? opsForQueue.data : null,
+        )
+          .items.filter((i) => i.kind === 'gate')
+          .sort((a, b) => a.at.localeCompare(b.at))
+      : [];
+  const here = decisions.findIndex((i) => i.href.startsWith(`/content/${content.id}#`));
+  const queue =
+    here >= 0
+      ? {
+          index: here + 1,
+          total: decisions.length,
+          prev: decisions[here - 1]?.href ?? null,
+          next: decisions[here + 1]?.href ?? null,
+        }
+      : undefined;
+  const previousScriptMain = previousScript ? (
+    <>
+      <div className="script-block">
+        <div className="script-block-head">
+          <h3>{t('ws.hook')}</h3>
+        </div>
+        <p>“{previousScript.content.hook}”</p>
+      </div>
+      <div className="script-block">
+        <div className="script-block-head">
+          <h3>{t('ws.voiceScript')}</h3>
+        </div>
+        <p>“{previousScript.content.voiceOver}”</p>
+      </div>
+      <div className="script-block">
+        <div className="script-block-head">
+          <h3>{t('ws.cta')}</h3>
+        </div>
+        <p>“{previousScript.content.callToAction}”</p>
+      </div>
+    </>
+  ) : null;
+  const previousBoard = storyboardList[1];
   const focusSubtitle = [
     content.title,
     projectName,
@@ -455,6 +502,16 @@ export default async function ContentPage({
         title={t('review.focus.script')}
         subtitle={focusSubtitle}
         reviewable={canEdit && latestScript?.status === 'pending_review'}
+        queue={queue}
+        previous={
+          previousScript && latestScript
+            ? {
+                label: `v${String(previousScript.version)}`,
+                current: `v${String(latestScript.version)}`,
+                main: previousScriptMain,
+              }
+            : undefined
+        }
         main={
           <>
             <div className="section-head">
@@ -695,6 +752,23 @@ export default async function ContentPage({
         title={t('review.focus.storyboard')}
         subtitle={focusSubtitle}
         reviewable={canEdit && board.status === 'pending_review' && !board.stale}
+        queue={queue}
+        previous={
+          previousBoard
+            ? {
+                label: `v${String(previousBoard.version)}`,
+                current: `v${String(board.version)}`,
+                main: (
+                  <p className="t-13">
+                    {t('review.boardPrevious', {
+                      seconds: previousBoard.totalDurationSeconds,
+                      source: sourceText(previousBoard.source),
+                    })}
+                  </p>
+                ),
+              }
+            : undefined
+        }
         main={
           <ul className="storyboard-grid" aria-label={t('ws.board.scenes')}>
             {board.scenes.map((scene, i) => {

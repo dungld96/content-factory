@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 import { useT } from '@/components/i18n-provider';
 import { Icon } from '@/components/icon';
@@ -28,6 +28,18 @@ export function FocusReview(props: {
   readonly reviewable: boolean;
   readonly main: ReactNode;
   readonly side: ReactNode;
+  /** The previous version, read-only, for the v1/v2 switch; omitted for a first version. */
+  readonly previous?:
+    { readonly label: string; readonly current: string; readonly main: ReactNode } | undefined;
+  /** Position among the To-do decisions, with the neighbours' links. */
+  readonly queue?:
+    | {
+        readonly index: number;
+        readonly total: number;
+        readonly prev: string | null;
+        readonly next: string | null;
+      }
+    | undefined;
 }) {
   const t = useT();
   // null: follow the link (`focus` in the hash); true/false: the reviewer opened or closed it.
@@ -39,6 +51,16 @@ export function FocusReview(props: {
   );
   // Deciding ends the review: once nothing waits, the page returns to the workspace.
   const open = (requested ?? fromLink) && props.reviewable;
+  const [showPrevious, setShowPrevious] = useState(false);
+  const [changes, setChanges] = useState(false);
+  const body = useRef<HTMLDivElement>(null);
+
+  // "Show changes": open every word diff of the version (they are folded by default).
+  useEffect(() => {
+    for (const d of body.current?.querySelectorAll('details.text-diff') ?? []) {
+      (d as HTMLDetailsElement).open = changes;
+    }
+  }, [changes, showPrevious]);
 
   useEffect(() => {
     if (!open) return;
@@ -82,6 +104,72 @@ export function FocusReview(props: {
             </span>
             <span className="t-12 muted">{props.subtitle}</span>
           </div>
+          <span className="spacer" />
+          {props.previous && (
+            <>
+              <div className="seg" role="group" aria-label={t('review.versions')}>
+                <button
+                  type="button"
+                  className={showPrevious ? 'on' : undefined}
+                  aria-pressed={showPrevious}
+                  onClick={() => {
+                    setShowPrevious(true);
+                  }}
+                >
+                  {props.previous.label}
+                </button>
+                <button
+                  type="button"
+                  className={showPrevious ? undefined : 'on'}
+                  aria-pressed={!showPrevious}
+                  onClick={() => {
+                    setShowPrevious(false);
+                  }}
+                >
+                  {t('review.latest', { version: props.previous.current })}
+                </button>
+              </div>
+              <button
+                type="button"
+                className="btn sm"
+                aria-pressed={changes}
+                disabled={showPrevious}
+                onClick={() => {
+                  setChanges((v) => !v);
+                }}
+              >
+                <Icon name="eye" />
+                {changes
+                  ? t('review.hideChanges')
+                  : t('review.showChangesFrom', { version: props.previous.label })}
+              </button>
+            </>
+          )}
+          {props.queue && props.queue.total > 0 && (
+            <nav className="row focus-queue" aria-label={t('review.queue')}>
+              <span className="t-13 muted">
+                {t('review.queuePos', { index: props.queue.index, total: props.queue.total })}
+              </span>
+              {props.queue.prev ? (
+                <a className="btn sm icon" href={props.queue.prev} aria-label={t('review.prev')}>
+                  <Icon name="chevronRight" className="flip" />
+                </a>
+              ) : (
+                <span className="btn sm icon" aria-disabled="true">
+                  <Icon name="chevronRight" className="flip" />
+                </span>
+              )}
+              {props.queue.next ? (
+                <a className="btn sm icon" href={props.queue.next} aria-label={t('review.next')}>
+                  <Icon name="chevronRight" />
+                </a>
+              ) : (
+                <span className="btn sm icon" aria-disabled="true">
+                  <Icon name="chevronRight" />
+                </span>
+              )}
+            </nav>
+          )}
         </header>
       ) : (
         props.reviewable && (
@@ -105,8 +193,19 @@ export function FocusReview(props: {
           </div>
         )
       )}
-      <div className="focus-body">
-        <div className="focus-main">{props.main}</div>
+      <div className="focus-body" ref={body}>
+        <div className={changes ? 'focus-main changes' : 'focus-main'}>
+          {open && showPrevious && props.previous ? (
+            <div className="col focus-previous" aria-label={props.previous.label}>
+              <p className="callout info t-13">
+                {t('review.previousNote', { version: props.previous.label })}
+              </p>
+              {props.previous.main}
+            </div>
+          ) : (
+            props.main
+          )}
+        </div>
         <aside className="col focus-side">{props.side}</aside>
       </div>
     </div>

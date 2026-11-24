@@ -23,8 +23,9 @@ system. The theme follows the system, or the sidebar moon/sun toggle (`acf_theme
 | To-do / Phone · To-do | `/` | Matches: "N things need you", tabs, decision rows with gate badges and waiting time, In production meters, Running now (live jobs), Ready to download. Phone: decision cards with a full-width action |
 | New content | `/productions/new` | Matches: four sections, product photos (upload or Library), voice-over and profile, brief check, estimated run cost from routed model prices, Create & write script / Save as draft, draft autosave |
 | Productions | `/productions` | Matches: List/Board, chips, six stage columns with gate counts, cards with status and this month's cost |
-| Workspace (light, dark, VI) | `/content/:id` | Matches: header with spend and budget, six-step rail with G1–G4, dark Next-step bar with Skip, scene board, cost by stage, latest activity |
-| Gate 1 · Script review | `/content/:id#script?focus=1` | Matches: full-screen focus review, Before you approve, Brief, Decision (note, Approve [A], Request changes [R]) |
+| Workspace (light, dark, VI) | `/content/:id` | Matches: header with spend and budget, six-step rail with G1–G4, dark Next-step bar with Skip, scene board with selection (Retry selected, Generate · price), cost by stage, latest activity |
+| Gate 1 · Script review | `/content/:id#script?focus=1` | Matches: full-screen focus review with the v1/v2 switch, Show changes, To-do position with previous/next, Before you approve, Brief, Decision (note, Approve [A], Request changes [R]) |
+| Gate 3 · Pick keyframes | `/content/:id#scenes?focus=1` | Matches: scene strip, large candidates, Choose #n & next scene, more candidates with price, gate criteria, keys ← → 1–9 Enter G |
 | Render | Render stage | Matches: Settings and Render steps, review of the latest render (player, checks, checklist, approve/reject), Export table with details, checksum and size |
 | Library | `/assets` | Matches: collections and types rail, chips, grid/list, asset cards with review state, details and lineage panel |
 | Operations | `/operations` | Matches: health cards, Needs attention with recovery actions, queues with load, last 24 hours with budgets |
@@ -38,11 +39,10 @@ system. The theme follows the system, or the sidebar moon/sun toggle (`acf_theme
   - worker heartbeats and media tool health on Operations (the canvas "Workers", "Media tools" cards);
   - stacked spend per capability per month (the chart shows monthly totals; this month by stage is in the table view).
 - **Interactions not built yet:**
-  - multi-select with "Retry selected" on the scene board;
-  - v1/v2 switch and To-do previous/next inside focus review;
-  - focus review for the keyframe gate (G3);
   - import preview diff card in Settings › Models;
-  - inline per-project overrides in Settings › Budgets (edited on the project Costs tab).
+  - inline per-project overrides in Settings › Budgets (edited on the project Costs tab);
+  - "Regenerate with a note" on keyframes (the image API takes no note; "more candidates" regenerates);
+  - "Reject & stop this item" in the Decision card (rejection asks for changes; stopping is Cancel run).
 - **Intentional:**
   - the phone bottom bar keeps Menu (it opens the full menu) where the canvas shows Costs;
   - Export opens the render's export table instead of a separate panel.

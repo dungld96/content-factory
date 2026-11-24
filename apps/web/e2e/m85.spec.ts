@@ -60,6 +60,15 @@ test('owner: picks a model and approves an earlier script version', async ({ pag
   await expect(page.getByText(/Version 2 ·/).first()).toBeVisible({ timeout: GENERATION_TIMEOUT });
   await page.reload();
 
+  // Focus review (canvas): v1/v2 switch; v1 is read-only; Escape returns to the workspace.
+  await page.getByRole('button', { name: 'Focus review' }).click();
+  const focus = page.getByRole('dialog', { name: 'Script review' });
+  await focus.getByRole('button', { name: 'v1', exact: true }).click();
+  await expect(focus).toContainText('v1 is shown read-only');
+  await focus.getByRole('button', { name: 'v2 · latest' }).click();
+  await page.keyboard.press('Escape');
+  await expect(focus).toHaveCount(0);
+
   // Q4: version 1 is approved from the earlier-versions list while version 2 stays pending.
   await page.getByText(/Earlier versions \(1\)/).click();
   const v1 = page.getByRole('listitem', { name: 'Script version 1' });
