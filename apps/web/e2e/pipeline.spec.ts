@@ -25,8 +25,8 @@ async function openDemoContent(page: Page, email: string, password: string) {
 }
 
 /**
- * Opens a tab of the content workspace (script & brief, storyboard, scenes, …). Keyframes, clips
- * and voice-over are stages inside the Scenes tab (UX review U1).
+ * Opens a stage of the content workspace's stage rail (brief & script, storyboard, scenes, render
+ * & export; redesign R3). Keyframes, clips and voice-over are stages inside Scenes (UX review U1).
  */
 async function openTab(page: Page, name: RegExp) {
   if (/Keyframes|Clips|Voice-over/.test(name.source)) {
@@ -105,13 +105,14 @@ test('editor: scene images → review → keyframes (gate 3)', async ({ page }) 
   const panel = page.getByLabel('Scene image controls');
   await expect(panel).toBeVisible();
 
-  // Estimate first: the seeded mock image model is free (estimated 0, never "unknown").
-  await panel.getByRole('button', { name: 'Estimate cost' }).click();
+  // The price is on the button (R-D4): the seeded mock image model is free ($0, never "?"), so
+  // it is within the cost threshold and generates in one click.
+  const generate = panel.getByRole('button', { name: /^Generate images · ~\$0$/ });
+  await expect(generate).toBeVisible();
   await expect(panel.getByLabel('Image estimate')).toContainText('mock/solid-image');
-  await expect(panel.getByLabel('Image estimate')).toContainText('estimated 0 USD');
 
   // One job per scene; the worker generates, validates and stores the images.
-  await panel.getByRole('button', { name: 'Generate images' }).click();
+  await generate.click();
   await expect(page.getByLabel('Content status')).toHaveText('Asset review', {
     timeout: GENERATION_TIMEOUT,
   });
@@ -132,7 +133,7 @@ test('editor: scene images → review → keyframes (gate 3)', async ({ page }) 
       .poll(() => img.evaluate((el) => (el as HTMLImageElement).naturalWidth))
       .toBeGreaterThan(0);
     await candidate.getByRole('button', { name: 'Approve' }).click();
-    await expect(candidate).toContainText('approved');
+    await expect(candidate).toContainText('Approved');
     await candidate.getByRole('button', { name: 'Use as keyframe' }).click();
     await expect(scene).toContainText('Keyframe chosen');
   }
@@ -147,7 +148,7 @@ test('editor: voice profile → clips → voice-over (gate 4)', async ({ page })
   await openDemoContent(page, EDITOR, passwordOf('EDITOR'));
 
   // A project voice profile (Settings → Voice profiles) with the seeded mock TTS model.
-  await page.goto('/settings?section=voices');
+  await page.goto('/settings/voices');
   const form = page.getByRole('form', { name: 'New voice profile' });
   await form.getByLabel('Name').fill('Narrator');
   await form
@@ -168,9 +169,9 @@ test('editor: voice profile → clips → voice-over (gate 4)', async ({ page })
   const modelSelect = clips.getByLabel('Model');
   await expect(modelSelect).toHaveValue('');
   await expect(modelSelect).toContainText('Mock video clips');
-  // Generate is enabled only once the estimate (billed seconds, limit) has been shown.
-  await expect(clips.getByRole('button', { name: 'Generate clips' })).toBeDisabled();
-  await clips.getByRole('button', { name: 'Estimate cost' }).click();
+  // The estimate (billed seconds, retention) is behind the price on the button (R-D4).
+  const generateClips = clips.getByRole('button', { name: /^Generate clips · ~\$0$/ });
+  await expect(generateClips).toBeVisible();
   const estimate = clips.getByLabel('Clip estimate');
   await expect(estimate).toContainText('mock/still-video');
   await expect(estimate).toContainText('billed as');
@@ -178,7 +179,7 @@ test('editor: voice profile → clips → voice-over (gate 4)', async ({ page })
   const clipScenes = page.getByRole('article', { name: /^Scene \d+ clips$/ });
   const sceneCount = await clipScenes.count();
   expect(sceneCount).toBeGreaterThan(0);
-  await clips.getByRole('button', { name: 'Generate clips' }).click();
+  await generateClips.click();
   await expect(page.getByText(/clip job\(s\) queued/)).toBeVisible();
   // The worker submits, polls the mock provider, renders and validates real MP4s (FFmpeg).
   await expect
@@ -203,7 +204,7 @@ test('editor: voice profile → clips → voice-over (gate 4)', async ({ page })
     expect(ranged.headers()['content-type']).toBe('video/mp4');
     expect((await ranged.body()).subarray(4, 8).toString('latin1')).toBe('ftyp');
     await candidate.getByRole('button', { name: 'Approve' }).click();
-    await expect(candidate).toContainText('approved');
+    await expect(candidate).toContainText('Approved');
     await candidate.getByRole('button', { name: 'Use as clip' }).click();
     await expect(scene).toContainText('Clip chosen');
   }
@@ -213,10 +214,10 @@ test('editor: voice profile → clips → voice-over (gate 4)', async ({ page })
   await openTab(page, /^Voice-over/);
   const voice = page.getByLabel('Voice-over controls');
   await voice.getByLabel('Voice profile').selectOption({ label: 'Narrator · mock-a · vi' });
-  await expect(voice.getByRole('button', { name: 'Generate voice-overs' })).toBeEnabled();
-  await voice.getByRole('button', { name: 'Estimate cost' }).click();
+  const generateVoice = voice.getByRole('button', { name: /^Generate voice-overs · ~\$0$/ });
+  await expect(generateVoice).toBeEnabled();
   await expect(voice.getByLabel('Voice-over estimate')).toContainText('mock/tone-tts');
-  await voice.getByRole('button', { name: 'Generate voice-overs' }).click();
+  await generateVoice.click();
   await expect(page.getByText(/voice-over job\(s\) queued/)).toBeVisible();
   const voiceScenes = page.getByRole('list', { name: /^Scene \d+ voice-over candidates$/ });
   // Every fixture scene has voice-over text: one generated candidate each.
@@ -320,7 +321,7 @@ test('viewer: sees the versions but no generate, edit or review controls', async
       page.getByRole('button', { name: /Edit|Approve|Reject|keyframe|Regenerate|Resync/ }),
     ).toHaveCount(0);
   };
-  await openTab(page, /^Script/);
+  await openTab(page, /^Brief & script/);
   await expect(page.getByRole('article', { name: 'Script version 2' })).toBeVisible();
   await noControls();
   await openTab(page, /^Storyboard/);
@@ -341,7 +342,7 @@ test('viewer: sees the versions but no generate, edit or review controls', async
   await expect(page.getByRole('article', { name: 'Render 1' })).toContainText('Current export');
   await expect(page.getByRole('button', { name: /Render video|Export package/ })).toHaveCount(0);
   await noControls();
-  await openTab(page, /^Activity/);
+  await page.getByRole('button', { name: 'History' }).click();
   await expect(page.getByRole('list', { name: 'Version history' })).toContainText(
     'Script v2 approved',
   );

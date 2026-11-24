@@ -34,7 +34,7 @@ test('login → project list → logout', async ({ page, context }) => {
   await signIn(page, OWNER, passwordOf('OWNER'));
   await expect(page).toHaveURL(OVERVIEW);
   await page
-    .getByRole('navigation', { name: 'Workspace' })
+    .getByRole('navigation', { name: 'Main' })
     .getByRole('link', { name: 'Projects' })
     .click();
   await expect(page).toHaveURL(/\/projects$/);

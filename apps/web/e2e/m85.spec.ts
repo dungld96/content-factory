@@ -65,14 +65,16 @@ test('owner: picks a model and approves an earlier script version', async ({ pag
   await v1.getByRole('button', { name: 'Approve script v1' }).click();
   await expect(page.getByText('The script v1 is approved.')).toBeVisible();
   await page.reload();
-  // The step bar names the approved version (the checklist moved into it, UX review U2).
-  await expect(page.getByLabel('Production steps')).toContainText('v1 approved');
+  // The stage rail names the approved version (redesign R3).
+  await expect(page.getByRole('tablist', { name: 'Production stages' })).toContainText(
+    'v1 approved',
+  );
 });
 
 test('owner: voice picker offers the model voices', async ({ page }) => {
   await signIn(page);
   const projectId = projectUrl.split('/').pop() ?? '';
-  await page.goto(`/settings?section=voices&project=${projectId}`);
+  await page.goto(`/settings/voices?project=${projectId}`);
   const form = page.getByRole('form', { name: 'New voice profile' });
   await expect(form).toBeVisible();
   // Only enabled models are offered; the voice field lists the model's voices.

@@ -27,14 +27,21 @@ interface EventRow {
 }
 
 export interface LiveSubscriber {
-  readonly projectIds: ReadonlySet<string>;
+  readonly userId: string;
+  /** The user's projects when the stream opened; projects joined later are checked on demand. */
+  readonly projectIds: Set<string>;
   readonly send: (event: LiveJobEventDto) => void;
 }
 
 interface Listener extends LiveSubscriber {
   /** Rows created before this were the stream's backlog, not live news. */
   readonly joinedAt: number;
+  /** Projects checked and found not to be the user's, with when (re-checked after a while). */
+  readonly refused: Map<string, number>;
 }
+
+/** A refused project is checked again after this (a membership may have been added). */
+const REFUSED_TTL_MS = 30_000;
 
 const toEvent = (r: EventRow): LiveJobEventDto => ({
   id: cursorOf(r.created_at, r.id),
@@ -87,7 +94,7 @@ export class LiveEventsService implements OnModuleDestroy {
   }
 
   subscribe(subscriber: LiveSubscriber): () => void {
-    const listener: Listener = { ...subscriber, joinedAt: Date.now() };
+    const listener: Listener = { ...subscriber, joinedAt: Date.now(), refused: new Map() };
     this.subscribers.add(listener);
     if (!this.timer) {
       this.since = new Date();
@@ -186,9 +193,8 @@ export class LiveEventsService implements OnModuleDestroy {
         if (row.created_at > this.since) this.since = row.created_at;
         const event = toEvent(row);
         for (const s of this.subscribers) {
-          if (s.projectIds.has(row.project_id) && row.created_at.getTime() >= s.joinedAt) {
-            s.send(event);
-          }
+          if (row.created_at.getTime() < s.joinedAt) continue;
+          if (await this.follows(s, row.project_id)) s.send(event);
         }
       }
       const keepAfter = this.since.getTime() - 2 * OVERLAP_MS;
@@ -198,6 +204,27 @@ export class LiveEventsService implements OnModuleDestroy {
     } finally {
       this.ticking = false;
     }
+  }
+
+  /**
+   * Whether the listener may see a project's jobs: its projects at connect time, else a fresh
+   * membership check (a project created or joined after the stream opened), cached when refused.
+   */
+  private async follows(s: Listener, projectId: string): Promise<boolean> {
+    if (s.projectIds.has(projectId)) return true;
+    const refusedAt = s.refused.get(projectId);
+    if (refusedAt !== undefined && Date.now() - refusedAt < REFUSED_TTL_MS) return false;
+    const member = await this.prisma.client.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId: s.userId } },
+      select: { projectId: true },
+    });
+    if (member) {
+      s.projectIds.add(projectId);
+      s.refused.delete(projectId);
+      return true;
+    }
+    s.refused.set(projectId, Date.now());
+    return false;
   }
 
   private read(from: Date, limit: number): Promise<EventRow[]> {

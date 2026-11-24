@@ -105,6 +105,7 @@ export class LiveController {
 
     const sent = new Set<string>();
     const unsubscribe = this.live.subscribe({
+      userId: actor.userId,
       projectIds,
       send: (event) => {
         if (sent.has(event.id)) return;

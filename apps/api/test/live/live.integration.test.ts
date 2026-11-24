@@ -184,6 +184,18 @@ describe('live jobs (R-D5)', () => {
     expect(got.events.map((e) => [e.jobId, e.to])).toContainEqual([jobId, 'running']);
   });
 
+  it('follows a project the user joins after the stream opened', async () => {
+    const live = stream('editor', '', 1, 5_000);
+    await new Promise((r) => setTimeout(r, 300));
+    const before = w;
+    const base = await createFixture(db, ids);
+    w = { ...base, ...(await addGenerationFixture(db, ids, base)) };
+    const jobId = await queuedJob();
+    const got = await live;
+    w = before;
+    expect(got.events.map((e) => e.jobId)).toContain(jobId);
+  });
+
   it('sends nothing of other projects', async () => {
     const live = stream('outsider', '', 1, 2_500);
     await new Promise((r) => setTimeout(r, 300));

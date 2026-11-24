@@ -15,51 +15,58 @@ async function signIn(page: Page) {
 const nav = (page: Page, name: string) =>
   page.getByRole('complementary').getByRole('link', { name, exact: true });
 
-test('owner: overview, search, filters, pipeline board, masters and asset lineage', async ({
+test('owner: To-do, search, Productions list and board, masters and asset lineage', async ({
   page,
 }) => {
   await signIn(page);
 
-  // Overview: counts and the recent list come from the API.
-  const stats = page.getByRole('region', { name: 'Workspace statistics' });
-  await expect(stats).toContainText('Content items');
-  await expect(page.getByRole('table', { name: 'Recently updated' })).toContainText(
+  // To-do (R2): the queue of decisions; the exported demo item is ready to download.
+  await expect(page.getByRole('heading', { level: 1, name: 'To-do' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Decisions waiting' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Ready to download' })).toContainText(
     '5 useful desk gadgets',
   );
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link')).toHaveCount(7);
 
-  // ⌘K / Ctrl+K focuses the search; Enter opens the filtered content library.
+  // ⌘K / Ctrl+K focuses the search; Enter opens the filtered Productions list.
   await page.keyboard.press('ControlOrMeta+k');
   await expect(page.getByRole('searchbox', { name: 'Search content' })).toBeFocused();
   await page.keyboard.type('desk gadgets');
   await page.keyboard.press('Enter');
-  await expect(page).toHaveURL(/\/content\?q=desk(\+|%20)gadgets$/);
+  await expect(page).toHaveURL(/\/productions\?q=desk(\+|%20)gadgets$/);
   const library = page.getByRole('table', { name: 'Content items' });
   await expect(library).toContainText('5 useful desk gadgets');
   await expect(library).not.toContainText('Standing desk tips');
 
-  // Status filter (URL-backed): the pipeline spec exported the demo item.
-  await page.goto('/content');
-  await page.getByLabel('Status').selectOption({ label: 'Approved or exported' });
-  await expect(page).toHaveURL(/status=approved/);
+  // The former content library address redirects, with its query (R1).
+  await page.goto('/content?status=approved');
+  await expect(page).toHaveURL(/\/productions\?status=approved$/);
   await expect(library).toContainText('5 useful desk gadgets');
   await expect(library).not.toContainText('Standing desk tips');
 
-  // Pipeline board groups items by stage.
-  await nav(page, 'Production pipeline').click();
+  // Status filter (URL-backed): the pipeline spec exported the demo item.
+  await page.goto('/productions');
+  await page.getByLabel('Status').selectOption({ label: 'Approved or exported' });
+  await expect(page).toHaveURL(/status=approved/);
+  await expect(library).toContainText('5 useful desk gadgets');
+
+  // The board view groups items by stage; /pipeline redirects to it.
+  await page.goto('/pipeline');
+  await expect(page).toHaveURL(/\/productions\?view=board$/);
   await expect(page.getByRole('region', { name: 'Approved' })).toContainText(
     '5 useful desk gadgets',
   );
   await expect(page.getByRole('region', { name: 'Render & quality' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Draft' })).toContainText('Standing desk tips');
 
-  // Content masters list.
-  await nav(page, 'Content masters').click();
+  // Content masters list (from Productions).
+  await page.getByRole('link', { name: 'Content masters' }).click();
   await expect(page.getByRole('table', { name: 'Content masters' })).toContainText(
     'Standing desk tips',
   );
 
-  // Asset library: lineage of the uploaded reference and of a generated image.
-  await nav(page, 'Asset library').click();
+  // Library: lineage of the uploaded reference and of a generated image.
+  await nav(page, 'Library').click();
   const assets = page.getByRole('list', { name: 'Assets' });
   await assets.getByRole('button', { name: /desk-reference\.png/ }).click();
   const lineage = page.getByRole('region', { name: 'Asset lineage' });
@@ -124,4 +131,60 @@ test('owner: project settings and a new project', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Pilot Channel' })).toBeVisible();
   await expect(page.getByRole('table', { name: 'Content items' })).toHaveCount(0);
   await expect(page.getByText('No content items yet')).toBeVisible();
+});
+
+test('owner: switches the interface to Vietnamese and back (R-D6)', async ({ page }) => {
+  await signIn(page);
+  const switcher = page.getByRole('group', { name: 'Interface language' });
+  await switcher.getByRole('button', { name: 'VI' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
+  await expect(page.getByRole('heading', { level: 1, name: 'Việc cần làm' })).toBeVisible();
+  await expect(
+    page.getByRole('navigation', { name: 'Chính' }).getByRole('link', { name: 'Sản xuất' }),
+  ).toBeVisible();
+  // Saved on the account: a fresh page (and another device) renders in Vietnamese from the start.
+  await page.context().clearCookies({ name: 'acf_locale' });
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
+  await expect(page.getByRole('heading', { level: 1, name: 'Việc cần làm' })).toBeVisible();
+  // Settings › Profile & language: follow the browser again (English here).
+  await page.goto('/settings/profile');
+  await page.getByRole('radio', { name: 'Theo trình duyệt' }).check();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+});
+
+test('phone (390 px): bottom bar and no horizontal scroll, in both languages (R7)', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  await signIn(page);
+  const bar = page.getByRole('navigation', { name: 'Menu' });
+  await expect(bar.getByRole('link')).toHaveCount(4);
+  await expect(bar.getByRole('button', { name: 'Menu' })).toBeVisible();
+  const pages = [
+    '/',
+    '/productions',
+    '/productions?view=board',
+    '/projects',
+    '/assets',
+    '/costs',
+    '/operations',
+    '/settings/general',
+  ];
+  for (const locale of ['en', 'vi'] as const) {
+    await context.addCookies([
+      { name: 'acf_locale', value: locale, domain: 'localhost', path: '/' },
+    ]);
+    for (const path of pages) {
+      await page.goto(path);
+      await expect(page.locator('html')).toHaveAttribute('lang', locale);
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, `${locale} ${path}`).toBeLessThanOrEqual(0);
+    }
+  }
+  await context.close();
 });

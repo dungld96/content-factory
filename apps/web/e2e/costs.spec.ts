@@ -17,7 +17,10 @@ async function signIn(page: Page, email: string, password: string) {
 async function openCosts(page: Page) {
   await page.goto('/projects');
   await page.getByRole('link', { name: 'Demo Studio' }).click();
-  await page.getByRole('link', { name: 'Costs' }).click();
+  await page
+    .getByRole('navigation', { name: 'Project sections' })
+    .getByRole('link', { name: 'Costs' })
+    .click();
   await expect(page.getByRole('heading', { level: 1, name: 'Costs and budget' })).toBeVisible();
 }
 
@@ -70,11 +73,50 @@ test('editor: sees the limits read-only', async ({ page }) => {
 test('operations page: queues, failures, providers and budgets', async ({ page }) => {
   await signIn(page, OWNER, passwordOf('OWNER'));
   await page
-    .getByRole('navigation', { name: 'Production' })
+    .getByRole('navigation', { name: 'Main' })
     .getByRole('link', { name: 'Operations' })
     .click();
   await expect(page.getByRole('heading', { level: 1, name: 'Operations' })).toBeVisible();
   await expect(page.getByRole('table', { name: 'Queues' })).toContainText('generation-dlq');
   await expect(page.getByRole('heading', { name: 'Held reservations' })).toBeVisible();
   await expect(page.getByRole('list', { name: 'Project budgets' })).toContainText('Demo Studio');
+});
+
+test('workspace costs: every project against its monthly limit', async ({ page }) => {
+  await signIn(page, OWNER, passwordOf('OWNER'));
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Costs' }).click();
+  await expect(page).toHaveURL(/\/costs$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Costs' })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'By project' })).toContainText('Demo Studio');
+});
+
+test('owner: cost-confirmation threshold per project, workspace default for operators (R-D4)', async ({
+  page,
+}) => {
+  await signIn(page, OWNER, passwordOf('OWNER'));
+  await openCosts(page);
+  const form = page.getByRole('form', { name: 'Budget limits' });
+  const threshold = form.getByLabel('Cost-confirmation threshold (USD)');
+  await expect(threshold).toHaveValue('');
+  await threshold.fill('1.234');
+  await form.getByRole('button', { name: 'Save budget' }).click();
+  await expect(form.getByRole('alert')).toContainText('at most two decimals');
+  await threshold.fill('0.5');
+  await form.getByRole('button', { name: 'Save budget' }).click();
+  await expect(page.getByText('Budget saved.')).toBeVisible();
+  await page.goto('/settings/budgets');
+  await expect(page.getByRole('table', { name: 'Project overrides' })).toContainText(
+    '$0.50 (project)',
+  );
+  // Restore: the workspace threshold applies again.
+  await openCosts(page);
+  await page
+    .getByRole('form', { name: 'Budget limits' })
+    .getByLabel('Cost-confirmation threshold (USD)')
+    .fill('');
+  await page
+    .getByRole('form', { name: 'Budget limits' })
+    .getByRole('button', { name: 'Save budget' })
+    .click();
+  await expect(page.getByText('Budget saved.')).toBeVisible();
 });
