@@ -308,7 +308,8 @@ export const EN = {
 
   // --- Costs (R1) -----------------------------------------------------------------------
   'costs.titleFull': 'Costs & budgets',
-  'costs.leadShort': '{month} (UTC) · all projects · reported costs, reservations and unknowns kept apart',
+  'costs.leadShort':
+    '{month} (UTC) · all projects · reported costs, reservations and unknowns kept apart',
   'costs.thisMonth': 'This month',
   'costs.spent': 'Spent',
   'costs.ofLimits': 'of {limit} in project limits',
@@ -320,7 +321,8 @@ export const EN = {
   'costs.trend': 'Spend per month',
   'costs.trendAria': 'Spend per month: {months}',
   'costs.byStageNow': 'This month by stage',
-  'costs.chartNote': 'Totals across your projects (reported, else estimated, plus held). Unknown-cost calls are counted apart, never added as $0.',
+  'costs.chartNote':
+    'Totals across your projects (reported, else estimated, plus held). Unknown-cost calls are counted apart, never added as $0.',
   'costs.budgets': 'Budgets this month',
   'costs.editLimits': 'Edit limits',
   'costs.warnLine': '80 % or more used · {left} left',

@@ -57,7 +57,6 @@ export default async function CostsPage() {
   const loaded = rows.filter((r) => r.budget && r.costs);
   const month = loaded[0]?.costs?.month ?? new Date().toISOString().slice(0, 7);
   const total = addUsd(...loaded.map((r) => r.costs?.total.totalUsd ?? '0'));
-  const calls = loaded.reduce((n, r) => n + (r.costs?.total.calls ?? 0), 0);
   const limits = addUsd(...loaded.map((r) => r.budget?.monthly.limitUsd ?? '0'));
   const reserved = addUsd(...loaded.map((r) => r.budget?.reservedUsd ?? '0'));
   const held = addUsd(...loaded.map((r) => r.budget?.heldUsd ?? '0'));

@@ -1,9 +1,16 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 import { useT } from '@/components/i18n-provider';
 import { Icon } from '@/components/icon';
+
+function subscribeHash(listener: () => void): () => void {
+  window.addEventListener('hashchange', listener);
+  return () => {
+    window.removeEventListener('hashchange', listener);
+  };
+}
 
 /**
  * Focus review (redesign canvas "Gate 1 · Script review"): the version under review on the left,
@@ -23,13 +30,15 @@ export function FocusReview(props: {
   readonly side: ReactNode;
 }) {
   const t = useT();
-  const [requested, setOpen] = useState(false);
+  // null: follow the link (`focus` in the hash); true/false: the reviewer opened or closed it.
+  const [requested, setOpen] = useState<boolean | null>(null);
+  const fromLink = useSyncExternalStore(
+    subscribeHash,
+    () => window.location.hash.includes('focus'),
+    () => false,
+  );
   // Deciding ends the review: once nothing waits, the page returns to the workspace.
-  const open = requested && props.reviewable;
-
-  useEffect(() => {
-    if (props.reviewable && window.location.hash.includes('focus')) setOpen(true);
-  }, [props.reviewable]);
+  const open = (requested ?? fromLink) && props.reviewable;
 
   useEffect(() => {
     if (!open) return;

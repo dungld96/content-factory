@@ -2115,3 +2115,41 @@ body.focus-open {
     flex: 1 1 100%;
   }
 }
+
+/* Phone (canvas "Phone · To-do"): compact topbar, decision cards with a full-width action. */
+@media (width <= 760px) {
+  .ds .topbar .cmdk {
+    display: none;
+  }
+
+  .ds .todo-main .irow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .ds .todo-main .irow .ikind {
+    display: none;
+  }
+
+  .ds .todo-main .irow .ttl {
+    flex: 0 0 auto;
+  }
+
+  .ds .todo-main .irow .wait {
+    width: auto;
+    order: -1;
+    text-align: right;
+  }
+
+  .ds .todo-main .irow .btn {
+    width: 100%;
+    height: 44px;
+    font-size: 15px;
+  }
+
+  .ds .page-head .seg {
+    width: 100%;
+    overflow-x: auto;
+  }
+}

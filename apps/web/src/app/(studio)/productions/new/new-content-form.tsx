@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import {
@@ -128,7 +128,7 @@ function minusUsd(a: string, b: string): string {
  * whole run. "Create & write script" creates the item and starts only the script; every later
  * step still waits for its approval gate.
  */
-export function NewContentForm(props: {
+function NewContentFormInner(props: {
   readonly projects: readonly NewContentProject[];
   readonly initialProjectId: string;
   readonly routes: readonly AiRouteDto[];
@@ -137,28 +137,30 @@ export function NewContentForm(props: {
   const t = useT();
   const router = useRouter();
   const first = props.projects.find((p) => p.id === props.initialProjectId) ?? props.projects[0];
-  const [draft, setDraft] = useState<Draft | null>(first ? emptyDraft(first) : null);
+  // Rendered on the client only (see NewContentForm), so the browser draft can seed the state.
+  const [draft, setDraft] = useState<Draft | null>(() => {
+    if (!first) return null;
+    const saved = readDraft();
+    return saved && props.projects.some((p) => p.id === saved.projectId)
+      ? { ...emptyDraft(first), ...saved }
+      : emptyDraft(first);
+  });
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState<'script' | 'draft' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  const slot = useSyncExternalStore(
+    noSubscription,
+    () => document.getElementById('topbar-slot'),
+    () => null,
+  );
   const fileInput = useRef<HTMLInputElement>(null);
-  const restored = useRef(false);
 
-  // Restore a draft of this browser once, then keep saving it (debounced).
+  // Keep the draft in this browser (debounced).
   useEffect(() => {
-    if (restored.current || !draft) return;
-    restored.current = true;
-    const saved = readDraft();
-    if (saved && props.projects.some((p) => p.id === saved.projectId)) {
-      setDraft((d) => (d ? { ...d, ...saved } : d));
-    }
-  }, [draft, props.projects]);
-  useEffect(() => {
-    if (!draft || !restored.current) return;
+    if (!draft) return;
     const id = window.setTimeout(() => {
       try {
         window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
@@ -178,9 +180,6 @@ export function NewContentForm(props: {
     return () => {
       window.clearInterval(id);
     };
-  }, []);
-  useEffect(() => {
-    setSlot(document.getElementById('topbar-slot'));
   }, []);
 
   const project = props.projects.find((p) => p.id === draft?.projectId) ?? first;
@@ -848,6 +847,29 @@ export function NewContentForm(props: {
       )}
     </>
   );
+}
+
+const noSubscription = (): (() => void) => () => undefined;
+
+type FormProps = Parameters<typeof NewContentFormInner>[0];
+
+/** Client-only: the form starts from this browser's saved draft, which the server cannot know. */
+export function NewContentForm(props: FormProps) {
+  const mounted = useSyncExternalStore(
+    noSubscription,
+    () => true,
+    () => false,
+  );
+  if (!mounted) {
+    return (
+      <div className="page-head">
+        <div>
+          <span className="sk" style={{ display: 'block', width: 240, height: 28 }} />
+        </div>
+      </div>
+    );
+  }
+  return <NewContentFormInner {...props} />;
 }
 
 function CostRow(props: {

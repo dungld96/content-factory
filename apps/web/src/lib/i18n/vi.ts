@@ -308,7 +308,8 @@ export const VI: Readonly<Record<keyof typeof EN, string>> = {
 
   // --- Costs (R1) -----------------------------------------------------------------------
   'costs.titleFull': 'Chi phí & ngân sách',
-  'costs.leadShort': '{month} (UTC) · mọi dự án · chi phí đã báo, khoản giữ và chi phí chưa rõ được tách riêng',
+  'costs.leadShort':
+    '{month} (UTC) · mọi dự án · chi phí đã báo, khoản giữ và chi phí chưa rõ được tách riêng',
   'costs.thisMonth': 'Tháng này',
   'costs.spent': 'Đã chi',
   'costs.ofLimits': 'trên {limit} hạn mức dự án',
@@ -320,7 +321,8 @@ export const VI: Readonly<Record<keyof typeof EN, string>> = {
   'costs.trend': 'Chi tiêu theo tháng',
   'costs.trendAria': 'Chi tiêu theo tháng: {months}',
   'costs.byStageNow': 'Tháng này theo giai đoạn',
-  'costs.chartNote': 'Tổng của các dự án (đã báo, nếu không thì ước tính, cộng khoản giữ). Lượt gọi chưa rõ giá được đếm riêng, không bao giờ cộng là $0.',
+  'costs.chartNote':
+    'Tổng của các dự án (đã báo, nếu không thì ước tính, cộng khoản giữ). Lượt gọi chưa rõ giá được đếm riêng, không bao giờ cộng là $0.',
   'costs.budgets': 'Ngân sách tháng này',
   'costs.editLimits': 'Sửa hạn mức',
   'costs.warnLine': 'Đã dùng từ 80 % · còn {left}',
@@ -1325,7 +1327,8 @@ export const VI: Readonly<Record<keyof typeof EN, string>> = {
   'review.focus.storyboard': 'Duyệt storyboard',
   'review.focusOpen': 'Duyệt toàn màn hình',
   'review.focusClose': 'Đóng chế độ duyệt',
-  'review.focusHint': 'Đang chờ bạn quyết định. Duyệt toàn màn hình với danh sách kiểm tra bên cạnh.',
+  'review.focusHint':
+    'Đang chờ bạn quyết định. Duyệt toàn màn hình với danh sách kiểm tra bên cạnh.',
   'ws.nextStep': 'Bước tiếp theo',
   'ws.allDoneTitle': 'Đã xong',
   'ws.allDoneBody': 'Đã qua mọi cổng duyệt và video đã được xuất.',

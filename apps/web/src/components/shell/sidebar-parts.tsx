@@ -12,15 +12,13 @@ import { projectInitials, projectSwatch } from '@/lib/project-swatch';
 import { LogoutButton } from './logout-button';
 
 /** Closes a popover on Escape, an outside click and navigation. */
-function usePopover(): {
+function usePopover(ref: React.RefObject<HTMLDivElement | null>): {
   readonly open: boolean;
   readonly toggle: () => void;
   readonly close: () => void;
-  readonly ref: React.RefObject<HTMLDivElement | null>;
 } {
   const path = usePathname();
   const [openOn, setOpenOn] = useState<string | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
   const open = openOn === path;
   useEffect(() => {
     if (!open) return;
@@ -36,7 +34,7 @@ function usePopover(): {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('mousedown', onClick);
     };
-  }, [open]);
+  }, [open, ref]);
   return {
     open,
     toggle: () => {
@@ -45,7 +43,6 @@ function usePopover(): {
     close: () => {
       setOpenOn(null);
     },
-    ref,
   };
 }
 
@@ -58,11 +55,12 @@ export function ProjectSwitch(props: {
 }) {
   const t = useT();
   const path = usePathname();
-  const pop = usePopover();
+  const ref = useRef<HTMLDivElement>(null);
+  const pop = usePopover(ref);
   const currentId = /^\/projects\/([^/]+)/.exec(path)?.[1];
   const current = props.projects.find((p) => p.id === currentId);
   return (
-    <div className="proj-switch-wrap" ref={pop.ref}>
+    <div className="proj-switch-wrap" ref={ref}>
       <button
         className="proj-switch"
         type="button"
@@ -157,9 +155,10 @@ export function AccountMenu(props: {
   readonly theme: ReactNode;
 }) {
   const t = useT();
-  const pop = usePopover();
+  const ref = useRef<HTMLDivElement>(null);
+  const pop = usePopover(ref);
   return (
-    <div className="me-wrap" ref={pop.ref}>
+    <div className="me-wrap" ref={ref}>
       {pop.open && (
         <div className="menu-pop account-pop" role="dialog" aria-label={t('nav.account')}>
           <span className="mi hd">{props.email}</span>

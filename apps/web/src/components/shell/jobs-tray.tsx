@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import { useT } from '@/components/i18n-provider';
-import { Icon } from '@/components/icon';
 import { RelativeTime } from '@/components/local-time';
 import { StatusBadge } from '@/components/status-badge';
 import { toast } from '@/components/toast';
