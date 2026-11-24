@@ -91,21 +91,21 @@ describe('route readiness and key status', () => {
     });
     expect(
       routeReadiness(route({ key: 'mock', status: 'enabled', configured: false }), providers),
-    ).toEqual({ ready: false, reason: 'Test-only provider, not active here' });
+    ).toEqual({ ready: false, reason: 'ai.reason.testOnly' });
     expect(
       routeReadiness(
         route({ key: 'openrouter', status: 'enabled', configured: true }, 'disabled'),
         providers,
       ),
-    ).toEqual({ ready: false, reason: 'Model disabled' });
+    ).toEqual({ ready: false, reason: 'ai.reason.modelDisabled' });
   });
 
   it('describes keys without exposing them', () => {
     expect(keyStatus(providers[1] as AiProviderDto)).toEqual({
-      label: 'API key configured',
+      label: 'ai.key.configured',
       ok: true,
     });
-    expect(keyStatus(providers[0] as AiProviderDto).label).toBe('Test provider (tests only)');
+    expect(keyStatus(providers[0] as AiProviderDto).label).toBe('ai.key.testOnly');
   });
 });
 

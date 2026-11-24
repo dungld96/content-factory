@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { PRODUCT_REFERENCES_MAX, type ContentBrief } from '@acf/contracts';
 
 import { AssetPicker } from '@/components/asset-picker';
+import { useT } from '@/components/i18n-provider';
 import { toast } from '@/components/toast';
 import { assetContentUrl } from '@/lib/asset-url';
 import { errorText, mutate } from '@/lib/api-client';
@@ -26,6 +27,7 @@ export function ProductPhotos(props: {
   /** Shown after saving, e.g. what the change affects. */
   readonly savedText: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +37,7 @@ export function ProductPhotos(props: {
     setOpen(false);
     if (ids.length === current.length && ids.every((id) => current.includes(id))) return;
     if (ids.length > PRODUCT_REFERENCES_MAX) {
-      setError(`Choose at most ${String(PRODUCT_REFERENCES_MAX)} product photos.`);
+      setError(t('photos.max', { max: PRODUCT_REFERENCES_MAX }));
       return;
     }
     const rest = Object.fromEntries(
@@ -53,14 +55,12 @@ export function ProductPhotos(props: {
   }
 
   return (
-    <div className="product-photos" aria-label="Product photos">
+    <div className="product-photos" aria-label={t('photos.label')}>
       <div className="product-photos-head">
         <span>
-          <b>Product photos</b>
+          <b>{t('photos.label')}</b>
           <small className="muted">
-            {current.length > 0
-              ? 'Sent as references with every keyframe, so the product stays the same.'
-              : 'None: keyframes may show a different product in every scene. Add photos of the product you review.'}
+            {current.length > 0 ? t('photos.some') : t('photos.none')}
           </small>
         </span>
         {props.canEdit && (
@@ -71,7 +71,7 @@ export function ProductPhotos(props: {
               setOpen(true);
             }}
           >
-            {current.length > 0 ? `Change (${String(current.length)})` : 'Add product photos'}
+            {current.length > 0 ? t('photos.change', { count: current.length }) : t('photos.add')}
           </button>
         )}
       </div>
@@ -79,7 +79,7 @@ export function ProductPhotos(props: {
         <div className="product-photos-thumbs">
           {current.map((id) => (
             // eslint-disable-next-line @next/next/no-img-element -- authenticated API stream
-            <img key={id} src={assetContentUrl(id)} alt="Product reference" loading="lazy" />
+            <img key={id} src={assetContentUrl(id)} alt={t('photos.alt')} loading="lazy" />
           ))}
         </div>
       )}
@@ -88,7 +88,7 @@ export function ProductPhotos(props: {
           projectId={props.projectId}
           open
           multiple
-          title={`Product photos (up to ${String(PRODUCT_REFERENCES_MAX)})`}
+          title={t('photos.pickerTitle', { max: PRODUCT_REFERENCES_MAX })}
           types={TYPES}
           selected={current}
           onClose={() => {

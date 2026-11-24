@@ -10,6 +10,11 @@ import {
   Image as ImageIcon,
   Images,
   LayoutDashboard,
+  ListChecks,
+  Wallet,
+  Languages,
+  LayoutList,
+  Columns3,
   Layers,
   Menu,
   Music,
@@ -34,6 +39,11 @@ import {
  */
 const ICONS = {
   overview: LayoutDashboard,
+  todoList: ListChecks,
+  costs: Wallet,
+  language: Languages,
+  list: LayoutList,
+  board: Columns3,
   projects: FolderKanban,
   content: Clapperboard,
   masters: Layers,

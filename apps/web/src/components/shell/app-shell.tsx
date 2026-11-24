@@ -4,38 +4,19 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
 
-import { Icon, type IconName } from '@/components/icon';
-import { t, type MessageKey } from '@/lib/i18n';
+import { useT } from '@/components/i18n-provider';
+import { Icon } from '@/components/icon';
 
-const BOTTOM: readonly {
-  readonly href: string;
-  readonly label: MessageKey;
-  readonly icon: IconName;
-  readonly match: (p: string) => boolean;
-}[] = [
-  { href: '/', label: 'nav.overview', icon: 'overview', match: (p) => p === '/' },
-  {
-    href: '/content',
-    label: 'nav.contentShort',
-    icon: 'content',
-    match: (p) => p.startsWith('/content') || p.startsWith('/pipeline'),
-  },
-  { href: '/assets', label: 'nav.library', icon: 'assets', match: (p) => p.startsWith('/assets') },
-  {
-    href: '/operations',
-    label: 'nav.operations',
-    icon: 'operations',
-    match: (p) => p.startsWith('/operations'),
-  },
-];
+import { BOTTOM_ITEMS } from './nav-items';
 
 /**
  * The studio frame (UX review U4). On wide screens the sidebar is always visible. Below 760 px
  * it becomes a drawer opened from the top bar's menu button, and a bottom bar holds the four most
- * used destinations. The drawer closes on navigation and with Escape.
+ * used destinations plus the menu (redesign §2). The drawer closes on navigation and with Escape.
  */
 export function AppShell(props: { readonly sidebar: ReactNode; readonly children: ReactNode }) {
   const path = usePathname();
+  const t = useT();
   // The drawer belongs to the page it was opened on: navigating closes it.
   const [openOn, setOpenOn] = useState<string | null>(null);
   const open = openOn === path;
@@ -84,7 +65,7 @@ export function AppShell(props: { readonly sidebar: ReactNode; readonly children
       )}
       {props.children}
       <nav className="bottom-nav" aria-label={t('nav.menu')}>
-        {BOTTOM.map((item) => (
+        {BOTTOM_ITEMS.map((item) => (
           <Link
             key={item.href}
             href={item.href}
@@ -92,9 +73,21 @@ export function AppShell(props: { readonly sidebar: ReactNode; readonly children
             aria-current={item.match(path) ? 'page' : undefined}
           >
             <Icon name={item.icon} size={20} />
-            <span>{t(item.label)}</span>
+            <span>{t(item.short)}</span>
           </Link>
         ))}
+        <button
+          type="button"
+          className={open ? 'active' : undefined}
+          aria-expanded={open}
+          aria-controls="studio-sidebar"
+          onClick={() => {
+            setOpen((v) => !v);
+          }}
+        >
+          <Icon name="menu" size={20} />
+          <span>{t('nav.menu')}</span>
+        </button>
       </nav>
     </div>
   );

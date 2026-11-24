@@ -2,31 +2,33 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Suspense, type ReactNode } from 'react';
 
-import type { MeResponse } from '@acf/contracts';
-
 import { Icon } from '@/components/icon';
+import { LanguageSwitch } from '@/components/language-switch';
 import { AppShell } from '@/components/shell/app-shell';
 import { LogoutButton } from '@/components/shell/logout-button';
 import { SidebarNav } from '@/components/shell/sidebar-nav';
 import { Topbar } from '@/components/shell/topbar';
 import { Toaster } from '@/components/toast';
-import { apiGet } from '@/lib/api-server';
 import { initials } from '@/lib/format';
+import { getT } from '@/lib/i18n/server';
+import { getMe } from '@/lib/me';
 
 export const dynamic = 'force-dynamic';
 
-/** The signed-in workspace shell (prototype sidebar + topbar). Signed-out visitors sign in. */
+/** The signed-in workspace shell (sidebar + topbar). Signed-out visitors sign in. */
 export default async function StudioLayout({ children }: { readonly children: ReactNode }) {
-  const me = await apiGet<MeResponse>('/auth/me');
+  const [me, t] = await Promise.all([getMe(), getT()]);
   if (me.kind === 'unauthenticated') redirect('/login');
   if (me.kind === 'error') {
     return (
       <div className="standalone">
         <section className="card standalone-card" role="alert">
-          <h1>The workspace is unavailable</h1>
+          <h1>{t('app.unavailableTitle')}</h1>
           <p className="muted">
-            The API could not be reached{me.status ? ` (HTTP ${String(me.status)})` : ''}. Check{' '}
-            <Link href="/status">system status</Link> and reload the page.
+            {t('app.unavailableBody', {
+              status: me.status ? ` (HTTP ${String(me.status)})` : '',
+            })}{' '}
+            <Link href="/status">{t('app.systemStatus')}</Link>
           </p>
         </section>
       </div>
@@ -39,13 +41,13 @@ export default async function StudioLayout({ children }: { readonly children: Re
     <AppShell
       sidebar={
         <>
-          <Link href="/" className="brand" aria-label="Content Studio overview">
+          <Link href="/" className="brand" aria-label={t('app.home')}>
             <span className="brand-mark" aria-hidden="true">
               <Icon name="generate" size={18} />
             </span>
             <span className="brand-copy">
-              <span className="brand-name">content studio</span>
-              <span className="brand-sub">AI content factory</span>
+              <span className="brand-name">{t('app.brandName')}</span>
+              <span className="brand-sub">{t('app.brandSub')}</span>
             </span>
           </Link>
           <div className="workspace-switch">
@@ -53,13 +55,14 @@ export default async function StudioLayout({ children }: { readonly children: Re
               W
             </span>
             <span className="workspace-copy">
-              <b>My workspace</b>
+              <b>{t('nav.myWorkspace')}</b>
               <span>
-                {memberships.length} project{memberships.length === 1 ? '' : 's'} · {owned} owned
+                {t('nav.workspaceSummary', { count: memberships.length })} ·{' '}
+                {t('nav.ownedSummary', { count: owned })}
               </span>
             </span>
           </div>
-          <SidebarNav projectCount={memberships.length} />
+          <SidebarNav />
           <div className="sidebar-bottom">
             <div className="profile">
               <span className="avatar" aria-hidden="true">
@@ -69,6 +72,9 @@ export default async function StudioLayout({ children }: { readonly children: Re
                 <b>{user.displayName}</b>
                 <small>{user.email}</small>
               </span>
+            </div>
+            <div className="profile-tools">
+              <LanguageSwitch signedIn />
               <LogoutButton />
             </div>
           </div>

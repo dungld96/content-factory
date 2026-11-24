@@ -4,40 +4,27 @@ import { notFound, redirect } from 'next/navigation';
 
 import type { BudgetDto, CostFigureDto, ProjectCostsDto, ProjectDto } from '@acf/contracts';
 
+import { CostFigure } from '@/components/cost-figure';
+import { ProjectTabs } from '@/components/project-tabs';
 import { apiGet } from '@/lib/api-server';
+import { jobKindLabel } from '@/lib/format';
+import type { Translate } from '@/lib/i18n';
+import { getT } from '@/lib/i18n/server';
 import { formatUsd } from '@/lib/money';
 
 import { BudgetEditor } from './budget-editor';
 
-export const metadata: Metadata = { title: 'Costs · Content Studio' };
 export const dynamic = 'force-dynamic';
 
-const STAGE_LABEL: Readonly<Record<string, string>> = {
-  script_generation: 'Script',
-  storyboard_generation: 'Storyboard',
-  image_generation: 'Images',
-  video_generation: 'Clips',
-  tts_generation: 'Voice-overs',
-  render: 'Render',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('costs.pageTitle') };
+}
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 
-/** Reported, estimated, unknown and held kept apart (B9): unknown cost is never shown as $0. */
-function Figure({ cost }: { readonly cost: CostFigureDto }) {
-  const parts = [`${formatUsd(cost.reportedUsd)} reported`];
-  if (cost.estimatedUsd !== '0') parts.push(`${formatUsd(cost.estimatedUsd)} estimated`);
-  if (cost.heldUsd !== '0') parts.push(`${formatUsd(cost.heldUsd)} held`);
-  if (cost.unknownCalls > 0) parts.push(`${String(cost.unknownCalls)} call(s) of unknown cost`);
-  return (
-    <>
-      <b>{formatUsd(cost.totalUsd)}</b>
-      <span className="muted small-text"> · {parts.join(' · ')}</span>
-    </>
-  );
-}
-
 function CostTable(props: {
+  readonly t: Translate;
   readonly label: string;
   readonly rows: readonly {
     readonly key: string;
@@ -45,19 +32,20 @@ function CostTable(props: {
     readonly cost: CostFigureDto;
   }[];
 }) {
+  const { t } = props;
   return (
     <section className="card card-pad">
       <h2>{props.label}</h2>
       {props.rows.length === 0 ? (
-        <p className="muted small-text">No spending this month.</p>
+        <p className="muted small-text">{t('pcosts.noSpending')}</p>
       ) : (
         <div className="table-wrap">
           <table className="table" aria-label={props.label}>
             <thead>
               <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Calls</th>
-                <th scope="col">Cost</th>
+                <th scope="col">{t('pcosts.colName')}</th>
+                <th scope="col">{t('pcosts.colCalls')}</th>
+                <th scope="col">{t('pcosts.colCost')}</th>
               </tr>
             </thead>
             <tbody>
@@ -66,7 +54,7 @@ function CostTable(props: {
                   <td>{r.name}</td>
                   <td>{r.cost.calls}</td>
                   <td>
-                    <Figure cost={r.cost} />
+                    <CostFigure cost={r.cost} t={t} />
                   </td>
                 </tr>
               ))}
@@ -85,123 +73,129 @@ export default async function ProjectCostsPage(props: {
 }) {
   const [{ projectId }, query] = await Promise.all([props.params, props.searchParams]);
   const month = query.month && MONTH.test(query.month) ? query.month : undefined;
-  const [project, budget, costs] = await Promise.all([
+  const [project, budget, costs, t] = await Promise.all([
     apiGet<ProjectDto>(`/projects/${projectId}`),
     apiGet<BudgetDto>(`/projects/${projectId}/budget`),
     apiGet<ProjectCostsDto>(`/projects/${projectId}/costs${month ? `?month=${month}` : ''}`),
+    getT(),
   ]);
   if (project.kind === 'unauthenticated') redirect('/login');
   if (project.kind === 'error') {
     if (project.status === 404) notFound();
     return (
       <section className="card notice error" role="alert">
-        The project could not be loaded.
+        {t('pcosts.projectError')}
       </section>
     );
   }
   if (budget.kind !== 'ok' || costs.kind !== 'ok') {
     return (
       <section className="card notice error" role="alert">
-        Costs could not be loaded.
+        {t('costs.loadError')}
       </section>
     );
   }
   const b = budget.data;
   const c = costs.data;
   const thisMonth = !month || month === b.periodStart.slice(0, 7);
-  const maxTrend = c.trend.reduce((m, t) => Math.max(m, Number(t.cost.totalUsd)), 0);
+  const maxTrend = c.trend.reduce((m, point) => Math.max(m, Number(point.cost.totalUsd)), 0);
+  const mode = (value: 'hard' | 'soft') => t(value === 'hard' ? 'mode.hard' : 'mode.soft');
+  const limit = (l: { limitUsd: string | null; mode: 'hard' | 'soft' }) =>
+    l.limitUsd === null ? t('pcosts.limitNone') : `${formatUsd(l.limitUsd)} (${mode(l.mode)})`;
 
   return (
     <div className="stack">
       <div className="page-heading">
         <div>
           <div className="eyebrow">
-            <Link href="/projects">Projects</Link> /{' '}
-            <Link href={`/projects/${projectId}`}>{project.data.name}</Link> / Costs
+            <Link href="/projects">{t('nav.projects')}</Link> /{' '}
+            <Link href={`/projects/${projectId}`}>{project.data.name}</Link> / {t('nav.costs')}
           </div>
-          <h1>Costs and budget</h1>
-          <p>
-            Spending of {c.month} (UTC). Every figure keeps provider-reported and estimated cost
-            apart.
-          </p>
+          <h1>{t('pcosts.title')}</h1>
+          <p>{t('pcosts.lead', { month: c.month })}</p>
         </div>
       </div>
+      <ProjectTabs projectId={projectId} />
 
       {b.warning && (
         <p className="notice" role="status">
           {formatUsd(b.monthly.limitUsd) === '$0'
-            ? 'The monthly budget is $0: paid work is blocked.'
-            : `80 % or more of this month's budget is used or reserved (${formatUsd(b.remainingUsd)} left).`}
+            ? t('pcosts.zeroBudget')
+            : t('pcosts.warning', { left: formatUsd(b.remainingUsd) })}
         </p>
       )}
 
-      <section className="stats" aria-label="Budget">
+      <section className="stats" aria-label={t('pcosts.budget')}>
         <div className="card stat">
-          <div className="stat-top">This month</div>
+          <div className="stat-top">{t('costs.total')}</div>
           <div className="stat-value">{formatUsd(c.total.totalUsd)}</div>
           <div className="stat-foot">
-            of {formatUsd(c.budget.limitUsd)} ({b.monthly.mode}) · {c.total.calls} call(s)
+            {t('pcosts.ofLimit', {
+              limit: formatUsd(c.budget.limitUsd),
+              mode: mode(b.monthly.mode),
+              calls: c.total.calls,
+            })}
           </div>
         </div>
         {thisMonth && (
           <>
             <div className="card stat">
-              <div className="stat-top">Reserved</div>
+              <div className="stat-top">{t('costs.reserved')}</div>
               <div className="stat-value">{formatUsd(b.reservedUsd)}</div>
-              <div className="stat-foot">queued or running work</div>
+              <div className="stat-foot">{t('costs.reservedFoot')}</div>
             </div>
             <div className="card stat">
-              <div className="stat-top">Held</div>
+              <div className="stat-top">{t('costs.held')}</div>
               <div className="stat-value">{formatUsd(b.heldUsd)}</div>
-              <div className="stat-foot">outcome unknown: resolve on the Operations page</div>
+              <div className="stat-foot">{t('costs.heldFoot')}</div>
             </div>
             <div className="card stat">
-              <div className="stat-top">Remaining</div>
+              <div className="stat-top">{t('pcosts.remaining')}</div>
               <div className="stat-value">{formatUsd(b.remainingUsd)}</div>
               <div className="stat-foot">
                 {b.unknownCalls > 0
-                  ? `${String(b.unknownCalls)} call(s) of unknown cost`
-                  : 'this month'}
+                  ? t('costs.unknownPart', { count: b.unknownCalls })
+                  : t('pcosts.thisMonth')}
               </div>
             </div>
           </>
         )}
         <div className="card stat">
-          <div className="stat-top">Retries</div>
+          <div className="stat-top">{t('pcosts.retries')}</div>
           <div className="stat-value">{formatUsd(c.retryCost.totalUsd)}</div>
-          <div className="stat-foot">calls that did not produce a result</div>
+          <div className="stat-foot">{t('pcosts.retriesFoot')}</div>
         </div>
         <div className="card stat">
-          <div className="stat-top">Per approved video</div>
+          <div className="stat-top">{t('pcosts.perVideo')}</div>
           <div className="stat-value">
             {c.costPerApprovedVideo ? formatUsd(c.costPerApprovedVideo.perVideoUsd) : '—'}
           </div>
           <div className="stat-foot">
             {c.costPerApprovedVideo
-              ? `${String(c.costPerApprovedVideo.approvedVideos)} approved this month`
-              : 'no render approved this month'}
+              ? t('pcosts.approvedThisMonth', { count: c.costPerApprovedVideo.approvedVideos })
+              : t('pcosts.noneApproved')}
           </div>
         </div>
       </section>
 
-      <section className="card card-pad" aria-label="Six-month trend">
-        <h2>Last six months</h2>
+      <section className="card card-pad" aria-label={t('pcosts.trend')}>
+        <h2>{t('pcosts.lastSix')}</h2>
         <div className="chart cost-trend">
-          {c.trend.map((t) => (
+          {c.trend.map((point) => (
             <Link
-              key={t.month}
+              key={point.month}
               className="bar-group"
-              href={`/projects/${projectId}/costs?month=${t.month}`}
+              href={`/projects/${projectId}/costs?month=${point.month}`}
             >
               <div
-                className={t.month === c.month ? 'bar dark' : 'bar'}
+                className={point.month === c.month ? 'bar dark' : 'bar'}
                 style={{
-                  height: `${String(maxTrend > 0 ? Math.max(4, (Number(t.cost.totalUsd) / maxTrend) * 100) : 4)}%`,
+                  height: `${String(maxTrend > 0 ? Math.max(4, (Number(point.cost.totalUsd) / maxTrend) * 100) : 4)}%`,
                 }}
-                title={`${t.month}: ${formatUsd(t.cost.totalUsd)}`}
+                title={`${point.month}: ${formatUsd(point.cost.totalUsd)}`}
               />
               <span className="bar-label">
-                {t.month} · {formatUsd(t.cost.totalUsd)}
+                {point.month} · {formatUsd(point.cost.totalUsd)}
               </span>
             </Link>
           ))}
@@ -209,7 +203,8 @@ export default async function ProjectCostsPage(props: {
       </section>
 
       <CostTable
-        label="By content item"
+        t={t}
+        label={t('pcosts.byItem')}
         rows={c.byContentItem.map((r) => ({
           key: r.contentItemId,
           name: <Link href={`/content/${r.contentItemId}`}>{r.title}</Link>,
@@ -217,15 +212,17 @@ export default async function ProjectCostsPage(props: {
         }))}
       />
       <CostTable
-        label="By stage"
+        t={t}
+        label={t('pcosts.byStage')}
         rows={c.byStage.map((r) => ({
           key: r.kind,
-          name: STAGE_LABEL[r.kind] ?? r.kind,
+          name: jobKindLabel(t, r.kind),
           cost: r.cost,
         }))}
       />
       <CostTable
-        label="By model"
+        t={t}
+        label={t('pcosts.byModel')}
         rows={c.byModel.map((r) => ({
           key: `${r.providerKey}/${r.modelKey}`,
           name: `${r.modelKey} (${r.providerKey})`,
@@ -236,16 +233,14 @@ export default async function ProjectCostsPage(props: {
       {project.data.role === 'owner' ? (
         <BudgetEditor budget={b} />
       ) : (
-        <section className="card card-pad" aria-label="Budget limits">
-          <h2>Budget limits</h2>
+        <section className="card card-pad" aria-label={t('pcosts.limits')}>
+          <h2>{t('pcosts.limits')}</h2>
           <p className="small-text">
-            Monthly {formatUsd(b.monthly.limitUsd)} ({b.monthly.mode}) · per content item{' '}
-            {b.item.limitUsd === null ? 'none' : `${formatUsd(b.item.limitUsd)} (${b.item.mode})`} ·
-            per request{' '}
-            {b.request.limitUsd === null
-              ? 'none'
-              : `${formatUsd(b.request.limitUsd)} (${b.request.mode})`}
-            . Only project owners change them.
+            {t('pcosts.limitsText', {
+              monthly: `${formatUsd(b.monthly.limitUsd)} (${mode(b.monthly.mode)})`,
+              item: limit(b.item),
+              request: limit(b.request),
+            })}
           </p>
         </section>
       )}

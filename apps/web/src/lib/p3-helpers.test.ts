@@ -111,3 +111,13 @@ describe('resume confirmations (P3 W1)', () => {
     });
   });
 });
+
+describe('job error catalogue in Vietnamese (R-D6)', () => {
+  it('has a Vietnamese text for every job error code', () => {
+    for (const code of JOB_ERROR_CODES) {
+      const vi = jobError(code, 'vi').text;
+      expect(vi, code).not.toBe(code);
+      expect(vi, code).not.toBe(jobError(code).text);
+    }
+  });
+});

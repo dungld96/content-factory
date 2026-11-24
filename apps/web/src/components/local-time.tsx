@@ -2,6 +2,9 @@
 
 import { useSyncExternalStore } from 'react';
 
+import { useLocale } from '@/components/i18n-provider';
+import { intlLocale, type Locale } from '@/lib/i18n';
+
 const subscribe = (): (() => void) => () => undefined;
 
 /**
@@ -24,12 +27,16 @@ export function useHydrated(): boolean {
  */
 export function LocalTime({ iso }: { readonly iso: string }) {
   const hydrated = useHydrated();
-  return <time dateTime={iso}>{hydrated ? formatLocal(iso) : iso}</time>;
+  const locale = useLocale();
+  return <time dateTime={iso}>{hydrated ? formatLocal(iso, locale) : iso}</time>;
 }
 
-/** "21 Nov 2026, 14:52": the viewer's locale and timezone, 24-hour clock (UX review U3). */
-export function formatLocal(iso: string): string {
-  return new Intl.DateTimeFormat(undefined, {
+/**
+ * "21 Nov 2026, 14:52" / "21 thg 11, 2026, 14:52": the interface language, the viewer's time
+ * zone, 24-hour clock (UX review U3, R-D6).
+ */
+export function formatLocal(iso: string, locale?: Locale): string {
+  return new Intl.DateTimeFormat(locale ? intlLocale(locale) : undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',
     hourCycle: 'h23',
@@ -76,15 +83,16 @@ function useNow(): number | null {
 /** "12 minutes ago" in the viewer's locale; the full local date is in the tooltip. */
 export function RelativeTime({ iso }: { readonly iso: string }) {
   const now = useNow();
+  const locale = useLocale();
   if (now === null) return <time dateTime={iso}>{iso.slice(0, 10)}</time>;
   const seconds = (new Date(iso).getTime() - now) / 1000;
-  const format = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  const format = new Intl.RelativeTimeFormat(intlLocale(locale), { numeric: 'auto' });
   const unit = UNITS.find(([, size]) => Math.abs(seconds) >= size);
   const text = unit
     ? format.format(Math.round(seconds / unit[1]), unit[0])
     : format.format(0, 'minute');
   return (
-    <time dateTime={iso} title={formatLocal(iso)}>
+    <time dateTime={iso} title={formatLocal(iso, locale)}>
       {text}
     </time>
   );

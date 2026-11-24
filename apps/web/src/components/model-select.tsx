@@ -1,5 +1,7 @@
 'use client';
 
+import { useT } from '@/components/i18n-provider';
+
 export interface ModelOption {
   readonly modelKey: string;
   readonly label: string;
@@ -15,10 +17,11 @@ export function ModelSelect(props: {
   readonly onChange: (modelKey: string) => void;
   readonly disabled?: boolean | undefined;
 }) {
+  const t = useT();
   if (props.models.length === 0) return null;
   return (
     <label className="field">
-      Model
+      {t('model.label')}
       <select
         value={props.value}
         disabled={props.disabled}
@@ -26,7 +29,7 @@ export function ModelSelect(props: {
           props.onChange(e.target.value);
         }}
       >
-        <option value="">Default (task route)</option>
+        <option value="">{t('model.default')}</option>
         {props.models.map((m) => (
           <option key={m.modelKey} value={m.modelKey}>
             {m.label}

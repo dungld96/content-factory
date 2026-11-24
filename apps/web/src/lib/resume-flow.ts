@@ -1,4 +1,5 @@
 import type { MutationResult } from './api-client';
+import { translator, type Translate } from './i18n';
 import { formatUsd } from './money';
 
 /** The consents a resume request can carry (`ResumeRunRequest`, M7c). */
@@ -28,9 +29,13 @@ const record = (v: unknown): Record<string, unknown> | null =>
  * error code and `error.current`, or show the error. Never decided by the message text.
  * (A soft budget is confirmed by `mutate()` itself.)
  */
-export function nextResumeStep(result: MutationResult<unknown>, body: ResumeBody): ResumeStep {
+export function nextResumeStep(
+  result: MutationResult<unknown>,
+  body: ResumeBody,
+  t: Translate = translator('en'),
+): ResumeStep {
   const current = record(result.current);
-  const fallback = result.message ?? `Request failed (HTTP ${String(result.status)})`;
+  const fallback = result.message ?? t('form.requestFailed', { status: result.status });
 
   if (result.code === 'ESTIMATE_CHANGED' && current && !('confirmedEstimateUsd' in body)) {
     const total =
@@ -38,14 +43,14 @@ export function nextResumeStep(result: MutationResult<unknown>, body: ResumeBody
     const scenes = Array.isArray(current['scenes'])
       ? current['scenes'].filter((s) => record(s)?.['action'] === 'generate').length
       : 0;
-    const what = `${String(scenes)} clip${scenes === 1 ? '' : 's'}`;
+    const what = t('resume.clips', { count: scenes });
     return {
       kind: 'confirm',
-      title: 'Confirm the clip cost',
+      title: t('resume.confirmClipTitle'),
       text:
         total === null
-          ? `Resuming generates ${what}. Their cost is unknown; up to USD 0.50 per call is reserved from the budget.`
-          : `Resuming generates ${what} for about ${formatUsd(total)} (estimate).`,
+          ? t('resume.clipUnknown', { what })
+          : t('resume.clipKnown', { what, total: formatUsd(total) }),
       next: {
         ...body,
         confirmedEstimateUsd: total,
@@ -56,8 +61,8 @@ export function nextResumeStep(result: MutationResult<unknown>, body: ResumeBody
   if (result.code === 'UNKNOWN_COST_NOT_ACCEPTED' && !body.acceptUnknownCost) {
     return {
       kind: 'confirm',
-      title: 'Confirm unknown cost',
-      text: 'Some calls have no known price. Up to USD 0.50 per call is reserved from the budget.',
+      title: t('resume.unknownTitle'),
+      text: t('resume.unknownText'),
       next: { ...body, acceptUnknownCost: true },
     };
   }
@@ -67,14 +72,14 @@ export function nextResumeStep(result: MutationResult<unknown>, body: ResumeBody
     if (charged > 0) {
       return {
         kind: 'confirm',
-        title: 'Possibly charged already',
-        text: `${String(charged)} job${charged === 1 ? '' : 's'} ended without knowing whether the provider accepted the call. Resuming may be charged twice.`,
+        title: t('resume.chargedTitle'),
+        text: t('resume.chargedText', { count: charged }),
         next: { ...body, acceptPossibleDoubleCharge: true },
       };
     }
     return {
       kind: 'error',
-      text: 'Nothing to resume: the failed work was already redone or is running again.',
+      text: t('resume.nothingLeft'),
     };
   }
   return { kind: 'error', text: fallback };

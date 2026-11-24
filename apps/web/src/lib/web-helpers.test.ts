@@ -44,7 +44,7 @@ describe('money', () => {
 describe('content status', () => {
   it('labels every status for people', () => {
     expect(statusInfo('script_review')).toEqual({
-      label: 'Script review',
+      label: 'status.script_review',
       tone: 'amber',
       stage: 'script',
     });

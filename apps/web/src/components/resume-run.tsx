@@ -5,18 +5,13 @@ import { useRef, useState } from 'react';
 
 import type { ResumeRunResponseDto } from '@acf/contracts';
 
+import { useT } from '@/components/i18n-provider';
 import { Icon } from '@/components/icon';
 import { Modal } from '@/components/modal';
 import { toast } from '@/components/toast';
 import { mutate } from '@/lib/api-client';
 import { MAX_RESUME_ROUNDS, nextResumeStep, type ResumeBody } from '@/lib/resume-flow';
 
-const SKIP_TEXT: Readonly<Record<ResumeRunResponseDto['skipped'][number]['reason'], string>> = {
-  outcome_unknown: 'possibly charged already',
-  superseded: 'already redone',
-  in_progress: 'running again',
-  finished_without_charge: 'finished from the delivered file, no new charge',
-};
 
 interface Question {
   readonly title: string;
@@ -35,6 +30,7 @@ export function ResumeRunButton(props: {
   readonly label?: string;
   readonly className?: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,22 +65,22 @@ export function ResumeRunButton(props: {
       if (r.ok && r.data) {
         setBusy(false);
         const queued = r.data.run?.jobs.length ?? 0;
-        const skipped = r.data.skipped.map((s) => SKIP_TEXT[s.reason]);
+        const skipped = r.data.skipped.map((s) => t(`resume.skip.${s.reason}`));
         toast(
-          `${queued > 0 ? `Resumed: ${String(queued)} job(s) queued.` : 'Nothing needed generating again.'}${
+          `${queued > 0 ? t('resume.queued', { count: queued }) : t('resume.nothing')}${
             skipped.length > 0
-              ? ` Skipped ${String(skipped.length)} (${[...new Set(skipped)].join(', ')}).`
+              ? ` ${t('resume.skipped', { count: skipped.length, reasons: [...new Set(skipped)].join(', ') })}`
               : ''
           }`,
         );
         router.refresh();
         return;
       }
-      const step = nextResumeStep(r, body);
+      const step = nextResumeStep(r, body, t);
       if (step.kind === 'error' || round === MAX_RESUME_ROUNDS) {
         setBusy(false);
         setError(
-          step.kind === 'error' ? step.text : (r.message ?? 'The run could not be resumed.'),
+          step.kind === 'error' ? step.text : (r.message ?? t('resume.failed')),
         );
         return;
       }
@@ -104,7 +100,7 @@ export function ResumeRunButton(props: {
         disabled={busy}
         onClick={() => void resume()}
       >
-        <Icon name="resume" /> {props.label ?? 'Resume'}
+        <Icon name="resume" /> {props.label ?? t('resume.button')}
       </button>
       {error && (
         <span className="form-error" role="alert">
@@ -119,10 +115,10 @@ export function ResumeRunButton(props: {
       >
         <div className="form-actions">
           <button type="button" className="btn" onClick={() => question?.answer(false)}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button type="button" className="btn primary" onClick={() => question?.answer(true)}>
-            Resume
+            {t('resume.button')}
           </button>
         </div>
       </Modal>

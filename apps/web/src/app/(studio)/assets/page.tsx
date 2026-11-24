@@ -7,39 +7,40 @@ import { UploadAssetButton } from '@/components/forms';
 import { QueryFilters } from '@/components/query-filters';
 import { apiGet } from '@/lib/api-server';
 import { param, type SearchParams } from '@/lib/content-filters';
+import { getT } from '@/lib/i18n/server';
 import { writableProjects } from '@/lib/project-options';
 import { apiGetAll } from '@/lib/workspace';
 
 import { AssetBrowser, NewCollectionForm, type AssetRow } from './asset-browser';
 
-export const metadata: Metadata = { title: 'Asset library · Content Studio' };
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('library.pageTitle') };
+}
 
 const PAGE_SIZE = 60;
 
-const TYPES = [
-  { value: 'reference', label: 'Reference images' },
-  { value: 'image', label: 'Generated images' },
-  { value: 'video', label: 'Clips' },
-  { value: 'audio', label: 'Audio' },
-  { value: 'render', label: 'Renders' },
-  { value: 'subtitle', label: 'Subtitles' },
-] as const;
+const TYPES = ['reference', 'image', 'video', 'audio', 'render', 'subtitle'] as const;
 
 /** Reference images, generated images, clips and audio with their provenance (prototype "Asset library"). */
 export default async function AssetsPage(props: { readonly searchParams: Promise<SearchParams> }) {
-  const query = await props.searchParams;
-  const projects = await apiGetAll<ProjectDto>('/projects');
+  const [query, projects, t] = await Promise.all([
+    props.searchParams,
+    apiGetAll<ProjectDto>('/projects'),
+    getT(),
+  ]);
   if (projects.kind === 'unauthenticated') redirect('/login');
   if (projects.kind === 'error') {
     return (
       <section className="card notice error" role="alert">
-        The asset library could not be loaded. Reload the page to try again.
+        {t('library.loadError')}
       </section>
     );
   }
   const projectId = param(query, 'project');
-  const type = TYPES.find((t) => t.value === param(query, 'type'))?.value;
+  const type = TYPES.find((value) => value === param(query, 'type'));
   const q = param(query, 'q')?.trim().slice(0, 100);
   const review = param(query, 'review') === 'pending';
   const scope = projects.data.items.filter((p) => !projectId || p.id === projectId);
@@ -79,9 +80,9 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">Project resources</div>
-          <h1>Asset library</h1>
-          <p>Reference images, audio and generated media with traceable production history.</p>
+          <div className="eyebrow">{t('library.eyebrow')}</div>
+          <h1>{t('library.title')}</h1>
+          <p>{t('library.lead')}</p>
         </div>
         <div className="actions">
           <UploadAssetButton
@@ -92,19 +93,24 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
       </div>
 
       <QueryFilters
-        search={{ name: 'q', placeholder: 'Search assets…' }}
+        search={{ name: 'q', placeholder: t('library.search') }}
         selects={[
-          { name: 'type', label: 'Asset type', allLabel: 'All asset types', options: TYPES },
+          {
+            name: 'type',
+            label: t('library.type'),
+            allLabel: t('library.allTypes'),
+            options: TYPES.map((value) => ({ value, label: t(`library.type.${value}`) })),
+          },
           {
             name: 'review',
-            label: 'Review',
-            allLabel: 'Any review state',
-            options: [{ value: 'pending', label: 'Needs review' }],
+            label: t('library.review'),
+            allLabel: t('library.anyReview'),
+            options: [{ value: 'pending', label: t('library.needsReview') }],
           },
           {
             name: 'project',
-            label: 'Project',
-            allLabel: 'All projects',
+            label: t('filter.project'),
+            allLabel: t('filter.allProjects'),
             // Two projects can share a name: add the slug then (UX review F13).
             options: projects.data.items.map((p, _, all) => ({
               value: p.id,
@@ -116,8 +122,8 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
             ? [
                 {
                   name: 'collection',
-                  label: 'Collection',
-                  allLabel: 'All assets',
+                  label: t('picker.collection'),
+                  allLabel: t('picker.allAssets'),
                   options: collectionList.map((c) => ({
                     value: c.id,
                     label: `${c.name} (${String(c.itemCount)})`,
@@ -126,17 +132,17 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
               ]
             : []),
         ]}
-        count={`${String(assets.length)} asset${assets.length === 1 ? '' : 's'}`}
+        count={t('library.count', { count: assets.length })}
       />
 
       {truncated && (
         <p className="muted small-text" role="status">
-          Showing the newest {PAGE_SIZE} assets per project. Search or filter to find older ones.
+          {t('library.truncated', { size: PAGE_SIZE })}
         </p>
       )}
       {failed && (
         <p className="notice error" role="alert">
-          Some projects’ assets could not be loaded.
+          {t('library.partial')}
         </p>
       )}
       {selectedProject && writable.some((p) => p.id === selectedProject.id) && (

@@ -3,34 +3,34 @@ import Link from 'next/link';
 import { LocalTime } from '@/components/local-time';
 import { Pill } from '@/components/status-pill';
 import { fetchApiHealth } from '@/lib/api-health';
+import { getT } from '@/lib/i18n/server';
 
 // Always render at request time: status must never be served from a build-time cache.
 export const dynamic = 'force-dynamic';
 
 const BADGE = {
-  ok: { tone: 'green', label: 'Operational' },
-  degraded: { tone: 'amber', label: 'Degraded' },
-  unreachable: { tone: 'red', label: 'API unreachable' },
+  ok: { tone: 'green', label: 'sys.ok' },
+  degraded: { tone: 'amber', label: 'sys.degraded' },
+  unreachable: { tone: 'red', label: 'sys.unreachable' },
 } as const;
 
 /** Public status page: works without signing in. */
 export default async function StatusPage() {
-  const health = await fetchApiHealth();
+  const [health, t] = await Promise.all([fetchApiHealth(), getT()]);
   const badge = BADGE[health.kind];
 
   return (
     <div className="standalone">
       <section className="card standalone-card wide">
         <div className="section-head">
-          <h1>System status</h1>
-          <Pill tone={badge.tone}>{badge.label}</Pill>
+          <h1>{t('sys.title')}</h1>
+          <Pill tone={badge.tone}>{t(badge.label)}</Pill>
         </div>
         {health.kind === 'unreachable' ? (
           <div role="alert">
             <p className="notice error">{health.reason}.</p>
             <p className="muted small-text">
-              Start dependencies with <code>pnpm infra:up</code> and the API with{' '}
-              <code>pnpm dev:api</code>, then reload this page.
+              {t('sys.startHint', { infra: 'pnpm infra:up', api: 'pnpm dev:api' })}
             </p>
           </div>
         ) : (
@@ -39,9 +39,9 @@ export default async function StatusPage() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th scope="col">Dependency</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Latency</th>
+                    <th scope="col">{t('sys.dependency')}</th>
+                    <th scope="col">{t('sys.status')}</th>
+                    <th scope="col">{t('sys.latency')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -50,7 +50,7 @@ export default async function StatusPage() {
                       <td className="table-title">{name}</td>
                       <td>
                         <Pill tone={check.status === 'ok' ? 'green' : 'red'}>
-                          {check.status === 'ok' ? 'ok' : (check.error ?? 'error')}
+                          {check.status === 'ok' ? t('sys.okShort') : (check.error ?? t('sys.error'))}
                         </Pill>
                       </td>
                       <td>{check.latencyMs} ms</td>
@@ -60,12 +60,12 @@ export default async function StatusPage() {
               </table>
             </div>
             <p className="muted small-text">
-              Checked at <LocalTime iso={health.data.timestamp} />
+              {t('sys.checkedAt')} <LocalTime iso={health.data.timestamp} />
             </p>
           </>
         )}
         <Link className="link" href="/">
-          ← Back to the workspace
+          {t('sys.back')}
         </Link>
       </section>
     </div>

@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import type { GenerationJobDto } from '@acf/contracts';
 
+import { useT } from '@/components/i18n-provider';
 import { Icon } from '@/components/icon';
 import { Modal } from '@/components/modal';
 import { toast } from '@/components/toast';
@@ -23,6 +24,7 @@ export function CancelRunButton(props: {
   readonly what: string;
   readonly video?: boolean | undefined;
 }) {
+  const t = useT();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -35,11 +37,11 @@ export function CancelRunButton(props: {
     setBusy(false);
     setOpen(false);
     if (!r.ok) {
-      setError(r.code === 'NOT_CANCELABLE' ? 'Nothing is running any more.' : errorText(r));
+      setError(r.code === 'NOT_CANCELABLE' ? t('cancel.nothing') : errorText(r));
       router.refresh();
       return;
     }
-    toast('Canceled.');
+    toast(t('cancel.done'));
     router.refresh();
   }
 
@@ -53,7 +55,7 @@ export function CancelRunButton(props: {
           setOpen(true);
         }}
       >
-        <Icon name="cancel" /> Cancel
+        <Icon name="cancel" /> {t('cancel.button')}
       </button>
       {error && (
         <span className="form-error" role="alert">
@@ -65,12 +67,8 @@ export function CancelRunButton(props: {
         onClose={() => {
           setOpen(false);
         }}
-        title={`Cancel ${props.what}?`}
-        description={
-          props.video
-            ? 'Queued clips are not sent. A clip already submitted keeps running at the provider and may still be charged.'
-            : 'Queued work is not started. A call already running finishes, and its result is discarded.'
-        }
+        title={t('cancel.title', { what: props.what })}
+        description={props.video ? t('cancel.videoText') : t('cancel.text')}
       >
         <div className="form-actions">
           <button
@@ -80,7 +78,7 @@ export function CancelRunButton(props: {
               setOpen(false);
             }}
           >
-            Keep running
+            {t('cancel.keep')}
           </button>
           <button
             type="button"
@@ -88,7 +86,7 @@ export function CancelRunButton(props: {
             disabled={busy}
             onClick={() => void cancel()}
           >
-            {busy ? 'Canceling…' : 'Cancel it'}
+            {busy ? t('cancel.canceling') : t('cancel.confirm')}
           </button>
         </div>
       </Modal>
@@ -101,6 +99,7 @@ export function CancelActiveRuns(props: {
   readonly jobs: readonly (GenerationJobDto | null | undefined)[];
   readonly video?: boolean | undefined;
 }) {
+  const t = useT();
   const runs = new Map<string, number>();
   for (const job of props.jobs) {
     if (job && ACTIVE.has(job.status)) {
@@ -111,7 +110,7 @@ export function CancelActiveRuns(props: {
     <CancelRunButton
       key={runId}
       runId={runId}
-      what={`this batch (${String(scenes)} scene${scenes === 1 ? '' : 's'})`}
+      what={t('cancel.batch', { count: scenes })}
       video={props.video}
     />
   ));

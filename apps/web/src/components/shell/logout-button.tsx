@@ -3,10 +3,12 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { useT } from '@/components/i18n-provider';
 import { csrfToken, forgetCsrfToken } from '@/lib/csrf-client';
 
 export function LogoutButton() {
   const router = useRouter();
+  const t = useT();
   const [busy, setBusy] = useState(false);
 
   async function logout() {
@@ -27,7 +29,7 @@ export function LogoutButton() {
 
   return (
     <button type="button" className="signout" onClick={() => void logout()} disabled={busy}>
-      {busy ? 'Signing out…' : 'Sign out'}
+      {busy ? t('user.signingOut') : t('user.signOut')}
     </button>
   );
 }

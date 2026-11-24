@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, HttpCode, Patch, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 
@@ -7,9 +7,11 @@ import {
   loginRequestSchema,
   loginResponseSchema,
   meResponseSchema,
+  preferencesRequestSchema,
   type LoginRequest,
   type LoginResponse,
   type MeResponse,
+  type PreferencesRequest,
 } from '@acf/contracts';
 
 import { Endpoint, ValidBody } from '../common/http/endpoint.js';
@@ -62,6 +64,22 @@ export class AuthController {
   })
   me(@CurrentActor() actor: Actor): Promise<MeResponse> {
     return this.auth.me(actor);
+  }
+
+  @Patch('me/preferences')
+  @Endpoint({
+    summary: "Change the signed-in user's own preferences (interface language)",
+    tags: ['auth'],
+    headers: ['x-csrf-token'],
+    body: preferencesRequestSchema,
+    responses: { 200: { description: 'Updated profile', schema: meResponseSchema } },
+    errors: [400, 401, 403],
+  })
+  updatePreferences(
+    @CurrentActor() actor: Actor,
+    @ValidBody() body: PreferencesRequest,
+  ): Promise<MeResponse> {
+    return this.auth.updatePreferences(actor, body);
   }
 
   @Get('csrf')

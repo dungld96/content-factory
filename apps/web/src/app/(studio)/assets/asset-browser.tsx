@@ -14,7 +14,7 @@ import type {
   LineageResponse,
 } from '@acf/contracts';
 
-import { mediaTypeLabel } from '@/lib/media-labels';
+import { useLocale, useT } from '@/components/i18n-provider';
 import { Icon } from '@/components/icon';
 import { LocalTime } from '@/components/local-time';
 import { ApprovalPill, Pill } from '@/components/status-pill';
@@ -22,6 +22,8 @@ import { toast } from '@/components/toast';
 import { errorText, fetchJson, mutate } from '@/lib/api-client';
 import { assetContentUrl } from '@/lib/asset-url';
 import { formatBytes, formatSeconds } from '@/lib/format';
+import type { MessageKey, Translate } from '@/lib/i18n';
+import { mediaTypeLabel } from '@/lib/media-labels';
 import { addUsd, formatUsd } from '@/lib/money';
 
 export type AssetRow = AssetDto & {
@@ -37,6 +39,7 @@ const IN_USE_CODES = new Set(['KEYFRAME_INVALID', 'SCENE_SELECTION_INVALID']);
 
 /** Creates a collection in the selected project (P2b L5). */
 export function NewCollectionForm({ projectId }: { readonly projectId: string }) {
+  const t = useT();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   async function create(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
@@ -52,17 +55,26 @@ export function NewCollectionForm({ projectId }: { readonly projectId: string })
     }
     setError(null);
     formEl.reset();
-    toast(`Collection “${name}” created.`);
+    toast(t('library.collectionCreated', { name }));
     router.refresh();
   }
   return (
-    <form className="image-toolbar" aria-label="New collection" onSubmit={(e) => void create(e)}>
+    <form
+      className="image-toolbar"
+      aria-label={t('library.newCollection')}
+      onSubmit={(e) => void create(e)}
+    >
       <label className="field">
-        New collection
-        <input name="name" maxLength={100} placeholder="e.g. Hero shots" required />
+        {t('library.newCollection')}
+        <input
+          name="name"
+          maxLength={100}
+          placeholder={t('library.collectionPlaceholder')}
+          required
+        />
       </label>
       <button type="submit" className="btn">
-        Create
+        {t('brand.create')}
       </button>
       {error && (
         <span className="form-error" role="alert">
@@ -83,6 +95,7 @@ function AssetActions({
   readonly collections: readonly CollectionDto[];
   readonly activeCollectionId: string | null;
 }) {
+  const t = useT();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,7 +115,7 @@ function AssetActions({
     if (!r.ok) {
       setError(
         r.code && IN_USE_CODES.has(r.code)
-          ? 'In use in a scene: choose another asset for that scene first.'
+          ? t('library.inUse')
           : errorText(r),
       );
       return;
@@ -117,42 +130,46 @@ function AssetActions({
     event.preventDefault();
     const value = new FormData(event.currentTarget).get('label');
     const label = typeof value === 'string' ? value : '';
-    void act('PATCH', `/assets/${asset.id}`, { label }, 'Label saved.');
+    void act('PATCH', `/assets/${asset.id}`, { label }, t('library.labelSaved'));
   }
 
   if (asset.archivedAt !== null) {
-    return <p className="muted small-text">Archived: read-only.</p>;
+    return <p className="muted small-text">{t('library.archivedReadOnly')}</p>;
   }
   return (
-    <div className="image-toolbar" aria-label="Asset actions">
+    <div className="image-toolbar" aria-label={t('library.actions')}>
       {REVIEWABLE.has(asset.assetType) && (
         <>
           <button
             type="button"
             className="btn primary"
             disabled={busy || asset.approvalStatus === 'approved'}
-            onClick={() => void act('POST', `/assets/${asset.id}/approve`, {}, 'Asset approved.')}
+            onClick={() =>
+              void act('POST', `/assets/${asset.id}/approve`, {}, t('library.approved'))
+            }
           >
-            <Icon name="check" /> Approve
+            <Icon name="check" /> {t('library.approve')}
           </button>
           <button
             type="button"
             className="btn danger"
             disabled={busy || asset.approvalStatus === 'rejected'}
-            onClick={() => void act('POST', `/assets/${asset.id}/reject`, {}, 'Asset rejected.')}
+            onClick={() =>
+              void act('POST', `/assets/${asset.id}/reject`, {}, t('library.rejected'))
+            }
           >
-            <Icon name="reject" /> Reject
+            <Icon name="reject" /> {t('library.reject')}
           </button>
         </>
       )}
       {editing ? (
         <form className="image-toolbar" onSubmit={saveLabel}>
           <label className="field">
-            Label
+            {t('upload.label')}
             <input name="label" defaultValue={asset.label ?? ''} maxLength={200} />
           </label>
           <button type="submit" className="btn primary" disabled={busy}>
-            Save
+            {t('common.save')}
           </button>
           <button
             type="button"
@@ -161,7 +178,7 @@ function AssetActions({
               setEditing(false);
             }}
           >
-            Cancel
+            {t('common.cancel')}
           </button>
         </form>
       ) : (
@@ -173,7 +190,7 @@ function AssetActions({
             setEditing(true);
           }}
         >
-          Edit label
+          {t('library.editLabel')}
         </button>
       )}
       {confirmArchive ? (
@@ -182,9 +199,11 @@ function AssetActions({
             type="button"
             className="btn danger"
             disabled={busy}
-            onClick={() => void act('POST', `/assets/${asset.id}/archive`, {}, 'Asset archived.')}
+            onClick={() =>
+              void act('POST', `/assets/${asset.id}/archive`, {}, t('library.archived'))
+            }
           >
-            Confirm archive
+            {t('library.confirmArchive')}
           </button>
           <button
             type="button"
@@ -193,7 +212,7 @@ function AssetActions({
               setConfirmArchive(false);
             }}
           >
-            Keep
+            {t('library.keep')}
           </button>
         </>
       ) : (
@@ -205,12 +224,12 @@ function AssetActions({
             setConfirmArchive(true);
           }}
         >
-          Archive
+          {t('library.archive')}
         </button>
       )}
       {collections.length > 0 && (
         <label className="field">
-          Add to collection
+          {t('library.addToCollection')}
           <select
             value=""
             disabled={busy}
@@ -221,12 +240,12 @@ function AssetActions({
                   'PUT',
                   `/collections/${c.id}/assets/${asset.id}`,
                   {},
-                  `Added to ${c.name}.`,
+                  t('library.addedTo', { name: c.name }),
                 );
               }
             }}
           >
-            <option value="">Choose…</option>
+            <option value="">{t('library.choose')}</option>
             {collections.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -242,7 +261,7 @@ function AssetActions({
           disabled={busy}
           onClick={() => void removeFromCollection(activeCollectionId)}
         >
-          Remove from this collection
+          {t('library.removeFromCollection')}
         </button>
       )}
       {error && (
@@ -258,16 +277,16 @@ function AssetActions({
       'DELETE',
       `/collections/${collectionId}/assets/${asset.id}`,
       undefined,
-      'Removed from the collection.',
+      t('library.removed'),
     );
   }
 }
 
-const SOURCE_LABEL: Readonly<Record<AssetDto['sourceType'], string>> = {
-  upload: 'Uploaded',
-  import: 'Imported',
-  generated: 'Generated',
-  derived: 'Derived',
+const SOURCE_LABEL: Readonly<Record<AssetDto['sourceType'], MessageKey>> = {
+  upload: 'source.upload',
+  import: 'source.import',
+  generated: 'source.generated',
+  derived: 'source.derived',
 };
 
 const nameOf = (a: AssetDto) =>
@@ -282,32 +301,19 @@ interface Provenance {
   readonly job: GenerationJobDto | null;
 }
 
-const ROLE_LABEL: Readonly<Record<AssetInputListDto['data'][number]['role'], string>> = {
-  character: 'character reference',
-  product: 'product reference',
-  environment: 'environment reference',
-  scene_reference: 'scene reference',
-  keyframe: 'keyframe',
-  clip: 'clip',
-  voiceover: 'voice-over',
-  music: 'music',
-  sfx: 'sound effect',
-};
+const ROLE_LABEL = (role: AssetInputListDto['data'][number]['role']): MessageKey =>
+  `inputRole.${role}`;
 
-const USE_LABEL: Readonly<Record<AssetProductionUsageDto['kind'], string>> = {
-  generation_input: 'Input',
-  keyframe: 'Keyframe',
-  clip: 'Chosen clip',
-  voiceover: 'Chosen voice-over',
-  scene_reference: 'Scene reference',
-  render_output: 'Render output',
-};
+const USE_LABEL = (kind: AssetProductionUsageDto['kind']): MessageKey => `use.${kind}`;
 
 /** One production use, e.g. "Chosen clip · scene 2". */
-function usageText(u: AssetProductionUsageDto): string {
-  const scene = u.sceneNumber === null ? '' : ` · scene ${String(u.sceneNumber)}`;
-  const role = u.kind === 'generation_input' && u.role ? ` (as ${ROLE_LABEL[u.role]})` : '';
-  return `${USE_LABEL[u.kind]}${role}${scene}`;
+function usageText(t: Translate, u: AssetProductionUsageDto): string {
+  const scene = u.sceneNumber === null ? '' : ` ${t('use.scene', { number: u.sceneNumber })}`;
+  const role =
+    u.kind === 'generation_input' && u.role
+      ? ` ${t('use.asRole', { role: t(ROLE_LABEL(u.role)) })}`
+      : '';
+  return `${t(USE_LABEL(u.kind))}${role}${scene}`;
 }
 
 /** Loads what the API records about where an asset came from and where it is used. */
@@ -348,6 +354,7 @@ function useProvenance(asset: AssetDto | null): Provenance | 'loading' | null {
 
 /** Players for clips and audio (Range-streamed through the API, M5a). */
 function MediaPreview({ asset }: { readonly asset: AssetDto }) {
+  const t = useT();
   if (asset.mimeType.startsWith('video/')) {
     return (
       <video
@@ -355,7 +362,7 @@ function MediaPreview({ asset }: { readonly asset: AssetDto }) {
         controls
         preload="metadata"
         src={assetContentUrl(asset.id)}
-        aria-label={`Play ${nameOf(asset)}`}
+        aria-label={t('library.play', { name: nameOf(asset) })}
       />
     );
   }
@@ -366,7 +373,7 @@ function MediaPreview({ asset }: { readonly asset: AssetDto }) {
         controls
         preload="metadata"
         src={assetContentUrl(asset.id)}
-        aria-label={`Play ${nameOf(asset)}`}
+        aria-label={t('library.play', { name: nameOf(asset) })}
       />
     );
   }
@@ -382,13 +389,19 @@ function LineagePanel({
   readonly collections: readonly CollectionDto[];
   readonly activeCollectionId: string | null;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const provenance = useProvenance(asset);
   return (
-    <section className="card card-pad" style={{ marginTop: 18 }} aria-label="Asset lineage">
+    <section
+      className="card card-pad"
+      style={{ marginTop: 18 }}
+      aria-label={t('library.lineage')}
+    >
       <div className="section-head">
         <div>
-          <h2>Asset lineage</h2>
-          <p>Every generated asset links back to its job, model, prompt template and scene.</p>
+          <h2>{t('library.lineage')}</h2>
+          <p>{t('library.lineageHint')}</p>
         </div>
         <ApprovalPill status={asset.approvalStatus} />
       </div>
@@ -402,105 +415,105 @@ function LineagePanel({
         />
       )}
       <div className="brief-box">
-        <span className="box-label">Selected asset · {nameOf(asset)}</span>
+        <span className="box-label">{t('library.selected', { name: nameOf(asset) })}</span>
         <dl className="lineage">
-          <dt>Project</dt>
+          <dt>{t('library.dt.project')}</dt>
           <dd>{asset.projectName}</dd>
-          <dt>Source</dt>
+          <dt>{t('library.dt.source')}</dt>
           <dd>
-            {SOURCE_LABEL[asset.sourceType]} {asset.assetType}
+            {t(SOURCE_LABEL[asset.sourceType])} {asset.assetType}
             {asset.sourceNote ? ` · ${asset.sourceNote}` : ''}
           </dd>
-          <dt>File</dt>
+          <dt>{t('library.dt.file')}</dt>
           <dd>
-            {mediaTypeLabel(asset.mimeType)} · {formatBytes(asset.sizeBytes)}
+            {mediaTypeLabel(asset.mimeType, locale)} · {formatBytes(asset.sizeBytes)}
             {asset.width && asset.height ? ` · ${String(asset.width)}×${String(asset.height)}` : ''}
           </dd>
-          <dt>Checksum</dt>
+          <dt>{t('library.dt.checksum')}</dt>
           <dd>
             <code>sha256:{asset.checksumSha256.slice(0, 12)}…</code>
           </dd>
-          <dt>Created</dt>
+          <dt>{t('library.dt.created')}</dt>
           <dd>
             <LocalTime iso={asset.createdAt} />
           </dd>
           {asset.contentItemId && (
             <>
-              <dt>Content</dt>
+              <dt>{t('library.dt.content')}</dt>
               <dd>
-                <Link href={`/content/${asset.contentItemId}`}>Open content workspace →</Link>
-                {asset.storyboardSceneId && ' (storyboard scene candidate)'}
+                <Link href={`/content/${asset.contentItemId}`}>{t('library.openWorkspace')}</Link>
+                {asset.storyboardSceneId && ` ${t('library.sceneCandidate')}`}
               </dd>
             </>
           )}
           {provenance === 'loading' ? (
             <>
-              <dt>Provenance</dt>
-              <dd aria-busy="true">Loading…</dd>
+              <dt>{t('library.dt.provenance')}</dt>
+              <dd aria-busy="true">{t('common.loading')}</dd>
             </>
           ) : (
             provenance && (
               <>
                 {provenance.job && (
                   <>
-                    <dt>Generation job</dt>
+                    <dt>{t('library.dt.job')}</dt>
                     <dd>
                       {provenance.job.kind} · {provenance.job.status} ·{' '}
                       <code>{provenance.job.id.slice(0, 8)}…</code>
                     </dd>
-                    <dt>Model</dt>
+                    <dt>{t('library.dt.model')}</dt>
                     <dd>{provenance.job.modelKey}</dd>
-                    <dt>Prompt template</dt>
+                    <dt>{t('library.dt.template')}</dt>
                     <dd>{provenance.job.promptTemplateId}</dd>
-                    <dt>Job cost</dt>
+                    <dt>{t('library.dt.cost')}</dt>
                     <dd>
                       {formatUsd(
                         addUsd(provenance.job.cost.reportedUsd, provenance.job.cost.estimatedUsd),
                       )}
                       {provenance.job.cost.unknownCalls > 0
-                        ? ` + ${String(provenance.job.cost.unknownCalls)} call(s) of unknown cost`
+                        ? ` ${t('library.unknownCalls', { count: provenance.job.cost.unknownCalls })}`
                         : ''}
                     </dd>
                   </>
                 )}
-                <dt>Made from</dt>
+                <dt>{t('library.dt.madeFrom')}</dt>
                 <dd>
                   {provenance.inputs.length === 0
-                    ? 'No generation inputs'
+                    ? t('library.noInputs')
                     : provenance.inputs.map((i, n) => (
                         <span key={i.asset.id}>
                           {n > 0 ? ', ' : ''}
-                          {nameOf(i.asset)} ({ROLE_LABEL[i.role]})
+                          {nameOf(i.asset)} ({t(ROLE_LABEL(i.role))})
                         </span>
                       ))}
                 </dd>
-                <dt>Used in</dt>
+                <dt>{t('library.dt.usedIn')}</dt>
                 <dd>
                   {provenance.production.length === 0
-                    ? 'Not used in production'
+                    ? t('library.notUsed')
                     : provenance.production.map((u, n) => (
                         <span
                           key={`${u.kind}-${u.assetId ?? u.storyboardSceneId ?? u.renderId ?? String(n)}`}
                         >
                           {n > 0 ? ', ' : ''}
                           {u.contentItemId ? (
-                            <Link href={`/content/${u.contentItemId}`}>{usageText(u)}</Link>
+                            <Link href={`/content/${u.contentItemId}`}>{usageText(t, u)}</Link>
                           ) : (
-                            usageText(u)
+                            usageText(t, u)
                           )}
                         </span>
                       ))}
                 </dd>
-                <dt>Derived from</dt>
+                <dt>{t('library.dt.derived')}</dt>
                 <dd>
                   {provenance.ancestors.length === 0
-                    ? 'Nothing (original asset)'
+                    ? t('library.original')
                     : provenance.ancestors.map(nameOf).join(' ← ')}
                 </dd>
-                <dt>Brand versions</dt>
+                <dt>{t('library.dt.brand')}</dt>
                 <dd>
                   {provenance.usages.length === 0
-                    ? 'No character or environment version'
+                    ? t('library.noBrand')
                     : provenance.usages
                         .map((u) => `${u.kind} v${String(u.version)} (${u.reference}, ${u.status})`)
                         .join(', ')}
@@ -524,20 +537,22 @@ export function AssetBrowser({
   readonly collections?: readonly CollectionDto[];
   readonly activeCollectionId?: string | null;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = assets.find((a) => a.id === selectedId) ?? null;
 
   if (assets.length === 0) {
     return (
       <section className="card empty">
-        <h2>No assets</h2>
-        Upload a reference image or audio, or generate scene media from an approved storyboard.
+        <h2>{t('library.noAssets')}</h2>
+        {t('library.noAssetsHint')}
       </section>
     );
   }
   return (
     <>
-      <ul className="asset-grid" aria-label="Assets">
+      <ul className="asset-grid" aria-label={t('library.gridLabel')}>
         {assets.map((asset) => {
           const name = nameOf(asset);
           return (
@@ -574,7 +589,7 @@ export function AssetBrowser({
                   ) : (
                     <span className="asset-kind">
                       <Icon name={asset.mimeType.startsWith('audio/') ? 'music' : 'content'} />
-                      {mediaTypeLabel(asset.mimeType)}
+                      {mediaTypeLabel(asset.mimeType, locale)}
                       {asset.durationMs ? ` · ${formatSeconds(asset.durationMs)}` : ''}
                     </span>
                   )}
@@ -582,7 +597,9 @@ export function AssetBrowser({
                 <span className="asset-meta">
                   <b>{name}</b>
                   <span>
-                    {asset.assetType === 'reference' ? 'Reference' : SOURCE_LABEL[asset.sourceType]}{' '}
+                    {asset.assetType === 'reference'
+                      ? t('library.reference')
+                      : t(SOURCE_LABEL[asset.sourceType])}{' '}
                     · {formatBytes(asset.sizeBytes)} · {asset.projectName}
                   </span>
                 </span>
@@ -599,7 +616,7 @@ export function AssetBrowser({
         />
       ) : (
         <p className="muted small-text" style={{ marginTop: 14 }}>
-          Select an asset to see its lineage. <Pill tone="green">Traceability enabled</Pill>
+          {t('library.selectHint')} <Pill tone="green">{t('library.traceability')}</Pill>
         </p>
       )}
     </>

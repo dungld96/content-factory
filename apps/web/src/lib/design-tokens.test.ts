@@ -3,7 +3,6 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { t } from './i18n';
 
 // UX review U3: readable text sizes and contrast, checked on the stylesheet itself.
 const css = readFileSync(path.join(import.meta.dirname, '../app/globals.css'), 'utf8');
@@ -63,16 +62,13 @@ describe('status pills (UX review U3)', () => {
       ['red', 'red-soft'],
       ['gray', 'gray-soft'],
       ['accent-hover', 'accent-soft'],
+      // Redesign Studio 2: information and review tones.
+      ['info', 'info-soft'],
+      ['review', 'review-soft'],
     ] as const) {
       expect(contrast(token(block, fg), token(block, bg)), `${fg} on ${bg}`).toBeGreaterThanOrEqual(
         4.5,
       );
     }
-  });
-});
-
-describe('t()', () => {
-  it('returns the English text', () => {
-    expect(t('nav.overview')).toBe('Overview');
   });
 });

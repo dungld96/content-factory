@@ -2,188 +2,175 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { ContentTable } from '@/components/content-table';
-import { Icon, type IconName } from '@/components/icon';
+import type { OpsSummaryDto } from '@acf/contracts';
+
 import { NewContentButton } from '@/components/forms';
-import { StageList } from '@/components/snapshot';
-import { isFinished, isInProduction, needsReview, weeklyCreation } from '@/lib/content-status';
+import { Icon, type IconName } from '@/components/icon';
+import { RelativeTime } from '@/components/local-time';
+import { StatusBadge, type BadgeState } from '@/components/status-badge';
+import { ContentStatusPill } from '@/components/status-pill';
+import { apiGet } from '@/lib/api-server';
+import { jobErrorText } from '@/lib/format';
+import type { MessageKey } from '@/lib/i18n';
+import { getLocale, getT } from '@/lib/i18n/server';
+import { formatUsd } from '@/lib/money';
+import { writableProjects } from '@/lib/project-options';
+import { buildTodo, type TodoItem, type TodoKind } from '@/lib/todo';
 import { loadWorkspace } from '@/lib/workspace';
 
-import { writableProjects } from '@/lib/project-options';
-
-export const metadata: Metadata = { title: 'Overview · Content Studio' };
 export const dynamic = 'force-dynamic';
 
-const DAY_MS = 86_400_000;
-
-function Stat(props: {
-  readonly label: string;
-  readonly icon: IconName;
-  readonly value: number;
-  readonly foot: string;
-}) {
-  return (
-    <div className="card stat">
-      <div className="stat-top">
-        {props.label}
-        <span className="stat-icon" aria-hidden="true">
-          <Icon name={props.icon} />
-        </span>
-      </div>
-      <div className="stat-value">{props.value}</div>
-      <div className="stat-foot">{props.foot}</div>
-    </div>
-  );
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('todo.pageTitle') };
 }
 
-const weekLabel = (isoDate: string) =>
-  new Date(`${isoDate}T00:00:00Z`).toLocaleDateString('en', {
-    month: 'short',
-    day: '2-digit',
-    timeZone: 'UTC',
-  });
+const KIND: Readonly<Record<TodoKind, { state: BadgeState; label: MessageKey; icon: IconName }>> = {
+  gate: { state: 'review', label: 'todo.kind.gate', icon: 'check' },
+  input: { state: 'changes', label: 'todo.kind.input', icon: 'edit' },
+  failed: { state: 'failed', label: 'todo.kind.failed', icon: 'failed' },
+  held: { state: 'budget', label: 'todo.kind.held', icon: 'warning' },
+  budget: { state: 'budget', label: 'todo.kind.budget', icon: 'costs' },
+};
 
-export default async function OverviewPage() {
-  const workspace = await loadWorkspace();
+/**
+ * To-do (redesign R2, R-D2): the home page is the operator's queue of decisions, each with its
+ * primary action on the row; running work and finished videos sit beside it.
+ */
+export default async function TodoPage() {
+  const [workspace, ops, t, locale] = await Promise.all([
+    loadWorkspace(),
+    apiGet<OpsSummaryDto>('/ops/summary'),
+    getT(),
+    getLocale(),
+  ]);
   if (workspace.kind === 'unauthenticated') redirect('/login');
   if (workspace.kind === 'error') {
     return (
       <section className="card card-pad notice error" role="alert">
-        The workspace could not be loaded. Reload the page to try again.
+        {t('todo.loadError')}
       </section>
     );
   }
   const { projects, content, truncated } = workspace.data;
-  const now = new Date();
-  const inProduction = content.filter((c) => isInProduction(c.status));
-  const waiting = content.filter((c) => needsReview(c.status));
-  const finished = content.filter((c) => isFinished(c.status));
-  const recentlyCreated = content.filter(
-    (c) => now.getTime() - new Date(c.createdAt).getTime() <= 30 * DAY_MS,
-  );
-  const weeks = weeklyCreation(content, now);
-  const peak = Math.max(1, ...weeks.map((w) => w.created));
-  const owned = projects.filter((p) => p.role === 'owner').length;
+  const todo = buildTodo(content, ops.kind === 'ok' ? ops.data : null);
   const writable = writableProjects(projects);
+  const reasonText = (item: TodoItem) => {
+    const detail =
+      item.kind === 'held' || item.kind === 'budget'
+        ? formatUsd(item.detail ?? '0')
+        : (item.detail ?? '');
+    const text = t(item.reason, { detail });
+    return item.kind === 'failed' && item.detail ? `${text}: ${jobErrorText(item.detail, locale)}` : text;
+  };
 
   return (
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">Workspace overview</div>
-          <h1>Let’s make something.</h1>
-          <p>Here’s what’s happening across your content workspace.</p>
+          <div className="eyebrow">{t('todo.eyebrow')}</div>
+          <h1>{t('todo.title')}</h1>
+          <p>{t('todo.lead')}</p>
         </div>
         <div className="actions">
-          <NewContentButton projects={writable} label="Create content" />
+          <NewContentButton projects={writable} label={t('todo.create')} />
         </div>
       </div>
 
-      {truncated && (
-        <p className="notice">
-          Showing the first 1,000 items per list; some counts may be partial.
+      {truncated && <p className="notice">{t('todo.truncated')}</p>}
+      {ops.kind !== 'ok' && (
+        <p className="notice" role="status">
+          {t('todo.opsMissing')}
         </p>
       )}
 
-      <section className="stats" aria-label="Workspace statistics">
-        <Stat
-          label="Content items"
-          icon="content"
-          value={content.length}
-          foot={`${String(recentlyCreated.length)} created in the last 30 days`}
-        />
-        <Stat
-          label="In production"
-          icon="history"
-          value={inProduction.length}
-          foot={`${String(waiting.length)} need your review`}
-        />
-        <Stat
-          label="Approved"
-          icon="check"
-          value={finished.length}
-          foot="All review gates passed"
-        />
-        <Stat
-          label="Projects"
-          icon="projects"
-          value={projects.length}
-          foot={`${String(owned)} owned by you`}
-        />
-      </section>
-
-      <div className="dashboard-grid">
-        <section className="card card-pad" aria-labelledby="activity-heading">
-          <div className="section-head">
+      <div className="todo-layout">
+        <section className="card todo-queue" aria-labelledby="todo-heading">
+          <div className="section-head card-pad-x">
             <div>
-              <h2 id="activity-heading">Production activity</h2>
-              <p>Content items created per week, last 8 weeks (UTC)</p>
+              <h2 id="todo-heading">{t('todo.queue')}</h2>
+              <p>{t('todo.count', { count: todo.items.length })}</p>
             </div>
           </div>
-          <div className="chart" role="img" aria-label="Content created per week">
-            {weeks.map((w) => (
-              <div
-                key={w.weekStart}
-                className="bar-group"
-                title={`Week of ${weekLabel(w.weekStart)}: ${String(w.created)} created, ${String(w.finished)} approved`}
-              >
-                <i className="bar" style={{ height: `${String((w.created / peak) * 100)}%` }} />
-                <i
-                  className="bar dark"
-                  style={{ height: `${String((w.finished / peak) * 100)}%` }}
-                />
-                <span className="bar-label">{weekLabel(w.weekStart)}</span>
-              </div>
-            ))}
-          </div>
-          <div className="chart-legend">
-            <span>
-              <i className="legend-dot pale" />
-              Created
-            </span>
-            <span>
-              <i className="legend-dot" />
-              Of which approved
-            </span>
-          </div>
+          {todo.items.length === 0 ? (
+            <div className="empty">
+              <span className="empty-icon" aria-hidden="true">
+                <Icon name="check" size={22} />
+              </span>
+              <h3>{t('todo.emptyTitle')}</h3>
+              <p>
+                {projects.length === 0
+                  ? t('todo.noProjects')
+                  : writable.length === 0
+                    ? t('todo.readOnly')
+                    : t('todo.emptyBody')}
+              </p>
+            </div>
+          ) : (
+            <ul className="todo-list">
+              {todo.items.map((item) => {
+                const kind = KIND[item.kind];
+                return (
+                  <li key={item.id} className={`todo-row ${item.kind}`}>
+                    <span className="todo-icon" aria-hidden="true">
+                      <Icon name={kind.icon} size={18} />
+                    </span>
+                    <span className="todo-main">
+                      <span className="todo-title">
+                        <b>{item.title}</b>
+                        <StatusBadge state={kind.state} label={t(kind.label)} />
+                      </span>
+                      <span className="todo-reason">{reasonText(item)}</span>
+                      <span className="subline">
+                        {item.projectName} · <RelativeTime iso={item.at} />
+                      </span>
+                    </span>
+                    <Link className="btn primary small todo-action" href={item.href}>
+                      {t(item.action)}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
-        <section className="card card-pad" aria-labelledby="health-heading">
-          <div className="section-head">
-            <div>
-              <h2 id="health-heading">Pipeline health</h2>
-              <p>Current content by stage</p>
-            </div>
-            <Link className="link" href="/pipeline">
-              View pipeline →
+
+        <aside className="stack todo-side">
+          <section className="card card-pad" aria-labelledby="running-heading">
+            <h3 id="running-heading">{t('todo.running')}</h3>
+            {todo.running.length === 0 ? (
+              <p className="muted small-text">{t('todo.runningEmpty')}</p>
+            ) : (
+              <ul className="mini-list">
+                {todo.running.map((c) => (
+                  <li key={c.id}>
+                    <Link href={`/content/${c.id}`}>{c.title}</Link>
+                    <ContentStatusPill status={c.status} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section className="card card-pad" aria-labelledby="ready-heading">
+            <h3 id="ready-heading">{t('todo.ready')}</h3>
+            {todo.ready.length === 0 ? (
+              <p className="muted small-text">{t('todo.readyEmpty')}</p>
+            ) : (
+              <ul className="mini-list">
+                {todo.ready.map((c) => (
+                  <li key={c.id}>
+                    <Link href={`/content/${c.id}#render`}>{c.title}</Link>
+                    <RelativeTime iso={c.updatedAt} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Link className="link" href="/productions">
+              {t('todo.allProductions')}
             </Link>
-          </div>
-          <StageList items={content} />
-        </section>
+          </section>
+        </aside>
       </div>
-
-      <section className="card card-pad" style={{ marginTop: 17 }} aria-labelledby="recent-heading">
-        <div className="section-head">
-          <div>
-            <h2 id="recent-heading">Recently updated</h2>
-            <p>Pick up where you left off</p>
-          </div>
-          <Link className="link" href="/content">
-            All content →
-          </Link>
-        </div>
-        {content.length === 0 ? (
-          <div className="empty">
-            <h3>No content yet</h3>
-            {writable.length > 0
-              ? 'Create your first content item to start a production.'
-              : projects.length === 0
-                ? 'Create a project first, or ask a project owner to add you.'
-                : 'You can view the projects you belong to, but not create content in them.'}
-          </div>
-        ) : (
-          <ContentTable items={content.slice(0, 6)} label="Recently updated" showProject compact />
-        )}
-      </section>
     </>
   );
 }

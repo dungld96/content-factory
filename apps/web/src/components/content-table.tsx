@@ -1,9 +1,12 @@
+'use client';
+
 import Link from 'next/link';
 
 import type { ContentItemDto } from '@acf/contracts';
 
+import { useT } from '@/components/i18n-provider';
 import { Icon } from '@/components/icon';
-import { FORMAT_LABEL, platformLabel } from '@/lib/format';
+import { formatLabel, platformLabel } from '@/lib/format';
 
 import { RelativeTime } from './local-time';
 import { ContentStatusPill } from './status-pill';
@@ -20,19 +23,20 @@ export function ContentTable(props: {
   readonly showProject?: boolean;
   readonly compact?: boolean;
 }) {
+  const t = useT();
   return (
     <div className="table-wrap">
       <table className="table" aria-label={props.label}>
         <thead>
           <tr>
-            <th scope="col">Content</th>
-            {props.showProject && <th scope="col">Project</th>}
-            <th scope="col">Format</th>
-            {!props.compact && <th scope="col">Platform</th>}
-            <th scope="col">Status</th>
-            <th scope="col">Updated</th>
+            <th scope="col">{t('table.content')}</th>
+            {props.showProject && <th scope="col">{t('table.project')}</th>}
+            <th scope="col">{t('table.format')}</th>
+            {!props.compact && <th scope="col">{t('table.platform')}</th>}
+            <th scope="col">{t('table.status')}</th>
+            <th scope="col">{t('table.updated')}</th>
             <th scope="col">
-              <span className="sr-only">Open</span>
+              <span className="sr-only">{t('table.open')}</span>
             </th>
           </tr>
         </thead>
@@ -50,7 +54,7 @@ export function ContentTable(props: {
                     <Link href={`/content/${item.id}`}>{item.title}</Link>
                     <span className="subline">
                       {props.compact
-                        ? `${platformLabel(item.targetPlatform)} · ${item.language.toUpperCase()}`
+                        ? `${platformLabel(t, item.targetPlatform)} · ${item.language.toUpperCase()}`
                         : `${String(item.targetDurationSeconds)}s · ${item.language.toUpperCase()}`}
                     </span>
                   </span>
@@ -59,10 +63,10 @@ export function ContentTable(props: {
               {props.showProject && <td>{item.projectName}</td>}
               <td>
                 {props.compact
-                  ? `${item.aspectRatio} video`
-                  : `${FORMAT_LABEL[item.format]} · ${item.aspectRatio}`}
+                  ? t('table.video', { ratio: item.aspectRatio })
+                  : `${formatLabel(t, item.format)} · ${item.aspectRatio}`}
               </td>
-              {!props.compact && <td>{platformLabel(item.targetPlatform)}</td>}
+              {!props.compact && <td>{platformLabel(t, item.targetPlatform)}</td>}
               <td>
                 <ContentStatusPill status={item.status} />
               </td>

@@ -143,6 +143,8 @@ model User {
   status            UserStatus @default(active)
   passwordChangedAt DateTime   @default(now()) @map("password_changed_at") @db.Timestamptz(3)
   lastLoginAt       DateTime?  @map("last_login_at") @db.Timestamptz(3)
+  /// Interface language ('en' | 'vi'; CHECK in SQL). NULL follows the browser (redesign R-D6).
+  locale            String?    @db.VarChar(8)
   createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 

@@ -8,23 +8,44 @@ import { NewMasterButton } from '@/components/forms';
 import { RelativeTime } from '@/components/local-time';
 import { apiGet } from '@/lib/api-server';
 import { isFinished } from '@/lib/content-status';
+import { param, type SearchParams } from '@/lib/content-filters';
 import { initials } from '@/lib/format';
+import { getT } from '@/lib/i18n/server';
 import { writableProjects } from '@/lib/project-options';
 import { apiGetAll } from '@/lib/workspace';
 
-export const metadata: Metadata = { title: 'Content masters · Content Studio' };
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('masters.pageTitle') };
+}
 
 type MasterRow = ContentMasterDto & { readonly projectName: string };
 
-/** Every content master of every project; the most recently updated one is featured. */
-export default async function MastersPage() {
-  const projects = await apiGetAll<ProjectDto>('/projects');
+/**
+ * Every content master of every project (or of `?project=`, the project's Masters tab); the most
+ * recently updated one is featured.
+ */
+export default async function MastersPage(props: { readonly searchParams: Promise<SearchParams> }) {
+  const [query, all, t] = await Promise.all([
+    props.searchParams,
+    apiGetAll<ProjectDto>('/projects'),
+    getT(),
+  ]);
+  const only = param(query, 'project');
+  const projects =
+    all.kind === 'ok' && only
+      ? {
+          ...all,
+          data: { ...all.data, items: all.data.items.filter((p) => p.id === only) },
+        }
+      : all;
   if (projects.kind === 'unauthenticated') redirect('/login');
   if (projects.kind === 'error') {
     return (
       <section className="card notice error" role="alert">
-        The content masters could not be loaded. Reload the page to try again.
+        {t('masters.loadError')}
       </section>
     );
   }
@@ -50,42 +71,55 @@ export default async function MastersPage() {
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">Reusable source content</div>
-          <h1>Content masters</h1>
-          <p>One core idea. Multiple channel-ready content variants.</p>
+          <div className="eyebrow">
+            {only && projects.data.items[0]
+              ? t('masters.filtered', { name: projects.data.items[0].name })
+              : t('masters.eyebrow')}
+          </div>
+          <h1>{t('masters.title')}</h1>
+          <p>{t('masters.lead')}</p>
         </div>
         <div className="actions">
+          {only && (
+            <Link className="btn" href="/masters">
+              {t('masters.showAll')}
+            </Link>
+          )}
           <NewMasterButton projects={writableProjects(projects.data.items)} />
         </div>
       </div>
 
       {detail && (
-        <section className="card master-hero" aria-label="Featured master">
+        <section className="card master-hero" aria-label={t('masters.featured')}>
           <div className="master-cover" aria-hidden="true">
             {initials(detail.title)}
           </div>
           <div className="master-info">
-            <div className="eyebrow">Recently updated · {masters[0]?.projectName}</div>
+            <div className="eyebrow">
+              {t('masters.recent', { project: masters[0]?.projectName ?? '' })}
+            </div>
             <h2>
               <Link href={`/masters/${detail.id}`}>{detail.title}</Link>
             </h2>
             <p>
-              Shared brief
+              {t('masters.sharedBrief')}
               {detail.brief.audience ? ` · ${detail.brief.audience}` : ''}
               {detail.brief.tone ? ` · ${detail.brief.tone}` : ''}
             </p>
             <div className="tags">
               <span className="tag">
-                {detail.activeVariantCount} variant{detail.activeVariantCount === 1 ? '' : 's'}
+                {t('masters.variantCount', { count: detail.activeVariantCount })}
               </span>
               <span className="tag">
-                {detail.variants.filter((v) => isFinished(v.status)).length} approved
+                {t('masters.approvedCount', {
+                  count: detail.variants.filter((v) => isFinished(v.status)).length,
+                })}
               </span>
-              <span className="tag">Brief revision {detail.briefRevision}</span>
+              <span className="tag">{t('masters.revision', { revision: detail.briefRevision })}</span>
             </div>
           </div>
           <Link className="btn" href={`/masters/${detail.id}`}>
-            Open master →
+            {t('masters.open')}
           </Link>
         </section>
       )}
@@ -93,25 +127,25 @@ export default async function MastersPage() {
       <section className="card variant-table" aria-labelledby="all-masters">
         <div className="section-head" style={{ padding: '14px 0 0' }}>
           <div>
-            <h2 id="all-masters">All masters</h2>
-            <p>Each master holds a shared brief; its variants run independent productions.</p>
+            <h2 id="all-masters">{t('masters.all')}</h2>
+            <p>{t('masters.allHint')}</p>
           </div>
         </div>
         {masters.length === 0 ? (
           <div className="empty">
-            <h3>No content masters yet</h3>
-            Creating content also creates its master.
+            <h3>{t('masters.none')}</h3>
+            {t('masters.noneHint')}
           </div>
         ) : (
           <div className="table-wrap">
-            <table className="table" aria-label="Content masters">
+            <table className="table" aria-label={t('masters.title')}>
               <thead>
                 <tr>
-                  <th scope="col">Master</th>
-                  <th scope="col">Project</th>
-                  <th scope="col">Variants</th>
-                  <th scope="col">Brief</th>
-                  <th scope="col">Updated</th>
+                  <th scope="col">{t('masters.colMaster')}</th>
+                  <th scope="col">{t('table.project')}</th>
+                  <th scope="col">{t('masters.colVariants')}</th>
+                  <th scope="col">{t('masters.colBrief')}</th>
+                  <th scope="col">{t('table.updated')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -123,7 +157,7 @@ export default async function MastersPage() {
                     </td>
                     <td>{m.projectName}</td>
                     <td>{m.activeVariantCount}</td>
-                    <td>Revision {m.briefRevision}</td>
+                    <td>{t('masters.revisionShort', { revision: m.briefRevision })}</td>
                     <td>
                       <RelativeTime iso={m.updatedAt} />
                     </td>

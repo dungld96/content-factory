@@ -1,7 +1,8 @@
 import type { ContentItemDto } from '@acf/contracts';
 
 import { isStatusFilter, matchesStatusFilter, STATUS_FILTERS } from './content-status';
-import { PLATFORM_OPTIONS } from './format';
+import { platformOptions } from './format';
+import type { Translate } from './i18n';
 
 export type SearchParams = Readonly<Record<string, string | string[] | undefined>>;
 
@@ -49,16 +50,20 @@ export function filterContent<T extends ContentItemDto>(
   );
 }
 
-export const STATUS_SELECT = {
-  name: 'status',
-  label: 'Status',
-  allLabel: 'All statuses',
-  options: STATUS_FILTERS,
-} as const;
+export function statusSelect(t: Translate) {
+  return {
+    name: 'status',
+    label: t('filter.status'),
+    allLabel: t('filter.allStatuses'),
+    options: STATUS_FILTERS.map((f) => ({ value: f.value, label: t(f.label) })),
+  } as const;
+}
 
-export const PLATFORM_SELECT = {
-  name: 'platform',
-  label: 'Platform',
-  allLabel: 'All platforms',
-  options: [...PLATFORM_OPTIONS, { value: 'none', label: 'No platform' }],
-} as const;
+export function platformSelect(t: Translate) {
+  return {
+    name: 'platform',
+    label: t('filter.platform'),
+    allLabel: t('filter.allPlatforms'),
+    options: [...platformOptions(t), { value: 'none', label: t('platform.none') }],
+  } as const;
+}

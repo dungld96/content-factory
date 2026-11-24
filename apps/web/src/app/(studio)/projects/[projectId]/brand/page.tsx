@@ -4,12 +4,18 @@ import { notFound, redirect } from 'next/navigation';
 
 import type { Page, ProjectDto, VersionedEntityDto } from '@acf/contracts';
 
+import { ProjectTabs } from '@/components/project-tabs';
 import { apiGet } from '@/lib/api-server';
+import { getT } from '@/lib/i18n/server';
 
 import { BrandSection } from './brand-section';
 
-export const metadata: Metadata = { title: 'Characters & environments · Content Studio' };
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('brand.pageTitle') };
+}
 
 /**
  * Recurring characters and environments of a project (P2b design L3) with their versions; each
@@ -20,10 +26,11 @@ export default async function BrandPage(props: {
   readonly params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await props.params;
-  const [project, characters, environments] = await Promise.all([
+  const [project, characters, environments, t] = await Promise.all([
     apiGet<ProjectDto>(`/projects/${projectId}`),
     apiGet<Page<VersionedEntityDto>>(`/projects/${projectId}/characters?limit=100`),
     apiGet<Page<VersionedEntityDto>>(`/projects/${projectId}/environments?limit=100`),
+    getT(),
   ]);
   if (project.kind === 'unauthenticated') redirect('/login');
   if (project.kind !== 'ok') notFound();
@@ -33,16 +40,14 @@ export default async function BrandPage(props: {
       <div className="page-heading">
         <div>
           <div className="eyebrow">
-            <Link href={`/projects/${projectId}`}>{project.data.name}</Link> / Brand
+            <Link href="/projects">{t('nav.projects')}</Link> /{' '}
+            <Link href={`/projects/${projectId}`}>{project.data.name}</Link> / {t('brand.crumb')}
           </div>
-          <h1>Characters &amp; environments</h1>
-          <p>
-            Recurring people and places. Each version links reference images from the{' '}
-            <Link href={`/assets?project=${projectId}`}>Asset library</Link>; approved versions
-            never change, and storyboards keep the version they were made with.
-          </p>
+          <h1>{t('brand.title')}</h1>
+          <p>{t('brand.lead')}</p>
         </div>
       </div>
+      <ProjectTabs projectId={projectId} />
       <BrandSection
         kind="characters"
         projectId={projectId}

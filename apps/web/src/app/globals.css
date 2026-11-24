@@ -32,10 +32,15 @@
   --red-soft: #fdecee;
   --gray: #5f6b7d;
   --gray-soft: #f0f2f5;
+  /* Redesign Studio 2: information (queued, running) and review (waiting for a human). */
+  --info: #1d5fa8;
+  --info-soft: #e8f1fc;
+  --review: #6a3fb5;
+  --review-soft: #f3edfc;
   --placeholder: linear-gradient(145deg, #e8e4f7, #c9d2e0);
   --shadow: 0 8px 28px rgb(25 36 56 / 5.5%);
   --radius: 14px;
-  --font-body: var(--font-dm-sans), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: var(--font-be-vietnam), system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-display: var(--font-manrope), var(--font-body);
   color-scheme: light;
 }
@@ -67,6 +72,10 @@
     --red-soft: #3b1c22;
     --gray: #a3adbd;
     --gray-soft: #232c3a;
+    --info: #7cb6f2;
+    --info-soft: #14283f;
+    --review: #c5a6f5;
+    --review-soft: #2a1f42;
     --placeholder: linear-gradient(145deg, #2a2f45, #1f2a3a);
     --shadow: 0 8px 28px rgb(0 0 0 / 25%);
     color-scheme: dark;

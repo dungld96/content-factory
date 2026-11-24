@@ -3,15 +3,17 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useSyncExternalStore, type SyntheticEvent } from 'react';
 
+import { useT } from '@/components/i18n-provider';
 import { Icon } from '@/components/icon';
 
-import { sectionOf } from './sidebar-nav';
+import { sectionOf } from './nav-items';
 
 const noSubscription = (): (() => void) => () => undefined;
 
-/** Breadcrumb and content search (⌘K / Ctrl+K focuses it; Enter opens the content library). */
+/** Breadcrumb and content search (⌘K / Ctrl+K focuses it; Enter opens Productions). */
 export function Topbar() {
   const path = usePathname();
+  const t = useT();
   const params = useSearchParams();
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
@@ -39,17 +41,17 @@ export function Topbar() {
   function search(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
     event.preventDefault();
     const q = input.current?.value.trim() ?? '';
-    router.push(q ? `/content?q=${encodeURIComponent(q)}` : '/content');
+    router.push(q ? `/productions?q=${encodeURIComponent(q)}` : '/productions');
   }
 
   return (
     <header className="topbar">
       <div className="crumb">
-        <span className="crumb-root">Workspace</span>
+        <span className="crumb-root">{t('nav.workspace')}</span>
         <span className="crumb-sep" aria-hidden="true">
           /
         </span>
-        <b>{sectionOf(path)}</b>
+        <b>{t(sectionOf(path))}</b>
       </div>
       <div className="top-spacer" />
       <form className="search" role="search" onSubmit={search}>
@@ -57,12 +59,12 @@ export function Topbar() {
         <input
           ref={input}
           // Re-mount when the URL query changes so the field shows the active search.
-          key={path === '/content' ? (params.get('q') ?? '') : ''}
+          key={path === '/productions' ? (params.get('q') ?? '') : ''}
           name="q"
           type="search"
-          placeholder="Search content…"
-          aria-label="Search content"
-          defaultValue={path === '/content' ? (params.get('q') ?? '') : ''}
+          placeholder={t('search.placeholder')}
+          aria-label={t('search.label')}
+          defaultValue={path === '/productions' ? (params.get('q') ?? '') : ''}
         />
         <kbd aria-hidden="true">{shortcut}</kbd>
       </form>

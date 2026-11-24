@@ -4,9 +4,9 @@ import { notFound, redirect } from 'next/navigation';
 
 import type { BudgetDto, ContentItemDto, ContentMasterDto, ProjectDto } from '@acf/contracts';
 
-import { Icon } from '@/components/icon';
 import { ContentTable } from '@/components/content-table';
 import { NewContentButton } from '@/components/forms';
+import { ProjectTabs } from '@/components/project-tabs';
 import { QueryFilters } from '@/components/query-filters';
 import { RecentActivity, StageList } from '@/components/snapshot';
 import { apiGet } from '@/lib/api-server';
@@ -14,15 +14,20 @@ import { addUsd, formatUsd } from '@/lib/money';
 import {
   contentFilterFrom,
   filterContent,
-  PLATFORM_SELECT,
-  STATUS_SELECT,
+  platformSelect,
+  statusSelect,
   type SearchParams,
 } from '@/lib/content-filters';
+import { getT } from '@/lib/i18n/server';
 import { writableProjects } from '@/lib/project-options';
 import { apiGetAll } from '@/lib/workspace';
 
-export const metadata: Metadata = { title: 'Project · Content Studio' };
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('project.pageTitle') };
+}
 
 /** A project's content library (prototype "Content library", scoped to one project). */
 export default async function ProjectPage(props: {
@@ -30,18 +35,19 @@ export default async function ProjectPage(props: {
   readonly searchParams: Promise<SearchParams>;
 }) {
   const [{ projectId }, query] = await Promise.all([props.params, props.searchParams]);
-  const [project, content, masters, budget] = await Promise.all([
+  const [project, content, masters, budget, t] = await Promise.all([
     apiGet<ProjectDto>(`/projects/${projectId}`),
     apiGetAll<ContentItemDto>(`/projects/${projectId}/content`),
     apiGetAll<ContentMasterDto>(`/projects/${projectId}/content-masters`),
     apiGet<BudgetDto>(`/projects/${projectId}/budget`),
+    getT(),
   ]);
   if (project.kind === 'unauthenticated') redirect('/login');
   if (project.kind === 'error') {
     if (project.status === 404) notFound();
     return (
       <section className="card notice error" role="alert">
-        The project could not be loaded.
+        {t('project.loadError')}
       </section>
     );
   }
@@ -59,65 +65,57 @@ export default async function ProjectPage(props: {
       <div className="page-heading">
         <div>
           <div className="eyebrow">
-            <Link href="/projects">Projects</Link> / Production
+            <Link href="/projects">{t('nav.projects')}</Link>
           </div>
           <h1>{project.data.name}</h1>
-          <p>
-            {project.data.description ?? 'Every idea, version and production status in one place.'}
-          </p>
+          <p>{project.data.description ?? t('project.lead')}</p>
         </div>
         <div className="actions">
-          <Link className="btn" href={`/projects/${projectId}/costs`}>
-            <span aria-hidden="true">$</span> Costs
-          </Link>
-          <Link className="btn" href={`/projects/${projectId}/brand`}>
-            Characters &amp; environments
-          </Link>
-          <Link className="btn" href={`/assets?project=${projectId}`}>
-            <Icon name="assets" /> Assets
-          </Link>
           {writable.length > 0 && <NewContentButton projects={writable} projectId={projectId} />}
         </div>
       </div>
+      <ProjectTabs projectId={projectId} />
 
       {budget.kind === 'ok' && budget.data.warning && (
         <p className="notice" role="status">
-          Budget: {formatUsd(addUsdSafe(budget.data))} of {formatUsd(budget.data.monthly.limitUsd)}{' '}
-          used or reserved this month.{' '}
-          <Link href={`/projects/${projectId}/costs`}>Review costs</Link>
+          {t('project.budgetWarning', {
+            used: formatUsd(addUsdSafe(budget.data)),
+            limit: formatUsd(budget.data.monthly.limitUsd),
+          })}{' '}
+          <Link href={`/projects/${projectId}/costs`}>{t('project.reviewCosts')}</Link>
         </p>
       )}
 
       <QueryFilters
-        search={{ name: 'q', placeholder: 'Search content…' }}
-        selects={[STATUS_SELECT, PLATFORM_SELECT]}
-        count={`${String(shown.length)} of ${String(items.length)} items`}
+        search={{ name: 'q', placeholder: t('search.placeholder') }}
+        selects={[statusSelect(t), platformSelect(t)]}
+        count={t('productions.count', { shown: shown.length, total: items.length })}
       />
 
       <div className="content-layout">
         <section className="card content-table">
           {content.kind !== 'ok' ? (
             <p className="notice error" role="alert">
-              The content items could not be loaded.
+              {t('project.contentError')}
             </p>
           ) : shown.length === 0 ? (
             <div className="empty">
-              <h2>{filtered ? 'No matching content' : 'No content items yet'}</h2>
-              {filtered ? 'Try another search or filter.' : 'Create content to start a production.'}
+              <h2>{filtered ? t('productions.noMatch') : t('productions.empty')}</h2>
+              {filtered ? t('productions.noMatchHint') : t('productions.emptyHint')}
             </div>
           ) : (
-            <ContentTable items={shown} label="Content items" />
+            <ContentTable items={shown} label={t('productions.tableLabel')} />
           )}
         </section>
         <aside className="card side-card">
-          <h3>Production snapshot</h3>
+          <h3>{t('productions.snapshot')}</h3>
           <StageList items={items} stages={['draft', 'script', 'storyboard', 'images', 'done']} />
           <hr />
-          <h3>Content masters</h3>
+          <h3>{t('project.mastersLabel')}</h3>
           {masters.kind !== 'ok' || masters.data.items.length === 0 ? (
-            <p className="muted small-text">No content masters yet.</p>
+            <p className="muted small-text">{t('project.noMasters')}</p>
           ) : (
-            <ul className="activity" aria-label="Content masters">
+            <ul className="activity" aria-label={t('project.mastersLabel')}>
               {masters.data.items.slice(0, 6).map((m) => (
                 <li key={m.id} className="activity-item">
                   <i className="activity-dot" aria-hidden="true" />
@@ -126,15 +124,17 @@ export default async function ProjectPage(props: {
                       <b>{m.title}</b>
                     </Link>
                     <br />
-                    {m.activeVariantCount} variant{m.activeVariantCount === 1 ? '' : 's'} · brief r
-                    {m.briefRevision}
+                    {t('project.variants', {
+                      count: m.activeVariantCount,
+                      revision: m.briefRevision,
+                    })}
                   </p>
                 </li>
               ))}
             </ul>
           )}
           <hr />
-          <h3>Recent activity</h3>
+          <h3>{t('productions.recent')}</h3>
           <RecentActivity items={items} limit={4} />
         </aside>
       </div>

@@ -8,7 +8,9 @@ import {
   ApiErrorCode,
   type LoginRequest,
   type LoginResponse,
+  type Locale,
   type MeResponse,
+  type PreferencesRequest,
 } from '@acf/contracts';
 
 import { ApiError } from '../common/api-error.js';
@@ -31,6 +33,9 @@ const invalidCredentials = () =>
     code: ApiErrorCode.InvalidCredentials,
     message: 'The email or password is incorrect.',
   });
+
+const toLocale = (value: string | null): Locale | null =>
+  value === 'en' || value === 'vi' ? value : null;
 
 @Injectable()
 export class AuthService {
@@ -100,13 +105,20 @@ export class AuthService {
   }
 
   async me(actor: Actor): Promise<MeResponse> {
-    const memberships = await this.prisma.client.projectMember.findMany({
-      where: { userId: actor.userId, project: { archivedAt: null } },
-      select: { role: true, project: { select: { id: true, slug: true, name: true } } },
-      orderBy: { project: { name: 'asc' } },
-    });
+    const [memberships, prefs] = await Promise.all([
+      this.prisma.client.projectMember.findMany({
+        where: { userId: actor.userId, project: { archivedAt: null } },
+        select: { role: true, project: { select: { id: true, slug: true, name: true } } },
+        orderBy: { project: { name: 'asc' } },
+      }),
+      this.prisma.client.user.findUnique({
+        where: { id: actor.userId },
+        select: { locale: true },
+      }),
+    ]);
     return {
       user: actor.user,
+      locale: toLocale(prefs?.locale ?? null),
       isOperator: isOperator(this.env, actor),
       memberships: memberships.map((m) => ({
         projectId: m.project.id,
@@ -115,6 +127,15 @@ export class AuthService {
         role: m.role,
       })),
     };
+  }
+
+  /** Saves the signed-in user's own preferences (redesign R-D6); returns the updated profile. */
+  async updatePreferences(actor: Actor, body: PreferencesRequest): Promise<MeResponse> {
+    await this.prisma.client.user.update({
+      where: { id: actor.userId },
+      data: { locale: body.locale },
+    });
+    return this.me(actor);
   }
 
   csrfToken(req: Request, res: Response): { csrfToken: string } {

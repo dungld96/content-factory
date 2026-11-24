@@ -10,22 +10,17 @@ import { Pill } from '@/components/status-pill';
 import { isInProduction } from '@/lib/content-status';
 import { param, type SearchParams } from '@/lib/content-filters';
 import { initials, paletteIndex } from '@/lib/format';
+import { getT } from '@/lib/i18n/server';
 import { apiGetAll } from '@/lib/workspace';
 
-export const metadata: Metadata = { title: 'Projects · Content Studio' };
 export const dynamic = 'force-dynamic';
 
-const ROLE_LABEL = { owner: 'Owner', editor: 'Editor', viewer: 'Viewer' } as const;
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('projects.pageTitle') };
+}
 
-const VISIBILITY = {
-  name: 'show',
-  label: 'Visibility',
-  allLabel: 'Active projects',
-  options: [
-    { value: 'archived', label: 'Archived' },
-    { value: 'all', label: 'All projects' },
-  ],
-} as const;
+const ROLE_LABEL = { owner: 'role.owner', editor: 'role.editor', viewer: 'role.viewer' } as const;
 
 interface ProjectMetrics {
   readonly content: number;
@@ -49,7 +44,7 @@ async function metricsOf(project: ProjectDto): Promise<ProjectMetrics | null> {
 export default async function ProjectsPage(props: {
   readonly searchParams: Promise<SearchParams>;
 }) {
-  const params = await props.searchParams;
+  const [params, t] = await Promise.all([props.searchParams, getT()]);
   const show = param(params, 'show');
   const q = param(params, 'q')?.toLocaleLowerCase();
   const projects = await apiGetAll<ProjectDto>(
@@ -73,9 +68,9 @@ export default async function ProjectsPage(props: {
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">Workspace</div>
-          <h1>Projects</h1>
-          <p>Organize content production by brand, channel, or campaign.</p>
+          <div className="eyebrow">{t('projects.eyebrow')}</div>
+          <h1>{t('projects.title')}</h1>
+          <p>{t('projects.lead')}</p>
         </div>
         <div className="actions">
           <NewProjectButton />
@@ -83,28 +78,34 @@ export default async function ProjectsPage(props: {
       </div>
 
       <QueryFilters
-        search={{ name: 'q', placeholder: 'Search projects…' }}
-        selects={[VISIBILITY]}
-        count={`${String(visible.length)} project${visible.length === 1 ? '' : 's'}`}
+        search={{ name: 'q', placeholder: t('projects.search') }}
+        selects={[
+          {
+            name: 'show',
+            label: t('projects.visibility'),
+            allLabel: t('projects.active'),
+            options: [
+              { value: 'archived', label: t('projects.archived') },
+              { value: 'all', label: t('projects.all') },
+            ],
+          },
+        ]}
+        count={t('projects.count', { count: visible.length })}
       />
 
       {projects.kind === 'error' ? (
         <section className="card notice error" role="alert">
-          The projects could not be loaded
-          {projects.status ? ` (HTTP ${String(projects.status)})` : ''}. Reload the page to try
-          again.
+          {t('projects.loadError', {
+            status: projects.status ? ` (HTTP ${String(projects.status)})` : '',
+          })}
         </section>
       ) : visible.length === 0 ? (
         <section className="card empty" aria-labelledby="no-projects">
-          <h2 id="no-projects">{q || show ? 'No matching projects' : 'No projects yet'}</h2>
-          <p>
-            {q || show
-              ? 'Try another search or filter.'
-              : 'Create a project, or ask a project owner to add you.'}
-          </p>
+          <h2 id="no-projects">{q || show ? t('projects.noMatch') : t('projects.none')}</h2>
+          <p>{q || show ? t('productions.noMatchHint') : t('projects.noneHint')}</p>
         </section>
       ) : (
-        <ul className="project-grid" aria-label="Your projects">
+        <ul className="project-grid" aria-label={t('projects.listLabel')}>
           {visible.map((project, i) => {
             const m = metrics[i];
             return (
@@ -118,11 +119,11 @@ export default async function ProjectsPage(props: {
                       {initials(project.name)}
                     </span>
                     <span className="actions">
-                      <span className="tag">{ROLE_LABEL[project.role]}</span>
+                      <span className="tag">{t(ROLE_LABEL[project.role])}</span>
                       {project.archivedAt ? (
-                        <Pill tone="gray">Archived</Pill>
+                        <Pill tone="gray">{t('projects.archived')}</Pill>
                       ) : (
-                        <Pill tone="green">Active</Pill>
+                        <Pill tone="green">{t('projects.activeBadge')}</Pill>
                       )}
                     </span>
                   </div>
@@ -135,19 +136,19 @@ export default async function ProjectsPage(props: {
                       <>
                         <div>
                           <b>{m.content}</b>
-                          <span>Content items</span>
+                          <span>{t('projects.contentItems')}</span>
                         </div>
                         <div>
                           <b>{m.inProduction}</b>
-                          <span>In production</span>
+                          <span>{t('projects.inProduction')}</span>
                         </div>
                         <div>
                           <b>{m.channels}</b>
-                          <span>Channel{m.channels === 1 ? '' : 's'}</span>
+                          <span>{t('projects.channels', { count: m.channels })}</span>
                         </div>
                       </>
                     ) : (
-                      <span>Metrics unavailable</span>
+                      <span>{t('projects.metricsUnavailable')}</span>
                     )}
                   </div>
                 </article>

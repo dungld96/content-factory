@@ -1,23 +1,27 @@
 import type { ContentItemDto } from '@acf/contracts';
 
+import type { Locale, Translate } from './i18n';
 import { jobError } from './job-errors';
 
 type Platform = NonNullable<ContentItemDto['targetPlatform']>;
 
-export const PLATFORM_OPTIONS: readonly { readonly value: Platform; readonly label: string }[] = [
-  { value: 'tiktok', label: 'TikTok' },
-  { value: 'instagram_reels', label: 'Instagram Reels' },
-  { value: 'youtube_shorts', label: 'YouTube Shorts' },
-  { value: 'other', label: 'Other' },
-];
-
-export function platformLabel(platform: Platform | null): string {
-  return PLATFORM_OPTIONS.find((p) => p.value === platform)?.label ?? 'No platform';
+/** Platform names (brand names stay as they are; "Other" is translated). */
+export function platformOptions(t: Translate): { readonly value: Platform; readonly label: string }[] {
+  return [
+    { value: 'tiktok', label: 'TikTok' },
+    { value: 'instagram_reels', label: 'Instagram Reels' },
+    { value: 'youtube_shorts', label: 'YouTube Shorts' },
+    { value: 'other', label: t('platform.other') },
+  ];
 }
 
-export const FORMAT_LABEL: Readonly<Record<ContentItemDto['format'], string>> = {
-  short_video: 'Short video',
-};
+export function platformLabel(t: Translate, platform: Platform | null): string {
+  return platformOptions(t).find((p) => p.value === platform)?.label ?? t('platform.none');
+}
+
+export function formatLabel(t: Translate, format: ContentItemDto['format']): string {
+  return format === 'short_video' ? t('format.short_video') : format;
+}
 
 /** "30s · 9:16 · VI" (prototype specification column). */
 export function specLabel(item: {
@@ -60,19 +64,25 @@ export function formatSeconds(ms: number): string {
 }
 
 /** Readable text for a job error code (P3 W3: the catalogue in `job-errors.ts`). */
-export function jobErrorText(code: string): string {
-  return jobError(code).text;
+export function jobErrorText(code: string, locale: Locale = 'en'): string {
+  return jobError(code, locale).text;
 }
 
-/** Stage names of generation job kinds (Operations, Activity). */
-export const JOB_KIND_LABEL: Readonly<Record<string, string>> = {
-  script_generation: 'Script',
-  storyboard_generation: 'Storyboard',
-  image_generation: 'Images',
-  video_generation: 'Clip',
-  tts_generation: 'Voice-over',
-  render: 'Render',
-};
+const JOB_KINDS = [
+  'script_generation',
+  'storyboard_generation',
+  'image_generation',
+  'video_generation',
+  'tts_generation',
+  'render',
+] as const;
+
+/** Stage name of a generation job kind (Operations, Activity), in the interface language. */
+export function jobKindLabel(t: Translate, kind: string): string {
+  return (JOB_KINDS as readonly string[]).includes(kind)
+    ? t(`jobKind.${kind as (typeof JOB_KINDS)[number]}`)
+    : kind;
+}
 
 /**
  * Identical lines once each, in first-seen order, with how often they occurred: a model can list

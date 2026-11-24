@@ -10,6 +10,7 @@ import { ApprovalPill } from '@/components/status-pill';
 import { fetchJson, mutate, uploadImage } from '@/lib/api-client';
 import { assetContentUrl } from '@/lib/asset-url';
 import { mediaTypeLabel } from '@/lib/media-labels';
+import { useLocale, useT } from '@/components/i18n-provider';
 
 const PAGE = 48;
 
@@ -36,6 +37,8 @@ export function AssetPicker(props: {
   readonly onClose: () => void;
   readonly onDone: (assetIds: string[]) => void;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [q, setQ] = useState('');
   const [collectionId, setCollectionId] = useState('');
   const [collections, setCollections] = useState<CollectionListDto['data']>([]);
@@ -106,13 +109,13 @@ export function AssetPicker(props: {
         label: f.name.replace(/\.[a-z0-9]+$/i, ''),
       });
       if (!r.ok || !r.data) {
-        setError(`${f.name}: ${r.message ?? 'the upload failed'}`);
+        setError(t('picker.failed', { name: f.name, message: r.message ?? t('picker.uploadFailed') }));
         continue;
       }
       added.push(r.data.id);
       if (collectionId) {
         const link = await mutate('PUT', `/collections/${collectionId}/assets/${r.data.id}`);
-        if (!link.ok) setError(`${f.name} was added to the Library but not to the collection.`);
+        if (!link.ok) setError(t('picker.notInCollection', { name: f.name }));
       }
     }
     setUploading(false);
@@ -130,18 +133,18 @@ export function AssetPicker(props: {
       open={props.open}
       onClose={props.onClose}
       title={props.title}
-      description="Choose from the Asset library, or add new reference images to it."
+      description={t('picker.desc')}
     >
       <div className="picker-toolbar">
         <label className="field">
-          Collection
+          {t('picker.collection')}
           <select
             value={collectionId}
             onChange={(e) => {
               setCollectionId(e.target.value);
             }}
           >
-            <option value="">All assets</option>
+            <option value="">{t('picker.allAssets')}</option>
             {collections.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name} ({c.itemCount})
@@ -150,7 +153,7 @@ export function AssetPicker(props: {
           </select>
         </label>
         <label className="field">
-          Search
+          {t('picker.search')}
           <input
             type="search"
             value={q}
@@ -162,7 +165,8 @@ export function AssetPicker(props: {
         </label>
         {props.multiple && collectionId && (
           <button type="button" className="btn small" onClick={chooseAll}>
-            <Icon name="check" /> Choose all in {collectionName ?? 'collection'}
+            <Icon name="check" />{' '}
+            {t('picker.chooseAll', { name: collectionName ?? t('picker.theCollection') })}
           </button>
         )}
         {canUpload && (
@@ -173,7 +177,7 @@ export function AssetPicker(props: {
               accept="image/png,image/jpeg,image/webp"
               multiple={props.multiple}
               hidden
-              aria-label="Image files to add"
+              aria-label={t('picker.filesLabel')}
               onChange={(e) => void upload(e.target.files)}
             />
             <button
@@ -184,10 +188,10 @@ export function AssetPicker(props: {
             >
               <Icon name="upload" />{' '}
               {uploading
-                ? 'Uploading…'
+                ? t('upload.uploading')
                 : collectionName
-                  ? `Add to Library · ${collectionName}`
-                  : 'Add to Library'}
+                  ? t('picker.addToCollection', { name: collectionName })
+                  : t('picker.addToLibrary')}
             </button>
           </>
         )}
@@ -199,16 +203,16 @@ export function AssetPicker(props: {
       )}
       {assets === null ? (
         <p className="muted small-text" aria-busy="true">
-          Loading…
+          {t('common.loading')}
         </p>
       ) : assets.length === 0 ? (
         <p className="muted small-text">
           {collectionId
-            ? 'This collection has no matching assets.'
-            : 'No matching assets in this project.'}
+            ? t('picker.emptyCollection')
+            : t('picker.emptyProject')}
         </p>
       ) : (
-        <ul className="asset-grid" aria-label="Library assets">
+        <ul className="asset-grid" aria-label={t('picker.gridLabel')}>
           {assets.map((a) => (
             <li key={a.id}>
               <button
@@ -225,7 +229,7 @@ export function AssetPicker(props: {
                     // eslint-disable-next-line @next/next/no-img-element -- authenticated API stream
                     <img src={assetContentUrl(a.id)} alt={assetName(a)} loading="lazy" />
                   ) : (
-                    <span>{mediaTypeLabel(a.mimeType)}</span>
+                    <span>{mediaTypeLabel(a.mimeType, locale)}</span>
                   )}
                 </span>
                 <span className="asset-meta">
@@ -239,7 +243,7 @@ export function AssetPicker(props: {
       )}
       <div className="form-actions">
         <button type="button" className="btn" onClick={props.onClose}>
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           type="button"
@@ -248,7 +252,7 @@ export function AssetPicker(props: {
             props.onDone(chosen);
           }}
         >
-          Use {chosen.length === 0 ? 'none' : `${String(chosen.length)} asset(s)`}
+          {chosen.length === 0 ? t('picker.useNone') : t('picker.use', { count: chosen.length })}
         </button>
       </div>
     </Modal>

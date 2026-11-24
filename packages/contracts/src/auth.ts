@@ -40,16 +40,28 @@ export const membershipSchema = z
   .meta({ id: 'Membership' });
 export type Membership = z.infer<typeof membershipSchema>;
 
+/** Interface languages (redesign R-D6). */
+export const localeSchema = z.enum(['en', 'vi']).meta({ id: 'Locale' });
+export type Locale = z.infer<typeof localeSchema>;
+
 /** `GET /auth/me`. */
 export const meResponseSchema = z
   .object({
     user: authUserSchema,
+    /** The interface language the user chose; `null` follows the browser. */
+    locale: localeSchema.nullable(),
     /** A platform operator (P1 design O1): may change AI providers, models and routes. */
     isOperator: z.boolean(),
     memberships: z.array(membershipSchema),
   })
   .meta({ id: 'MeResponse' });
 export type MeResponse = z.infer<typeof meResponseSchema>;
+
+/** `PATCH /auth/me/preferences`: the signed-in user's own interface preferences. */
+export const preferencesRequestSchema = z
+  .strictObject({ locale: localeSchema.nullable() })
+  .meta({ id: 'PreferencesRequest' });
+export type PreferencesRequest = z.infer<typeof preferencesRequestSchema>;
 
 /** `GET /auth/csrf`. */
 export const csrfResponseSchema = z.object({ csrfToken: z.string() }).meta({ id: 'CsrfResponse' });

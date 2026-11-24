@@ -12,15 +12,17 @@ import type {
   AiTask,
 } from '@acf/contracts';
 
+import { useT } from '@/components/i18n-provider';
 import { LocalTime } from '@/components/local-time';
-
-import { AddPriceButton } from './model-admin';
 import { Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { actionLabel, changeSummary, keyStatus, routeReadiness } from '@/lib/ai-settings-view';
 import { errorText, mutate } from '@/lib/api-client';
 import type { Tone } from '@/lib/content-status';
+import type { MessageKey, Translate } from '@/lib/i18n';
 import { compactCount, priceLine, primaryPrices, sortPrices } from '@/lib/price-format';
+
+import { AddPriceButton } from './model-admin';
 
 /**
  * AI settings (P1 design O7), split into focused panels: providers, task routes, the model
@@ -28,67 +30,29 @@ import { compactCount, priceLine, primaryPrices, sortPrices } from '@/lib/price-
  * routes and test credentials. Keys are never entered or shown here.
  */
 
-const TASKS: Readonly<
-  Record<AiTask, { readonly label: string; readonly hint: string; readonly capability: Capability }>
-> = {
-  script_generation: {
-    label: 'Scripts',
-    hint: 'Writes the script from the brief',
-    capability: 'llm',
-  },
-  storyboard_generation: {
-    label: 'Storyboards',
-    hint: 'Splits the script into scenes',
-    capability: 'llm',
-  },
-  image_generation: {
-    label: 'Keyframes',
-    hint: 'One image per scene',
-    capability: 'image_generation',
-  },
-  video_generation: {
-    label: 'Clips',
-    hint: 'Animates each keyframe',
-    capability: 'video_generation',
-  },
-  tts_generation: {
-    label: 'Voice-overs',
-    hint: 'Default; voice profiles choose their own',
-    capability: 'tts',
-  },
-};
-
 type Capability = AiModelDto['capabilities'][number];
 
-const CAPABILITIES: readonly { readonly id: Capability; readonly label: string }[] = [
-  { id: 'llm', label: 'Text' },
-  { id: 'image_generation', label: 'Images' },
-  { id: 'video_generation', label: 'Video' },
-  { id: 'tts', label: 'Speech' },
-];
+const TASK_CAPABILITY: Readonly<Record<AiTask, Capability>> = {
+  script_generation: 'llm',
+  storyboard_generation: 'llm',
+  image_generation: 'image_generation',
+  video_generation: 'video_generation',
+  tts_generation: 'tts',
+};
+
+const CAPABILITIES: readonly Capability[] = ['llm', 'image_generation', 'video_generation', 'tts'];
 
 const STATUS_TONE: Readonly<Record<AiProviderDto['status'], Tone>> = {
   enabled: 'green',
   disabled: 'gray',
   degraded: 'amber',
 };
-const STATUS_LABEL: Readonly<Record<AiProviderDto['status'], string>> = {
-  enabled: 'Enabled',
-  disabled: 'Disabled',
-  degraded: 'Degraded',
-};
-const KIND_LABEL: Readonly<Record<AiProviderDto['kind'], string>> = {
-  gateway: 'Gateway',
-  direct: 'Direct',
-  mock: 'Test provider',
-};
-const CHECK: Readonly<
-  Record<AiProviderKeyCheckDto['result'], { readonly text: string; readonly tone: Tone }>
-> = {
-  valid: { text: 'Key accepted', tone: 'green' },
-  rejected: { text: 'Key rejected — replace it in the server environment', tone: 'red' },
-  unreachable: { text: 'Provider unreachable — try again later', tone: 'amber' },
-  not_configured: { text: 'No key configured in this deployment', tone: 'gray' },
+const STATUS_LABEL = (s: AiProviderDto['status']): MessageKey => `ai.status.${s}`;
+const CHECK_TONE: Readonly<Record<AiProviderKeyCheckDto['result'], Tone>> = {
+  valid: 'green',
+  rejected: 'red',
+  unreachable: 'amber',
+  not_configured: 'gray',
 };
 
 /** One request at a time per panel; errors shown inline; success refreshes the server data. */
@@ -132,20 +96,18 @@ export function ProvidersPanel(props: {
   readonly providers: readonly AiProviderDto[];
   readonly isOperator: boolean;
 }) {
+  const t = useT();
   const { busy, error, run } = useAction();
   const [checks, setChecks] = useState<Record<string, AiProviderKeyCheckDto>>({});
   return (
     <section className="card card-pad" aria-labelledby="ai-providers">
       <div className="section-head">
         <div>
-          <h3 id="ai-providers">Providers</h3>
-          <p>
-            API keys live in the server environment, never in the browser. To change a key, an
-            operator edits the environment file and restarts the API and worker.
-          </p>
+          <h3 id="ai-providers">{t('ai.providers')}</h3>
+          <p>{t('ai.providersHint')}</p>
         </div>
       </div>
-      <ul className="provider-grid" aria-label="Providers">
+      <ul className="provider-grid" aria-label={t('ai.providers')}>
         {props.providers.map((p) => {
           const key = keyStatus(p);
           const check = checks[p.key];
@@ -156,30 +118,30 @@ export function ProvidersPanel(props: {
                   <b>{p.name}</b>
                   <code>{p.key}</code>
                 </div>
-                <span className="tag">{KIND_LABEL[p.kind]}</span>
+                <span className="tag">{t(`ai.kind.${p.kind}`)}</span>
               </div>
               <dl className="provider-facts">
-                <dt>Status</dt>
+                <dt>{t('ai.dt.status')}</dt>
                 <dd>
-                  <Pill tone={STATUS_TONE[p.status]}>{STATUS_LABEL[p.status]}</Pill>
+                  <Pill tone={STATUS_TONE[p.status]}>{t(STATUS_LABEL(p.status))}</Pill>
                 </dd>
-                <dt>Credentials</dt>
+                <dt>{t('ai.dt.credentials')}</dt>
                 <dd>
-                  <Pill tone={key.ok ? 'green' : 'gray'}>{key.label}</Pill>
+                  <Pill tone={key.ok ? 'green' : 'gray'}>{t(key.label)}</Pill>
                 </dd>
                 {(p.termsUrl ?? p.dataPolicyUrl) && (
                   <>
-                    <dt>Terms</dt>
+                    <dt>{t('ai.dt.terms')}</dt>
                     <dd className="small-text">
                       {p.termsUrl && (
                         <a href={p.termsUrl} target="_blank" rel="noreferrer">
-                          Terms
+                          {t('ai.terms')}
                         </a>
                       )}
                       {p.termsUrl && p.dataPolicyUrl && ' · '}
                       {p.dataPolicyUrl && (
                         <a href={p.dataPolicyUrl} target="_blank" rel="noreferrer">
-                          Data policy
+                          {t('ai.dataPolicy')}
                         </a>
                       )}
                     </dd>
@@ -188,14 +150,14 @@ export function ProvidersPanel(props: {
               </dl>
               {check && (
                 <div className="provider-check" role="status">
-                  <Pill tone={CHECK[check.result].tone}>{CHECK[check.result].text}</Pill>
+                  <Pill tone={CHECK_TONE[check.result]}>{t(`ai.check.${check.result}`)}</Pill>
                   <span className="muted small-text">
                     {check.limitRemaining !== null
-                      ? `Remaining limit ${String(check.limitRemaining)} · `
+                      ? `${t('ai.remaining', { value: check.limitRemaining })} `
                       : ''}
-                    {check.usage !== null ? `Usage ${String(check.usage)} · ` : ''}
-                    {check.isFreeTier === true ? 'Free tier · ' : ''}
-                    checked <LocalTime iso={check.checkedAt} />
+                    {check.usage !== null ? `${t('ai.usage', { value: check.usage })} ` : ''}
+                    {check.isFreeTier === true ? `${t('ai.freeTier')} ` : ''}
+                    {t('ai.checked')} <LocalTime iso={check.checkedAt} />
                   </span>
                 </div>
               )}
@@ -217,7 +179,7 @@ export function ProvidersPanel(props: {
                         })
                       }
                     >
-                      {busy === `test-${p.key}` ? 'Testing…' : 'Test connection'}
+                      {busy === `test-${p.key}` ? t('ai.testing') : t('ai.test')}
                     </button>
                   )}
                   <button
@@ -230,11 +192,14 @@ export function ProvidersPanel(props: {
                         'PATCH',
                         `/ai/providers/${p.key}`,
                         { status: p.status === 'enabled' ? 'disabled' : 'enabled' },
-                        `${p.name} ${p.status === 'enabled' ? 'disabled' : 'enabled'}.`,
+                        t('ai.providerToggled', {
+                          name: p.name,
+                          state: t(p.status === 'enabled' ? 'ai.status.disabled' : 'ai.status.enabled'),
+                        }),
                       )
                     }
                   >
-                    {p.status === 'enabled' ? 'Disable' : 'Enable'}
+                    {p.status === 'enabled' ? t('ai.disable') : t('ai.enable')}
                   </button>
                 </div>
               )}
@@ -256,45 +221,44 @@ export function RoutesPanel(props: {
   readonly models: readonly AiModelDto[];
   readonly isOperator: boolean;
 }) {
+  const t = useT();
   const { busy, error, run } = useAction();
   return (
     <section className="card card-pad" aria-labelledby="ai-routes">
       <div className="section-head">
         <div>
-          <h3 id="ai-routes">Task routes</h3>
-          <p>
-            The model each production step uses by default. A change applies to new requests; queued
-            jobs keep their model.
-          </p>
+          <h3 id="ai-routes">{t('ai.routes')}</h3>
+          <p>{t('ai.routesHint')}</p>
         </div>
       </div>
       <div className="table-wrap">
-        <table className="table routes-table stack-mobile" aria-label="Task routes">
+        <table className="table routes-table stack-mobile" aria-label={t('ai.routes')}>
           <thead>
             <tr>
-              <th scope="col">Step</th>
-              <th scope="col">Model</th>
-              <th scope="col">Provider</th>
-              <th scope="col">Status</th>
+              <th scope="col">{t('ai.colStep')}</th>
+              <th scope="col">{t('ai.colModel')}</th>
+              <th scope="col">{t('ai.colProvider')}</th>
+              <th scope="col">{t('ai.colStatus')}</th>
             </tr>
           </thead>
           <tbody>
             {props.routes.map((r) => {
-              const task = TASKS[r.task];
+              const capability = TASK_CAPABILITY[r.task];
+              const label = t(`ai.task.${r.task}`);
               const readiness = routeReadiness(r, props.providers);
-              const eligible = props.models.filter((m) => m.capabilities.includes(task.capability));
+              const eligible = props.models.filter((m) => m.capabilities.includes(capability));
               const provider = props.providers.find((p) => p.key === r.provider?.key);
               return (
                 <tr key={r.task}>
                   <td>
-                    <div className="cell-title">{task.label}</div>
-                    <div className="cell-sub">{task.hint}</div>
+                    <div className="cell-title">{label}</div>
+                    <div className="cell-sub">{t(`ai.task.${r.task}.hint`)}</div>
                   </td>
-                  <td data-label="Model">
+                  <td data-label={t('ai.colModel')}>
                     {props.isOperator ? (
                       <select
                         className="compact-select"
-                        aria-label={`Model for ${task.label}`}
+                        aria-label={t('ai.modelFor', { task: label })}
                         value={r.model?.modelKey ?? ''}
                         disabled={busy !== null}
                         onChange={(e) => {
@@ -304,15 +268,15 @@ export function RoutesPanel(props: {
                               'PUT',
                               `/ai/routes/${r.task}`,
                               { modelKey: e.target.value },
-                              `${task.label} now use ${e.target.value}.`,
+                              t('ai.routed', { task: label, model: e.target.value }),
                             );
                           }
                         }}
                       >
-                        {!r.model && <option value="">Choose a model…</option>}
+                        {!r.model && <option value="">{t('ai.chooseModel')}</option>}
                         {r.model && !eligible.some((m) => m.modelKey === r.model?.modelKey) && (
                           <option value={r.model.modelKey}>
-                            {r.model.displayName} (current, cannot run)
+                            {t('ai.currentCannotRun', { name: r.model.displayName })}
                           </option>
                         )}
                         {eligible.map((m) => (
@@ -327,20 +291,20 @@ export function RoutesPanel(props: {
                         <div className="cell-sub mono">{r.model.modelKey}</div>
                       </>
                     ) : (
-                      <span className="muted">Not routed</span>
+                      <span className="muted">{t('ai.notRouted')}</span>
                     )}
                     {props.isOperator && eligible.length === 0 && (
-                      <div className="cell-sub">No usable model with this capability yet.</div>
+                      <div className="cell-sub">{t('ai.noEligible')}</div>
                     )}
                   </td>
-                  <td data-label="Provider">
+                  <td data-label={t('ai.colProvider')}>
                     {provider ? provider.name : <span className="muted">—</span>}
                   </td>
-                  <td data-label="Status">
+                  <td data-label={t('ai.colStatus')}>
                     {readiness.ready ? (
-                      <Pill tone="green">Ready</Pill>
+                      <Pill tone="green">{t('ai.ready')}</Pill>
                     ) : (
-                      <Pill tone="amber">{readiness.reason}</Pill>
+                      <Pill tone="amber">{t(readiness.reason)}</Pill>
                     )}
                   </td>
                 </tr>
@@ -356,11 +320,12 @@ export function RoutesPanel(props: {
 
 // ---------------------------------------------------------------------------------- models
 
-function limits(m: AiModelDto): string {
+function limits(t: Translate, m: AiModelDto): string {
   const parts: string[] = [];
-  if (m.contextLength) parts.push(`${compactCount(m.contextLength)} context`);
-  if (m.maxOutputTokens) parts.push(`${compactCount(m.maxOutputTokens)} output`);
-  if (m.voices) parts.push(`${String(m.voices.length)} voices`);
+  if (m.contextLength) parts.push(t('ai.limit.context', { value: compactCount(m.contextLength) }));
+  if (m.maxOutputTokens)
+    parts.push(t('ai.limit.output', { value: compactCount(m.maxOutputTokens) }));
+  if (m.voices) parts.push(t('ai.limit.voices', { count: m.voices.length }));
   return parts.join(' · ') || '—';
 }
 
@@ -369,6 +334,7 @@ export function ModelsPanel(props: {
   readonly providers: readonly AiProviderDto[];
   readonly isOperator: boolean;
 }) {
+  const t = useT();
   const { busy, error, run } = useAction();
   const [capability, setCapability] = useState<Capability>('llm');
   const [status, setStatus] = useState<'all' | 'enabled' | 'disabled'>('all');
@@ -376,10 +342,7 @@ export function ModelsPanel(props: {
   const counts = useMemo(
     () =>
       Object.fromEntries(
-        CAPABILITIES.map((c) => [
-          c.id,
-          props.models.filter((m) => m.capabilities.includes(c.id)).length,
-        ]),
+        CAPABILITIES.map((c) => [c, props.models.filter((m) => m.capabilities.includes(c)).length]),
       ),
     [props.models],
   );
@@ -399,26 +362,23 @@ export function ModelsPanel(props: {
     <section className="card card-pad" aria-labelledby="ai-models">
       <div className="section-head">
         <div>
-          <h3 id="ai-models">Model catalogue</h3>
-          <p>
-            Prices are the provider’s published prices in USD. New models start disabled; enable one
-            only after a benchmark and a terms review.
-          </p>
+          <h3 id="ai-models">{t('ai.catalogue')}</h3>
+          <p>{t('ai.catalogueHint')}</p>
         </div>
       </div>
       <div className="catalogue-toolbar">
-        <div className="segmented" role="tablist" aria-label="Capability">
+        <div className="segmented" role="tablist" aria-label={t('ai.capability')}>
           {CAPABILITIES.map((c) => (
             <button
-              key={c.id}
+              key={c}
               type="button"
               role="tab"
-              aria-selected={capability === c.id}
+              aria-selected={capability === c}
               onClick={() => {
-                setCapability(c.id);
+                setCapability(c);
               }}
             >
-              {c.label} <span className="chip-count">{counts[c.id] ?? 0}</span>
+              {t(`ai.cap.${c}`)} <span className="chip-count">{counts[c] ?? 0}</span>
             </button>
           ))}
         </div>
@@ -426,8 +386,8 @@ export function ModelsPanel(props: {
           <input
             className="filter"
             type="search"
-            placeholder="Search models…"
-            aria-label="Search models"
+            placeholder={t('ai.searchModels')}
+            aria-label={t('ai.searchModels')}
             value={q}
             onChange={(e) => {
               setQ(e.target.value);
@@ -435,33 +395,33 @@ export function ModelsPanel(props: {
           />
           <select
             className="compact-select"
-            aria-label="Status"
+            aria-label={t('ai.colStatus')}
             value={status}
             onChange={(e) => {
               const v = e.target.value;
               setStatus(v === 'enabled' || v === 'disabled' ? v : 'all');
             }}
           >
-            <option value="all">All statuses</option>
-            <option value="enabled">Enabled</option>
-            <option value="disabled">Disabled</option>
+            <option value="all">{t('ai.allStatuses')}</option>
+            <option value="enabled">{t('ai.status.enabled')}</option>
+            <option value="disabled">{t('ai.status.disabled')}</option>
           </select>
         </div>
       </div>
       {shown.length === 0 ? (
-        <div className="empty">No models match.</div>
+        <div className="empty">{t('ai.noMatch')}</div>
       ) : (
         <div className="table-wrap">
-          <table className="table stack-mobile" aria-label="Models">
+          <table className="table stack-mobile" aria-label={t('ai.models')}>
             <thead>
               <tr>
-                <th scope="col">Model</th>
-                <th scope="col">Limits</th>
-                <th scope="col">Price</th>
-                <th scope="col">Status</th>
+                <th scope="col">{t('ai.colModel')}</th>
+                <th scope="col">{t('ai.colLimits')}</th>
+                <th scope="col">{t('ai.colPrice')}</th>
+                <th scope="col">{t('ai.colStatus')}</th>
                 {props.isOperator && (
                   <th scope="col">
-                    <span className="sr-only">Actions</span>
+                    <span className="sr-only">{t('ai.colActions')}</span>
                   </th>
                 )}
               </tr>
@@ -479,12 +439,12 @@ export function ModelsPanel(props: {
                         {providerName(m.providerKey)} · {m.qualityTier}
                       </div>
                     </td>
-                    <td data-label="Limits" className="small-text">
-                      {limits(m)}
+                    <td data-label={t('ai.colLimits')} className="small-text">
+                      {limits(t, m)}
                     </td>
-                    <td data-label="Price">
+                    <td data-label={t('ai.colPrice')}>
                       {m.activePrices.length === 0 ? (
-                        <span className="muted small-text">Unknown (never shown as $0)</span>
+                        <span className="muted small-text">{t('ai.priceUnknown')}</span>
                       ) : (
                         <>
                           <ul className="price-list">
@@ -499,7 +459,7 @@ export function ModelsPanel(props: {
                           </ul>
                           {rest > 0 && (
                             <details className="price-more">
-                              <summary>All prices ({m.activePrices.length})</summary>
+                              <summary>{t('ai.allPrices', { count: m.activePrices.length })}</summary>
                               <ul className="price-list">
                                 {sortPrices(m.activePrices)
                                   .map(priceLine)
@@ -510,16 +470,18 @@ export function ModelsPanel(props: {
                                   ))}
                               </ul>
                               <div className="cell-sub">
-                                Source: {m.activePrices[0]?.source.replace('_', ' ')}, effective{' '}
-                                {m.activePrices[0]?.effectiveFrom.slice(0, 10)}
+                                {t('ai.priceSource', {
+                                  source: m.activePrices[0]?.source.replace('_', ' ') ?? '',
+                                  date: m.activePrices[0]?.effectiveFrom.slice(0, 10) ?? '',
+                                })}
                               </div>
                             </details>
                           )}
                         </>
                       )}
                     </td>
-                    <td data-label="Status">
-                      <Pill tone={STATUS_TONE[m.status]}>{STATUS_LABEL[m.status]}</Pill>
+                    <td data-label={t('ai.colStatus')}>
+                      <Pill tone={STATUS_TONE[m.status]}>{t(STATUS_LABEL(m.status))}</Pill>
                     </td>
                     {props.isOperator && (
                       <td>
@@ -534,17 +496,22 @@ export function ModelsPanel(props: {
                                 'PATCH',
                                 `/ai/models/${m.id}`,
                                 { status: m.status === 'enabled' ? 'disabled' : 'enabled' },
-                                `${m.displayName} ${m.status === 'enabled' ? 'disabled' : 'enabled'}.`,
+                                t('ai.providerToggled', {
+                                  name: m.displayName,
+                                  state: t(
+                                    m.status === 'enabled' ? 'ai.status.disabled' : 'ai.status.enabled',
+                                  ),
+                                }),
                               )
                             }
                           >
-                            {m.status === 'enabled' ? 'Disable' : 'Enable'}
+                            {m.status === 'enabled' ? t('ai.disable') : t('ai.enable')}
                           </button>
                           {m.capabilities.includes('llm') && (
                             <select
                               className="compact-select"
-                              aria-label={`Structured output for ${m.displayName}`}
-                              title="Structured output: full schema, or basic for models that reject strict schemas"
+                              aria-label={t('ai.schemaFor', { name: m.displayName })}
+                              title={t('ai.schemaTitle')}
                               value={m.schemaMode}
                               disabled={busy !== null}
                               onChange={(e) =>
@@ -553,12 +520,12 @@ export function ModelsPanel(props: {
                                   'PATCH',
                                   `/ai/models/${m.id}`,
                                   { schemaMode: e.target.value },
-                                  'Structured output mode saved.',
+                                  t('ai.schemaSaved'),
                                 )
                               }
                             >
-                              <option value="full">Schema: full</option>
-                              <option value="basic">Schema: basic</option>
+                              <option value="full">{t('ai.schemaFull')}</option>
+                              <option value="basic">{t('ai.schemaBasic')}</option>
                             </select>
                           )}
                           <AddPriceButton model={m} />
@@ -580,26 +547,27 @@ export function ModelsPanel(props: {
 // ------------------------------------------------------------------------------ change log
 
 export function ActivityPanel({ events }: { readonly events: readonly AiRegistryEventDto[] }) {
+  const t = useT();
   return (
     <section className="card card-pad" aria-labelledby="ai-events">
       <div className="section-head">
         <div>
-          <h3 id="ai-events">Recent changes</h3>
-          <p>The latest 50 changes, newest first. The log is append-only.</p>
+          <h3 id="ai-events">{t('ai.changes')}</h3>
+          <p>{t('ai.changesHint')}</p>
         </div>
       </div>
       {events.length === 0 ? (
-        <div className="empty">No changes yet.</div>
+        <div className="empty">{t('ai.noChanges')}</div>
       ) : (
         <div className="table-wrap">
-          <table className="table stack-mobile" aria-label="Registry changes">
+          <table className="table stack-mobile" aria-label={t('ai.changesLabel')}>
             <thead>
               <tr>
-                <th scope="col">When</th>
-                <th scope="col">Change</th>
-                <th scope="col">Target</th>
-                <th scope="col">Value</th>
-                <th scope="col">By</th>
+                <th scope="col">{t('ai.colWhen')}</th>
+                <th scope="col">{t('ai.colChange')}</th>
+                <th scope="col">{t('ai.colTarget')}</th>
+                <th scope="col">{t('ai.colValue')}</th>
+                <th scope="col">{t('ai.colBy')}</th>
               </tr>
             </thead>
             <tbody>
@@ -608,14 +576,19 @@ export function ActivityPanel({ events }: { readonly events: readonly AiRegistry
                   <td className="small-text nowrap">
                     <LocalTime iso={e.createdAt} />
                   </td>
-                  <td data-label="Change">{actionLabel(e.action)}</td>
-                  <td data-label="Target" className="mono small-text">
+                  <td data-label={t('ai.colChange')}>
+                    {(() => {
+                      const key = actionLabel(e.action);
+                      return key ? t(key) : e.action;
+                    })()}
+                  </td>
+                  <td data-label={t('ai.colTarget')} className="mono small-text">
                     {e.target}
                   </td>
-                  <td data-label="Value" className="small-text">
+                  <td data-label={t('ai.colValue')} className="small-text">
                     {changeSummary(e)}
                   </td>
-                  <td data-label="By" className="small-text">
+                  <td data-label={t('ai.colBy')} className="small-text">
                     {e.actor ? e.actor.displayName : <span className="tag">CLI</span>}
                   </td>
                 </tr>

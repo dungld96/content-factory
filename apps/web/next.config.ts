@@ -22,6 +22,14 @@ const nextConfig: NextConfig = {
     // are refused by the API with 413 before it reads them.
     proxyClientMaxBodySize: '26mb',
   },
+  // Redesign R1: the content library and the pipeline became Productions (list / board). The
+  // content workspace keeps its /content/[id] address. Query strings are carried over.
+  redirects() {
+    return Promise.resolve([
+      { source: '/content', destination: '/productions', permanent: true },
+      { source: '/pipeline', destination: '/productions?view=board', permanent: true },
+    ]);
+  },
   // /api/v1/* is forwarded to the API at runtime by src/proxy.ts (same-origin topology, D3).
 };
 

@@ -1,5 +1,7 @@
 import type { ContentStatus } from '@acf/contracts';
 
+import type { MessageKey } from './i18n';
+
 /** Visual tone of a status pill (maps to `.status.<tone>` in globals.css). */
 export type Tone = 'green' | 'amber' | 'purple' | 'gray' | 'red';
 
@@ -7,28 +9,29 @@ export type Tone = 'green' | 'amber' | 'purple' | 'gray' | 'red';
 export type Stage = 'draft' | 'script' | 'storyboard' | 'images' | 'render' | 'done' | 'attention';
 
 interface StatusInfo {
-  readonly label: string;
+  /** Dictionary key of the status name (`status.<status>`). */
+  readonly label: MessageKey;
   readonly tone: Tone;
   readonly stage: Stage;
 }
 
 const STATUS: Readonly<Record<ContentStatus, StatusInfo>> = {
-  draft: { label: 'Draft', tone: 'gray', stage: 'draft' },
-  researching: { label: 'Researching', tone: 'purple', stage: 'draft' },
-  planning: { label: 'Planning', tone: 'purple', stage: 'draft' },
-  scripting: { label: 'Generating script', tone: 'purple', stage: 'script' },
-  script_review: { label: 'Script review', tone: 'amber', stage: 'script' },
-  storyboarding: { label: 'Generating storyboard', tone: 'purple', stage: 'storyboard' },
-  storyboard_review: { label: 'Storyboard review', tone: 'amber', stage: 'storyboard' },
-  generating_assets: { label: 'Generating images', tone: 'purple', stage: 'images' },
-  asset_review: { label: 'Asset review', tone: 'amber', stage: 'images' },
-  rendering: { label: 'Rendering', tone: 'purple', stage: 'render' },
-  quality_review: { label: 'Quality review', tone: 'amber', stage: 'render' },
-  approved: { label: 'Approved', tone: 'green', stage: 'done' },
-  exported: { label: 'Exported', tone: 'green', stage: 'done' },
-  failed: { label: 'Failed', tone: 'red', stage: 'attention' },
-  canceled: { label: 'Canceled', tone: 'gray', stage: 'attention' },
-  needs_input: { label: 'Needs input', tone: 'amber', stage: 'attention' },
+  draft: { label: 'status.draft', tone: 'gray', stage: 'draft' },
+  researching: { label: 'status.researching', tone: 'purple', stage: 'draft' },
+  planning: { label: 'status.planning', tone: 'purple', stage: 'draft' },
+  scripting: { label: 'status.scripting', tone: 'purple', stage: 'script' },
+  script_review: { label: 'status.script_review', tone: 'amber', stage: 'script' },
+  storyboarding: { label: 'status.storyboarding', tone: 'purple', stage: 'storyboard' },
+  storyboard_review: { label: 'status.storyboard_review', tone: 'amber', stage: 'storyboard' },
+  generating_assets: { label: 'status.generating_assets', tone: 'purple', stage: 'images' },
+  asset_review: { label: 'status.asset_review', tone: 'amber', stage: 'images' },
+  rendering: { label: 'status.rendering', tone: 'purple', stage: 'render' },
+  quality_review: { label: 'status.quality_review', tone: 'amber', stage: 'render' },
+  approved: { label: 'status.approved', tone: 'green', stage: 'done' },
+  exported: { label: 'status.exported', tone: 'green', stage: 'done' },
+  failed: { label: 'status.failed', tone: 'red', stage: 'attention' },
+  canceled: { label: 'status.canceled', tone: 'gray', stage: 'attention' },
+  needs_input: { label: 'status.needs_input', tone: 'amber', stage: 'attention' },
 };
 
 export const statusInfo = (status: ContentStatus): StatusInfo => STATUS[status];
@@ -72,12 +75,12 @@ export const isFinished = (s: ContentStatus) => s === 'approved' || s === 'expor
 
 /** Status filter groups offered by the content library. */
 export const STATUS_FILTERS = [
-  { value: 'in_production', label: 'In production' },
-  { value: 'needs_review', label: 'Needs review' },
-  { value: 'draft', label: 'Draft' },
-  { value: 'approved', label: 'Approved or exported' },
-  { value: 'attention', label: 'Failed or canceled' },
-] as const;
+  { value: 'in_production', label: 'filter.in_production' },
+  { value: 'needs_review', label: 'filter.needs_review' },
+  { value: 'draft', label: 'filter.draft' },
+  { value: 'approved', label: 'filter.approved' },
+  { value: 'attention', label: 'filter.attention' },
+] as const satisfies readonly { value: string; label: MessageKey }[];
 export type StatusFilter = (typeof STATUS_FILTERS)[number]['value'];
 
 export function isStatusFilter(value: string | undefined): value is StatusFilter {
@@ -115,14 +118,15 @@ export function countByStage(statuses: readonly ContentStatus[]): StageCount[] {
   });
 }
 
-export const STAGE_LABEL: Readonly<Record<Stage, string>> = {
-  draft: 'Draft',
-  script: 'Script',
-  storyboard: 'Storyboard',
-  images: 'Scene images',
-  render: 'Render & quality',
-  done: 'Approved',
-  attention: 'Needs attention',
+/** Dictionary keys of the stage names. */
+export const STAGE_LABEL: Readonly<Record<Stage, MessageKey>> = {
+  draft: 'stage.draft',
+  script: 'stage.script',
+  storyboard: 'stage.storyboard',
+  images: 'stage.images',
+  render: 'stage.render',
+  done: 'stage.done',
+  attention: 'stage.attention',
 };
 
 export interface WeekBucket {

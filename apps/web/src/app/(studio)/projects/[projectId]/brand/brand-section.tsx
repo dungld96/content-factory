@@ -6,11 +6,13 @@ import { useEffect, useState, type SyntheticEvent } from 'react';
 import type { Page, VersionDto, VersionedEntityDto } from '@acf/contracts';
 
 import { AssetPicker } from '@/components/asset-picker';
+import { useT } from '@/components/i18n-provider';
 import { LocalTime } from '@/components/local-time';
 import { Modal } from '@/components/modal';
 import { Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { errorText, etagOf, fetchJson, mutate } from '@/lib/api-client';
+import type { MessageKey } from '@/lib/i18n';
 
 type Kind = 'characters' | 'environments';
 
@@ -18,9 +20,21 @@ const VERSION_PATH: Readonly<Record<Kind, string>> = {
   characters: 'character-versions',
   environments: 'environment-versions',
 };
-const LABEL: Readonly<Record<Kind, { one: string; many: string }>> = {
-  characters: { one: 'character', many: 'Characters' },
-  environments: { one: 'environment', many: 'Environments' },
+const LABEL: Readonly<
+  Record<Kind, { many: MessageKey; create: MessageKey; none: MessageKey; created: MessageKey }>
+> = {
+  characters: {
+    many: 'brand.characters',
+    create: 'brand.newCharacter',
+    none: 'brand.noCharacter',
+    created: 'brand.createdCharacter',
+  },
+  environments: {
+    many: 'brand.environments',
+    create: 'brand.newEnvironment',
+    none: 'brand.noEnvironment',
+    created: 'brand.createdEnvironment',
+  },
 };
 const REFERENCE_TYPES = ['reference', 'image'] as const;
 
@@ -36,6 +50,7 @@ export function BrandSection(props: {
   readonly entities: readonly VersionedEntityDto[];
   readonly canEdit: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +71,7 @@ export function BrandSection(props: {
     }
     setError(null);
     setCreating(false);
-    toast(`The ${label.one} was created. Add a first version with its references.`);
+    toast(t(label.created));
     router.refresh();
   }
 
@@ -64,7 +79,7 @@ export function BrandSection(props: {
     <section className="card card-pad" aria-labelledby={`brand-${props.kind}`}>
       <div className="section-head">
         <div>
-          <h2 id={`brand-${props.kind}`}>{label.many}</h2>
+          <h2 id={`brand-${props.kind}`}>{t(label.many)}</h2>
         </div>
         {props.canEdit && (
           <button
@@ -74,14 +89,14 @@ export function BrandSection(props: {
               setCreating(true);
             }}
           >
-            <span aria-hidden="true">＋</span> New {label.one}
+            <span aria-hidden="true">＋</span> {t(label.create)}
           </button>
         )}
       </div>
       {props.entities.length === 0 ? (
-        <p className="muted small-text">No {label.one} yet.</p>
+        <p className="muted small-text">{t(label.none)}</p>
       ) : (
-        <ul className="plain-list" aria-label={label.many}>
+        <ul className="plain-list" aria-label={t(label.many)}>
           {props.entities.map((e) => (
             <EntityRow
               key={e.id}
@@ -98,19 +113,19 @@ export function BrandSection(props: {
         onClose={() => {
           setCreating(false);
         }}
-        title={`New ${label.one}`}
+        title={t(label.create)}
       >
         <form className="form" onSubmit={(e) => void create(e)}>
           <label className="field">
-            Name
+            {t('form.name')}
             <input name="name" required maxLength={120} />
           </label>
           <label className="field">
-            Slug <small>(lowercase letters, digits and dashes)</small>
+            {t('form.slug')} <small>{t('brand.slugHint')}</small>
             <input name="slug" required maxLength={60} pattern="[a-z0-9]+(-[a-z0-9]+)*" />
           </label>
           <label className="field">
-            Description <small>(optional)</small>
+            {t('form.description')} <small>{t('form.optional')}</small>
             <textarea name="description" maxLength={5000} rows={3} />
           </label>
           {error && (
@@ -126,10 +141,10 @@ export function BrandSection(props: {
                 setCreating(false);
               }}
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button type="submit" className="btn primary">
-              Create
+              {t('brand.create')}
             </button>
           </div>
         </form>
@@ -144,6 +159,7 @@ function EntityRow(props: {
   readonly projectId: string;
   readonly canEdit: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const { entity } = props;
   const [open, setOpen] = useState(false);
@@ -183,7 +199,7 @@ function EntityRow(props: {
       return;
     }
     setError(null);
-    toast(`Version ${String(v.version)} approved: it is now the master.`);
+    toast(t('brand.approved', { version: v.version }));
     setReload((n) => n + 1);
     router.refresh();
   }
@@ -199,29 +215,31 @@ function EntityRow(props: {
         <summary>
           <b>{entity.name}</b> <code>{entity.slug}</code>{' '}
           {entity.master ? (
-            <Pill tone="green">master v{entity.master.version}</Pill>
+            <Pill tone="green">{t('brand.master', { version: entity.master.version })}</Pill>
           ) : (
-            <Pill tone="gray">no approved version</Pill>
+            <Pill tone="gray">{t('brand.noApproved')}</Pill>
           )}
         </summary>
         {entity.description && <p className="muted small-text">{entity.description}</p>}
         {versions === null ? (
           <p className="muted small-text" aria-busy="true">
-            Loading versions…
+            {t('brand.loadingVersions')}
           </p>
         ) : versions.length === 0 ? (
-          <p className="muted small-text">No versions yet.</p>
+          <p className="muted small-text">{t('brand.noVersions')}</p>
         ) : (
-          <ol className="small-text" aria-label={`Versions of ${entity.name}`}>
+          <ol className="small-text" aria-label={t('brand.versionsOf', { name: entity.name })}>
             {versions.map((v) => (
               <li key={v.id}>
                 v{v.version}{' '}
-                <Pill tone={v.status === 'approved' ? 'green' : 'amber'}>{v.status}</Pill> ·{' '}
-                {v.description} · {v.primaryAssetId ? 'primary reference set' : 'no primary'} ·{' '}
-                {v.assets.length} linked · <LocalTime iso={v.createdAt} />
+                <Pill tone={v.status === 'approved' ? 'green' : 'amber'}>
+                  {v.status === 'approved' ? t('brand.status.approved') : t('brand.status.draft')}
+                </Pill>{' '}
+                · {v.description} · {v.primaryAssetId ? t('brand.primarySet') : t('brand.noPrimary')}{' '}
+                · {t('brand.linked', { count: v.assets.length })} · <LocalTime iso={v.createdAt} />
                 {props.canEdit && v.status === 'draft' && (
                   <button type="button" className="btn small" onClick={() => void approve(v)}>
-                    Approve
+                    {t('brand.approve')}
                   </button>
                 )}
               </li>
@@ -236,7 +254,7 @@ function EntityRow(props: {
               setDrafting(true);
             }}
           >
-            New version
+            {t('brand.newVersion')}
           </button>
         )}
         {error && (
@@ -269,6 +287,7 @@ function NewVersion(props: {
   readonly base: VersionDto | null;
   readonly onClose: (saved: boolean) => void;
 }) {
+  const t = useT();
   const [primary, setPrimary] = useState<string | null>(props.base?.primaryAssetId ?? null);
   const [linked, setLinked] = useState<string[]>(props.base?.assets.map((a) => a.assetId) ?? []);
   const [picking, setPicking] = useState<'primary' | 'linked' | null>(null);
@@ -286,7 +305,7 @@ function NewVersion(props: {
       setError(errorText(r));
       return;
     }
-    toast('Draft saved. Approve it to make it the master.');
+    toast(t('brand.draftSaved'));
     props.onClose(true);
   }
 
@@ -296,7 +315,7 @@ function NewVersion(props: {
         projectId={props.projectId}
         open
         multiple={picking === 'linked'}
-        title={picking === 'primary' ? 'Primary reference' : 'Linked references'}
+        title={picking === 'primary' ? t('brand.primaryRef') : t('brand.linkedRefs')}
         types={REFERENCE_TYPES}
         selected={picking === 'primary' ? (primary ? [primary] : []) : linked}
         onClose={() => {
@@ -316,12 +335,12 @@ function NewVersion(props: {
       onClose={() => {
         props.onClose(false);
       }}
-      title={`New version of ${props.entity.name}`}
-      description="A new draft; approved versions never change."
+      title={t('brand.newVersionOf', { name: props.entity.name })}
+      description={t('brand.newVersionDesc')}
     >
       <form className="form" onSubmit={(e) => void save(e)}>
         <label className="field">
-          Description
+          {t('form.description')}
           <textarea
             name="description"
             required
@@ -334,7 +353,8 @@ function NewVersion(props: {
           />
         </label>
         <p className="small-text">
-          Primary reference: {primary ? <code>{primary.slice(0, 8)}…</code> : 'none'}{' '}
+          {t('brand.primaryLine')}{' '}
+          {primary ? <code>{primary.slice(0, 8)}…</code> : t('common.none')}{' '}
           <button
             type="button"
             className="btn small"
@@ -342,11 +362,11 @@ function NewVersion(props: {
               setPicking('primary');
             }}
           >
-            Choose
+            {t('brand.choose')}
           </button>
         </p>
         <p className="small-text">
-          Linked references: {linked.length}{' '}
+          {t('brand.linkedLine', { count: linked.length })}{' '}
           <button
             type="button"
             className="btn small"
@@ -354,7 +374,7 @@ function NewVersion(props: {
               setPicking('linked');
             }}
           >
-            Choose
+            {t('brand.choose')}
           </button>
         </p>
         {error && (
@@ -370,10 +390,10 @@ function NewVersion(props: {
               props.onClose(false);
             }}
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button type="submit" className="btn primary">
-            Save draft
+            {t('brand.saveDraft')}
           </button>
         </div>
       </form>

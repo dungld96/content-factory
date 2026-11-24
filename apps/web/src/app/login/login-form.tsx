@@ -3,17 +3,20 @@
 import { useRouter } from 'next/navigation';
 import { useState, type SubmitEvent } from 'react';
 
+import { useT } from '@/components/i18n-provider';
 import { rememberCsrfToken } from '@/lib/csrf-client';
+import type { MessageKey } from '@/lib/i18n';
 
 type State =
   { readonly kind: 'idle' | 'submitting' } | { readonly kind: 'error'; readonly message: string };
 
-const MESSAGES: Readonly<Record<number, string>> = {
-  401: 'The email or password is incorrect.',
-  429: 'Too many attempts. Wait a minute and try again.',
+const MESSAGES: Readonly<Record<number, MessageKey>> = {
+  401: 'login.invalid',
+  429: 'login.rateLimited',
 };
 
 export function LoginForm() {
+  const t = useT();
   const router = useRouter();
   const [state, setState] = useState<State>({ kind: 'idle' });
 
@@ -28,7 +31,7 @@ export function LoginForm() {
         body: JSON.stringify({ email: form.get('email'), password: form.get('password') }),
       });
       if (!res.ok) {
-        setState({ kind: 'error', message: MESSAGES[res.status] ?? 'Sign-in failed. Try again.' });
+        setState({ kind: 'error', message: t(MESSAGES[res.status] ?? 'login.failed') });
         return;
       }
       const body = (await res.json()) as { csrfToken: string };
@@ -36,7 +39,7 @@ export function LoginForm() {
       router.replace('/');
       router.refresh();
     } catch {
-      setState({ kind: 'error', message: 'The server could not be reached.' });
+      setState({ kind: 'error', message: t('login.unreachable') });
     }
   }
 
@@ -44,11 +47,11 @@ export function LoginForm() {
   return (
     <form className="form" onSubmit={(e) => void onSubmit(e)} noValidate={false}>
       <label className="field">
-        Email
+        {t('login.email')}
         <input name="email" type="email" autoComplete="username" required />
       </label>
       <label className="field">
-        Password
+        {t('login.password')}
         <input name="password" type="password" autoComplete="current-password" required />
       </label>
       {state.kind === 'error' && (
@@ -57,7 +60,7 @@ export function LoginForm() {
         </p>
       )}
       <button type="submit" className="btn primary" disabled={submitting}>
-        {submitting ? 'Signing in…' : 'Sign in'}
+        {submitting ? t('login.submitting') : t('login.submit')}
       </button>
     </form>
   );

@@ -5,6 +5,7 @@ import { useState, type SubmitEvent } from 'react';
 
 import type { VoiceProfileDto } from '@acf/contracts';
 
+import { useT } from '@/components/i18n-provider';
 import { Pill } from '@/components/status-pill';
 import { toast } from '@/components/toast';
 import { mutate } from '@/lib/api-client';
@@ -38,6 +39,7 @@ export function VoiceProfilesCard(props: {
   readonly models: readonly TtsModelOption[];
   readonly canEdit: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +57,7 @@ export function VoiceProfilesCard(props: {
     setError(null);
     const r = await mutate(method, path, body);
     setBusy(false);
-    if (!r.ok) setError(r.message ?? `Request failed (HTTP ${String(r.status)})`);
+    if (!r.ok) setError(r.message ?? t('form.requestFailed', { status: r.status }));
     return r.ok;
   }
 
@@ -79,14 +81,14 @@ export function VoiceProfilesCard(props: {
     });
     if (ok) {
       formElement.reset();
-      toast('Voice profile created.');
+      toast(t('voice.created'));
       router.refresh();
     }
   }
 
   async function archive(profile: VoiceProfileDto) {
     if (await call('POST', `/voice-profiles/${profile.id}/archive`)) {
-      toast(`Archived ${profile.name}.`);
+      toast(t('voice.archived', { name: profile.name }));
       router.refresh();
     }
   }
@@ -94,9 +96,9 @@ export function VoiceProfilesCard(props: {
   return (
     <>
       {props.profiles.length === 0 ? (
-        <p className="muted small-text">No voice profiles yet.</p>
+        <p className="muted small-text">{t('voice.none')}</p>
       ) : (
-        <ul className="plain-list" aria-label="Voice profiles">
+        <ul className="plain-list" aria-label={t('voice.listLabel')}>
           {props.profiles.map((p) => (
             <li key={p.id} className="audio-row" aria-label={p.name}>
               <span className="audio-meta">
@@ -115,7 +117,7 @@ export function VoiceProfilesCard(props: {
                     disabled={busy}
                     onClick={() => void archive(p)}
                   >
-                    Archive
+                    {t('voice.archive')}
                   </button>
                 </span>
               )}
@@ -126,21 +128,26 @@ export function VoiceProfilesCard(props: {
       {props.canEdit &&
         (usable.length === 0 ? (
           <p className="muted small-text">
-            No text-to-speech model is enabled. An operator imports and enables one first.
+            {t('voice.noModel')}
           </p>
         ) : (
           <form
             className="form"
-            aria-label="New voice profile"
+            aria-label={t('voice.newLabel')}
             onSubmit={(e) => void create(e)}
             style={{ marginTop: 14 }}
           >
             <label className="field">
-              Name
-              <input name="name" required maxLength={120} placeholder="Narrator (female, warm)" />
+              {t('form.name')}
+              <input
+                name="name"
+                required
+                maxLength={120}
+                placeholder={t('voice.namePlaceholder')}
+              />
             </label>
             <label className="field">
-              Model
+              {t('model.label')}
               <select
                 name="modelKey"
                 required
@@ -157,7 +164,7 @@ export function VoiceProfilesCard(props: {
               </select>
             </label>
             <label className="field">
-              Language <small>(e.g. vi or vi-VN)</small>
+              {t('form.language')} <small>{t('voice.languageHint')}</small>
               <input
                 name="language"
                 required
@@ -170,11 +177,11 @@ export function VoiceProfilesCard(props: {
               />
             </label>
             <label className="field">
-              Voice{' '}
+              {t('voice.voice')}{' '}
               <small>
                 {voiceOptions.length > 0
-                  ? `(${String(voiceOptions.length)} voices for this language; type to search)`
-                  : '(the provider’s voice id)'}
+                  ? t('voice.voicesFound', { count: voiceOptions.length })
+                  : t('voice.voiceId')}
               </small>
               <input
                 name="voice"
@@ -192,11 +199,11 @@ export function VoiceProfilesCard(props: {
               )}
             </label>
             <label className="field">
-              Speed <small>(optional, 0.5–2)</small>
+              {t('voice.speed')} <small>{t('voice.speedHint')}</small>
               <input name="speed" type="number" min={0.5} max={2} step={0.05} />
             </label>
             <label className="field">
-              Instructions <small>(optional style prompt)</small>
+              {t('voice.instructions')} <small>{t('voice.instructionsHint')}</small>
               <input name="instructions" maxLength={500} />
             </label>
             {error && (
@@ -206,12 +213,12 @@ export function VoiceProfilesCard(props: {
             )}
             <div className="form-actions">
               <button type="submit" className="btn primary" disabled={busy}>
-                {busy ? 'Saving…' : 'Create voice profile'}
+                {busy ? t('common.saving') : t('voice.create')}
               </button>
             </div>
           </form>
         ))}
-      {!props.canEdit && <Pill tone="gray">Read only</Pill>}
+      {!props.canEdit && <Pill tone="gray">{t('voice.readOnly')}</Pill>}
     </>
   );
 }

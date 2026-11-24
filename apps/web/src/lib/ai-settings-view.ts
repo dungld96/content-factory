@@ -1,46 +1,54 @@
 import type { AiProviderDto, AiRegistryEventDto, AiRouteDto } from '@acf/contracts';
 
+import type { MessageKey } from './i18n';
+
+/** `reason` and `label` are dictionary keys (redesign R-D6). */
 export type Readiness =
-  { readonly ready: true } | { readonly ready: false; readonly reason: string };
+  { readonly ready: true } | { readonly ready: false; readonly reason: MessageKey };
 
 /** Whether a task route can serve requests now, and if not, the first thing to fix. */
 export function routeReadiness(route: AiRouteDto, providers: readonly AiProviderDto[]): Readiness {
-  if (!route.model || !route.provider) return { ready: false, reason: 'No model routed' };
+  if (!route.model || !route.provider) return { ready: false, reason: 'ai.reason.noModel' };
   const provider = providers.find((p) => p.key === route.provider?.key);
-  if (route.provider.status !== 'enabled') return { ready: false, reason: 'Provider disabled' };
+  if (route.provider.status !== 'enabled')
+    return { ready: false, reason: 'ai.reason.providerDisabled' };
   if (!route.provider.configured) {
     return {
       ready: false,
       reason:
-        provider?.kind === 'mock' ? 'Test-only provider, not active here' : 'No API key configured',
+        provider?.kind === 'mock' ? 'ai.reason.testOnly' : 'ai.reason.noKey',
     };
   }
-  if (route.model.status !== 'enabled') return { ready: false, reason: 'Model disabled' };
+  if (route.model.status !== 'enabled') return { ready: false, reason: 'ai.reason.modelDisabled' };
   return { ready: true };
 }
 
 /** What a provider's credentials look like to an operator. */
-export function keyStatus(p: AiProviderDto): { readonly label: string; readonly ok: boolean } {
+export function keyStatus(p: AiProviderDto): { readonly label: MessageKey; readonly ok: boolean } {
   if (p.kind === 'mock') {
     return {
-      label: p.configured ? 'Test provider active' : 'Test provider (tests only)',
+      label: p.configured ? 'ai.key.testActive' : 'ai.key.testOnly',
       ok: p.configured,
     };
   }
-  return { label: p.configured ? 'API key configured' : 'No API key', ok: p.configured };
+  return { label: p.configured ? 'ai.key.configured' : 'ai.key.none', ok: p.configured };
 }
 
-const ACTION_LABEL: Readonly<Record<string, string>> = {
-  provider_status: 'Provider status',
-  model_status: 'Model status',
-  model_schema_mode: 'Schema mode',
-  model_min_billed_seconds: 'Minimum billed seconds',
-  route_set: 'Task route',
-  price_added: 'Price added',
-  model_imported: 'Model imported',
-};
+const ACTIONS = [
+  'provider_status',
+  'model_status',
+  'model_schema_mode',
+  'model_min_billed_seconds',
+  'route_set',
+  'price_added',
+  'model_imported',
+] as const;
 
-export const actionLabel = (action: string) => ACTION_LABEL[action] ?? action;
+/** The dictionary key of a registry action, or `null` for actions this build does not know. */
+export const actionLabel = (action: string): MessageKey | null =>
+  (ACTIONS as readonly string[]).includes(action)
+    ? (`ai.action.${action as (typeof ACTIONS)[number]}` as const)
+    : null;
 
 const record = (v: unknown): Record<string, unknown> | null =>
   typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;

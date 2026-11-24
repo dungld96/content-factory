@@ -165,7 +165,27 @@ describe('session guard', () => {
       ],
       // P1 O1: not in OPERATOR_EMAILS.
       isOperator: false,
+      // R-D6: no choice yet, the browser decides.
+      locale: null,
     });
+  });
+
+  it('saves the interface language on the user (R-D6) and validates it', async () => {
+    const jar = new CookieJar();
+    await login(jar, OWNER);
+    const token = csrfOf(await call(jar, 'GET', '/auth/csrf'));
+    const headers = { 'x-csrf-token': token };
+    const set = await call(jar, 'PATCH', '/auth/me/preferences', { headers, body: { locale: 'vi' } });
+    expect(set.status).toBe(200);
+    expect((set.json as { locale: string }).locale).toBe('vi');
+    expect(((await call(jar, 'GET', '/auth/me')).json as { locale: string }).locale).toBe('vi');
+    const bad = await call(jar, 'PATCH', '/auth/me/preferences', { headers, body: { locale: 'fr' } });
+    expect(bad.status).toBe(400);
+    const reset = await call(jar, 'PATCH', '/auth/me/preferences', {
+      headers,
+      body: { locale: null },
+    });
+    expect((reset.json as { locale: string | null }).locale).toBeNull();
   });
 
   it('destroys the session when its user is disabled behind its back', async () => {

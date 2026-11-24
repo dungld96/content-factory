@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import type { GenerationJobDto } from '@acf/contracts';
 
+import { useT } from '@/components/i18n-provider';
 import { Icon } from '@/components/icon';
 import { Modal } from '@/components/modal';
 import { ResumeRunButton } from '@/components/resume-run';
@@ -20,11 +21,12 @@ export function DeliveredOutputActions(props: {
   readonly job: GenerationJobDto;
   readonly canEdit: boolean;
 }) {
+  const t = useT();
   const { job } = props;
   const [open, setOpen] = useState(false);
   if (job.status !== 'failed' || (!job.hasDeliveredOutput && !job.finishable)) return null;
   const isClip = job.kind === 'video_generation';
-  const what = isClip ? 'clip' : 'voice-over';
+  const what = isClip ? t('delivered.clip') : t('delivered.voiceover');
   return (
     <span className="delivered-actions">
       {job.hasDeliveredOutput && (
@@ -35,7 +37,7 @@ export function DeliveredOutputActions(props: {
             setOpen(true);
           }}
         >
-          <Icon name="play" /> Preview {what}
+          <Icon name="play" /> {t('delivered.preview', { what })}
         </button>
       )}
       {props.canEdit && job.finishable && (
@@ -43,8 +45,8 @@ export function DeliveredOutputActions(props: {
           runId={job.productionRunId}
           label={
             job.errorCode === 'OUTPUT_INVALID'
-              ? 'Check again – no new charge'
-              : 'Finish – no new charge'
+              ? t('delivered.checkAgain')
+              : t('delivered.finish')
           }
           className="btn small primary"
         />
@@ -54,15 +56,11 @@ export function DeliveredOutputActions(props: {
         onClose={() => {
           setOpen(false);
         }}
-        title={`Delivered ${what}`}
+        title={t('delivered.title', { what })}
         description={
           job.errorCode === 'OUTPUT_INVALID'
-            ? `Paid for and kept, but it failed validation${
-                job.errorMessage ? `: ${job.errorMessage}` : ''
-              }.`
-            : `Paid for and kept, not checked yet. ${
-                job.finishable ? 'Finish stores it without a new charge.' : ''
-              }`
+            ? t('delivered.invalid', { detail: job.errorMessage ? `: ${job.errorMessage}` : '' })
+            : `${t('delivered.unchecked')}${job.finishable ? ` ${t('delivered.finishHint')}` : ''}`
         }
       >
         {open &&
@@ -72,7 +70,7 @@ export function DeliveredOutputActions(props: {
               src={deliveredOutputUrl(job.id)}
               controls
               preload="metadata"
-              aria-label={`Delivered ${what}`}
+              aria-label={t('delivered.title', { what })}
             />
           ) : (
             <audio src={deliveredOutputUrl(job.id)} controls preload="metadata" />
