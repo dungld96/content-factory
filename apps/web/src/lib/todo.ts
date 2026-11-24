@@ -23,33 +23,42 @@ export interface TodoItem {
   readonly href: string;
   /** Extra values for the reason text (error code, amount). */
   readonly detail?: string | undefined;
+  /** Approval gate number (1–4) of a gate item. */
+  readonly gate?: 1 | 2 | 3 | 4 | undefined;
   readonly at: string;
 }
 
 type Content = ContentItemDto & { readonly projectName: string };
 
 const GATES: Partial<
-  Record<ContentStatus, { reason: MessageKey; action: MessageKey; hash: string; priority: number }>
+  Record<
+    ContentStatus,
+    { reason: MessageKey; action: MessageKey; hash: string; priority: number; gate: 1 | 2 | 3 | 4 }
+  >
 > = {
   script_review: {
+    gate: 1,
     reason: 'todo.reason.script',
     action: 'todo.action.reviewScript',
     hash: '#script',
     priority: 20,
   },
   storyboard_review: {
+    gate: 2,
     reason: 'todo.reason.storyboard',
     action: 'todo.action.reviewStoryboard',
     hash: '#storyboard',
     priority: 21,
   },
   asset_review: {
+    gate: 3,
     reason: 'todo.reason.scenes',
     action: 'todo.action.reviewScenes',
     hash: '#scenes',
     priority: 22,
   },
   quality_review: {
+    gate: 4,
     reason: 'todo.reason.render',
     action: 'todo.action.reviewRender',
     hash: '#render',
@@ -110,6 +119,7 @@ export function buildTodo(content: readonly Content[], ops: OpsSummaryDto | null
         reason: gate.reason,
         action: gate.action,
         href: `/content/${item.id}${gate.hash}`,
+        gate: gate.gate,
         at: item.updatedAt,
       });
     } else if (item.status === 'needs_input') {

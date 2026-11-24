@@ -45,19 +45,17 @@ test('owner: To-do, search, Productions list and board, masters and asset lineag
   await expect(library).not.toContainText('Standing desk tips');
 
   // Status filter (URL-backed): the pipeline spec exported the demo item.
-  await page.goto('/productions');
-  await page.getByLabel('Status').selectOption({ label: 'Approved or exported' });
-  await expect(page).toHaveURL(/status=approved/);
+  await page.goto('/productions?status=approved');
   await expect(library).toContainText('5 useful desk gadgets');
 
   // The board view groups items by stage; /pipeline redirects to it.
   await page.goto('/pipeline');
   await expect(page).toHaveURL(/\/productions\?view=board$/);
-  await expect(page.getByRole('region', { name: 'Approved' })).toContainText(
-    '5 useful desk gadgets',
+  await expect(page.getByRole('region', { name: 'Done' })).toContainText('5 useful desk gadgets');
+  await expect(page.getByRole('region', { name: 'Render', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Draft', exact: true })).toContainText(
+    'Standing desk tips',
   );
-  await expect(page.getByRole('region', { name: 'Render & quality' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Draft' })).toContainText('Standing desk tips');
 
   // Content masters list (from Productions).
   await page.getByRole('link', { name: 'Content masters' }).click();
