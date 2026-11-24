@@ -43,7 +43,10 @@ test('editor: brief → script → edit → approve → storyboard → scene edi
 }) => {
   test.setTimeout(120_000);
   await openDemoContent(page, EDITOR, passwordOf('EDITOR'));
+  // The brief and its check are the first stage of the rail.
+  await openTab(page, /^Brief/);
   await expect(page.getByText('Brief ready')).toBeVisible();
+  await openTab(page, /^Script/);
 
   // Gate 0: generate the script (async job processed by the worker).
   await page.getByRole('button', { name: 'Generate script' }).click();
@@ -252,7 +255,7 @@ test('editor: render → QC → approve (gate 5) → export the package', async 
   test.setTimeout(240_000);
   await openDemoContent(page, EDITOR, passwordOf('EDITOR'));
   // Every scene has a clip and a voice-over: the workspace opens on the render tab.
-  await expect(page.getByRole('tab', { name: /^Render & export/ })).toHaveAttribute(
+  await expect(page.getByRole('tab', { name: /^Render/ })).toHaveAttribute(
     'aria-selected',
     'true',
   );
@@ -321,7 +324,7 @@ test('viewer: sees the versions but no generate, edit or review controls', async
       page.getByRole('button', { name: /Edit|Approve|Reject|keyframe|Regenerate|Resync/ }),
     ).toHaveCount(0);
   };
-  await openTab(page, /^Brief & script/);
+  await openTab(page, /^Script/);
   await expect(page.getByRole('article', { name: 'Script version 2' })).toBeVisible();
   await noControls();
   await openTab(page, /^Storyboard/);
@@ -338,7 +341,7 @@ test('viewer: sees the versions but no generate, edit or review controls', async
     'Every scene with text has a voice-over',
   );
   await noControls();
-  await openTab(page, /^Render & export/);
+  await openTab(page, /^Render/);
   await expect(page.getByRole('article', { name: 'Render 1' })).toContainText('Current export');
   await expect(page.getByRole('button', { name: /Render video|Export package/ })).toHaveCount(0);
   await noControls();

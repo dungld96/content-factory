@@ -63,6 +63,7 @@ test('editor: new content → master page → add a variant; upload a reference 
   await expect(page.getByLabel('Content master')).toContainText('for TikTok');
 
   // The master page lists the variant; add a square YouTube variant (in a dialog).
+  await page.getByRole('tab', { name: /^Brief/ }).click();
   await page.getByLabel('Content master').getByRole('link').click();
   await expect(page.getByRole('heading', { level: 1, name: 'Standing desk tips' })).toBeVisible();
   const variants = page.getByRole('table', { name: 'Variants' });

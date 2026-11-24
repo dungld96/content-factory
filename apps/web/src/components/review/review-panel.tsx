@@ -82,92 +82,98 @@ export function ReviewPanel(props: {
     }
   }
 
+  const done = props.items.filter((i) => checklist.checked.has(i.id)).length;
   return (
     <section
-      className="review-panel"
+      className="review-panel col"
       aria-label={t('review.decision')}
       onKeyDown={onKeyDown}
       // Focusable so the shortcuts work after a click anywhere in the panel.
       tabIndex={-1}
     >
-      <div className="review-panel-head">
-        <span className="eyebrow">{props.gate}</span>
+      <div className="card check-card">
+        <div className="card-head">
+          <h3>{t('review.before')}</h3>
+          <span className="badge review">
+            {t('review.doneOf', { done, total: props.items.length })}
+          </span>
+          <span className="spacer" />
+          <button
+            type="button"
+            className="btn sm"
+            onClick={checklist.checkAll}
+            disabled={done === props.items.length}
+            aria-keyshortcuts="C"
+          >
+            <Icon name="check" /> {t('review.checkAll')} <kbd aria-hidden="true">C</kbd>
+          </button>
+        </div>
+        <div className="card-body col">
+          <span className="eyebrow">{props.gate}</span>
+          <ReviewChecklist items={props.items} state={checklist} />
+          <p className="t-12 muted">{t('review.keys')}</p>
+        </div>
       </div>
-      <ReviewChecklist items={props.items} state={checklist} />
-      {checklist.unchecked > 0 && (
-        <p className="muted small-text">
-          {t('review.uncheckedHint', { count: checklist.unchecked })}
-        </p>
-      )}
-      {mode === 'changes' && (
-        <label className="field">
-          {t('review.noteLabel')}
-          <textarea
-            ref={noteRef}
-            rows={3}
-            maxLength={2000}
-            value={note}
-            placeholder={t('review.notePlaceholder')}
-            onChange={(e) => {
-              setNote(e.target.value);
-            }}
-          />
-        </label>
-      )}
-      <div className="review-actions">
-        {mode === 'changes' ? (
-          <>
-            <button
-              type="button"
-              className="btn danger"
-              disabled={busy}
-              onClick={() => void decide('reject')}
-            >
-              <Icon name="reject" /> {t('review.send')}
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => {
-                setMode('idle');
-                setError(null);
+      <div className="card decision-card">
+        <div className="card-head">
+          <h3>{t('review.decision')}</h3>
+        </div>
+        <div className="card-body col">
+          <label className="field">
+            {t('review.noteLabel')}
+            <span className="hint">{t('review.noteHint')}</span>
+            <textarea
+              ref={noteRef}
+              className="input"
+              rows={3}
+              maxLength={2000}
+              value={note}
+              placeholder={t('review.notePlaceholder')}
+              onChange={(e) => {
+                setNote(e.target.value);
               }}
-            >
-              {t('common.cancel')}
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              className="btn primary"
-              disabled={busy}
-              aria-keyshortcuts="A"
-              onClick={() => void decide('approve')}
-            >
-              <Icon name="check" /> {t('review.approve', { what: props.what })}
-            </button>
-            <button
-              type="button"
-              className="btn"
-              disabled={busy}
-              aria-keyshortcuts="R"
-              onClick={() => {
+            />
+          </label>
+          <button
+            type="button"
+            className="btn primary lg"
+            disabled={busy}
+            aria-keyshortcuts="A"
+            onClick={() => void decide('approve')}
+          >
+            <Icon name="check" /> {t('review.approve', { what: props.what })}{' '}
+            <kbd aria-hidden="true">A</kbd>
+          </button>
+          {checklist.unchecked > 0 && (
+            <p className="t-12 muted">
+              {t('review.uncheckedHint', { count: checklist.unchecked })}
+            </p>
+          )}
+          <button
+            type="button"
+            className="btn lg"
+            disabled={busy}
+            aria-keyshortcuts="R"
+            onClick={() => {
+              if (mode === 'changes' || note.trim()) {
+                void decide('reject');
+              } else {
                 setMode('changes');
+                setError(t('review.noteRequired'));
                 setTimeout(() => noteRef.current?.focus(), 0);
-              }}
-            >
-              <Icon name="reject" /> {t('review.requestChanges')}
-            </button>
-          </>
-        )}
+              }
+            }}
+          >
+            <Icon name="message" /> {t('review.requestChanges')} <kbd aria-hidden="true">R</kbd>
+          </button>
+          {error && (
+            <p className="err-text" role="alert">
+              {error}
+            </p>
+          )}
+          <p className="t-12 muted">{t('review.afterApprove')}</p>
+        </div>
       </div>
-      <p className="muted small-text review-keys">{t('review.keys')}</p>
-      {error && (
-        <p className="form-error" role="alert">
-          {error}
-        </p>
-      )}
     </section>
   );
 }

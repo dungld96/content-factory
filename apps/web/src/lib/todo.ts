@@ -40,14 +40,14 @@ const GATES: Partial<
     gate: 1,
     reason: 'todo.reason.script',
     action: 'todo.action.reviewScript',
-    hash: '#script',
+    hash: '#script?focus=1',
     priority: 20,
   },
   storyboard_review: {
     gate: 2,
     reason: 'todo.reason.storyboard',
     action: 'todo.action.reviewStoryboard',
-    hash: '#storyboard',
+    hash: '#storyboard?focus=1',
     priority: 21,
   },
   asset_review: {

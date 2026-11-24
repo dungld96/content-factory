@@ -86,14 +86,22 @@ export function StageRail(props: {
             })
           : t('ws.allDone')}
       </p>
-      <div className="stage-rail" role="tablist" aria-label={t('ws.stages')} onKeyDown={onKeyDown}>
-        {stages.map((stage, i) => (
+      <div className="rail" role="tablist" aria-label={t('ws.stages')} onKeyDown={onKeyDown}>
+        {stages.map((stage) => (
           <button
             key={stage.id}
             id={`tab-${stage.id}`}
             type="button"
             role="tab"
-            className={`stage ${stage.state}`}
+            className={
+              stage.state === 'done'
+                ? 'done'
+                : stage.state === 'current'
+                  ? 'now'
+                  : stage.state === 'locked'
+                    ? 'locked'
+                    : undefined
+            }
             aria-selected={stage.id === active}
             aria-controls={`panel-${stage.id}`}
             tabIndex={stage.id === active ? 0 : -1}
@@ -101,18 +109,22 @@ export function StageRail(props: {
               select(stage.id);
             }}
           >
-            <span className="stage-circle" aria-hidden="true">
-              {stage.state === 'done' ? <Icon name="check" size={14} /> : i + 1}
+            <span className="st">
+              <span className="mk" aria-hidden="true">
+                {stage.state === 'done' ? (
+                  <Icon name="check" size={11} />
+                ) : stage.state === 'current' ? (
+                  <Icon name="resume" size={11} />
+                ) : null}
+              </span>
+              {stage.label}
+              {stage.gate && (
+                <span className={stage.state === 'done' ? 'gate ok' : 'gate'}>{stage.gate}</span>
+              )}
             </span>
-            <span className="stage-text">
-              <b>
-                {stage.label}
-                {stage.badge && <span className="chip-count">{stage.badge}</span>}
-              </b>
-              <small>
-                {stage.gate && <span className="stage-gate">{stage.gate}</span>}
-                {stage.note}
-              </small>
+            <span className="sub">
+              {stage.badge ? `${stage.badge} · ` : ''}
+              {stage.note}
             </span>
           </button>
         ))}

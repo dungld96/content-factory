@@ -3,7 +3,6 @@
 import { useSyncExternalStore } from 'react';
 
 import { useT } from '@/components/i18n-provider';
-import { Icon } from '@/components/icon';
 
 export interface CheckItem {
   readonly id: string;
@@ -79,20 +78,17 @@ export function ReviewChecklist(props: {
   readonly state: ReturnType<typeof useChecklist>;
 }) {
   const t = useT();
-  const { checked, toggle, checkAll } = props.state;
+  const { checked, toggle } = props.state;
   const done = props.items.filter((i) => checked.has(i.id)).length;
   return (
     <fieldset className="review-checklist">
-      <legend>
-        {t('review.checklist')}{' '}
-        <span className="muted small-text">
-          {t('review.checked', { done, total: props.items.length })}
-        </span>
+      <legend className="sr-only">
+        {t('review.checklist')} · {t('review.checked', { done, total: props.items.length })}
       </legend>
-      <ul>
+      <ul className="col">
         {props.items.map((item) => (
-          <li key={item.id}>
-            <label className="checkbox">
+          <li key={item.id} className={checked.has(item.id) ? 'claim on' : 'claim'}>
+            <label>
               <input
                 type="checkbox"
                 checked={checked.has(item.id)}
@@ -100,23 +96,14 @@ export function ReviewChecklist(props: {
                   toggle(item.id);
                 }}
               />
-              <span>
-                {item.label}
-                {item.auto && <small className="muted"> · {t('review.auto')}</small>}
+              <span className="col claim-text">
+                <b>{item.label}</b>
+                {item.auto && <span className="t-12 muted">{t('review.auto')}</span>}
               </span>
             </label>
           </li>
         ))}
       </ul>
-      <button
-        type="button"
-        className="btn small ghost"
-        onClick={checkAll}
-        disabled={done === props.items.length}
-        aria-keyshortcuts="C"
-      >
-        <Icon name="check" /> {t('review.checkAll')}
-      </button>
     </fieldset>
   );
 }

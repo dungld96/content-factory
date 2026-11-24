@@ -979,3 +979,468 @@
   gap: 2px;
   min-width: 0;
 }
+
+/* --- Content workspace (canvas "Workspace") -------------------------------------------------- */
+.ds .ws-title {
+  gap: 6px;
+}
+
+.ds .ws-title .row {
+  gap: 10px;
+}
+
+.ds .ws-title p {
+  margin: 0;
+}
+
+.ds .ws-head-actions {
+  gap: 8px;
+}
+
+.ds .ws-spend {
+  gap: 2px;
+  text-align: right;
+  padding-right: 8px;
+}
+
+.ds .ws-spend b {
+  font-weight: 700;
+}
+
+.ds .rail {
+  display: flex;
+  align-items: stretch;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow-x: auto;
+  margin: 0;
+}
+
+.ds .rail > button {
+  flex: 1 1 0;
+  min-width: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-2);
+  position: relative;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ds .rail > button:last-child {
+  border-right: 0;
+}
+
+.ds .rail > button:hover {
+  background: var(--surface-2);
+}
+
+.ds .rail > button[aria-selected='true'] {
+  background: var(--accent-soft);
+}
+
+.ds .rail > button[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--accent);
+}
+
+.ds .rail > button.locked .st {
+  color: var(--muted);
+}
+
+.ds .rail .mk .icon {
+  width: 11px;
+  height: 11px;
+}
+
+.ds .rail .sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ds [role='tabpanel'] {
+  margin-top: 16px;
+}
+
+.ds .actionbar {
+  margin-top: 16px;
+}
+
+.ds .actionbar .actionbar-icon {
+  color: #ff8d9b;
+  flex: none;
+}
+
+.ds .actionbar-text {
+  gap: 2px;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.ds .actionbar-detail {
+  font-size: 13px;
+  color: color-mix(in srgb, var(--surface) 72%, transparent);
+}
+
+.ds .actionbar a.btn.primary {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--surface);
+}
+
+.ds .stage-compact {
+  display: none;
+}
+
+.ds .ws-bottom {
+  gap: 16px;
+  align-items: stretch;
+}
+
+.ds .ws-cost {
+  flex: 1 1 360px;
+}
+
+.ds .ws-cost .card-body {
+  gap: 12px;
+}
+
+.ds .ws-cost .kv {
+  margin: 0;
+}
+
+.ds .ws-activity {
+  flex: 2 1 480px;
+}
+
+.ds .ws-activity .card-body {
+  gap: 10px;
+}
+
+.ds .ev {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.ds .ev .d {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex: none;
+  background: var(--accent);
+}
+
+.ds .export-panel {
+  gap: 10px;
+  align-items: flex-start;
+}
+
+/* Scene board (U1) in the canvas table style. */
+.ds .scene-board {
+  padding: 0;
+  overflow: hidden;
+}
+
+.ds .scene-board > .section-head {
+  padding: 16px 20px 4px;
+  margin: 0;
+}
+
+.ds .scene-board .board-filters {
+  padding: 0 20px 12px;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.ds .scene-board .chip.active {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--surface);
+}
+
+.ds .scene-board .board-head {
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.ds .scene-board .board-row {
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  margin: 0;
+}
+
+.ds .scene-board .board-row.focused {
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
+}
+
+@media (width <= 760px) {
+  .ds .stage-compact {
+    display: block;
+  }
+}
+
+.ds .scene-board .board-head,
+.ds .scene-board .board-row {
+  padding: 10px 20px;
+}
+
+/* Only the stage being viewed is underlined; the current stage keeps its accent marker. */
+.ds .rail > button.now:not([aria-selected='true']) {
+  background: transparent;
+}
+
+.ds .rail > button.now:not([aria-selected='true'])::after {
+  display: none;
+}
+
+/* --- Focus review (canvas "Gate 1 · Script review") ------------------------------------------ */
+.ds .focus-review {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ds .focus-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--review-bg);
+}
+
+.ds .focus-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.ds .focus-main {
+  flex: 999 1 520px;
+  min-width: 0;
+}
+
+.ds .focus-side {
+  flex: 1 1 300px;
+  min-width: 0;
+  gap: 16px;
+}
+
+.ds .focus-side .review-panel {
+  margin: 0;
+}
+
+.ds .focus-brief .card-body {
+  gap: 10px;
+}
+
+.ds .focus-review.open {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: var(--bg);
+  overflow-y: auto;
+  gap: 0;
+}
+
+.ds .focus-review.open .focus-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 8px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.ds .focus-title {
+  gap: 2px;
+}
+
+.ds .focus-review.open .focus-body {
+  padding: 24px 32px 48px;
+  max-width: 1360px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.ds .focus-review.open .focus-main {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  padding: 20px;
+}
+
+.ds .focus-review.open .focus-side {
+  position: sticky;
+  top: 84px;
+}
+
+body.focus-open {
+  overflow: hidden;
+}
+
+@media (width <= 760px) {
+  .ds .focus-review.open .focus-body {
+    padding: 16px;
+  }
+
+  .ds .focus-review.open .focus-side {
+    position: static;
+  }
+}
+
+/* Review side cards (canvas "Before you approve" and "Decision"). */
+.ds .review-panel {
+  gap: 16px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.ds .review-panel .card-head h3 {
+  font-size: 16px;
+}
+
+.ds .check-card .card-body,
+.ds .decision-card .card-body {
+  gap: 10px;
+}
+
+.ds .review-checklist {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.ds .review-checklist ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+}
+
+.ds .claim label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.ds .claim:not(.on) label {
+  border-color: var(--review);
+  background: var(--review-bg);
+  box-shadow: 0 0 0 1px var(--review);
+}
+
+.ds .claim input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
+  flex: none;
+}
+
+.ds .claim-text {
+  gap: 2px;
+  font-size: 13px;
+}
+
+.ds .decision-card .btn.lg {
+  width: 100%;
+}
+
+.ds .decision-card .btn kbd {
+  margin-left: auto;
+}
+
+/* Script sections as in the canvas: separated by rules, small uppercase labels. */
+.ds .focus-main .section-head {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0;
+}
+
+.ds .focus-main .script-block {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding: 16px 0;
+  margin: 0;
+}
+
+.ds .focus-main .script-block:last-child {
+  border-bottom: 0;
+}
+
+.ds .focus-main .script-block-head h3 {
+  font: 700 12px var(--font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ds .focus-main .script-block p {
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* Scene board header: title and filter chips on one row (canvas). */
+.ds .scene-board {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ds .scene-board > .section-head {
+  flex: 0 1 auto;
+  padding: 14px 12px 14px 20px;
+  border-bottom: 1px solid var(--line);
+  align-self: stretch;
+}
+
+.ds .scene-board > .section-head p {
+  display: none;
+}
+
+.ds .scene-board > .board-filters {
+  flex: 1 1 300px;
+  padding: 14px 20px 14px 0;
+  align-self: stretch;
+  align-items: center;
+}
+
+.ds .scene-board > :not(.section-head, .board-filters) {
+  flex: 1 1 100%;
+}

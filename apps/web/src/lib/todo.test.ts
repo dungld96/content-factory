@@ -31,7 +31,7 @@ describe('buildTodo (R2)', () => {
       null,
     );
     expect(items.map((i) => [i.id, i.action, i.href])).toEqual([
-      ['gate:a', 'todo.action.reviewScript', '/content/a#script'],
+      ['gate:a', 'todo.action.reviewScript', '/content/a#script?focus=1'],
       ['gate:b', 'todo.action.reviewRender', '/content/b#render'],
     ]);
   });
