@@ -2405,3 +2405,103 @@ body.focus-open {
 .ds .focus-previous {
   gap: 12px;
 }
+
+/* --- Settings › Budgets and Models (canvas) -------------------------------------------------- */
+.ds .budgets-settings {
+  gap: 16px;
+}
+
+.ds .setting-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.ds .setting-row.locked {
+  background: var(--surface-2);
+  align-items: center;
+}
+
+.ds .setting-text {
+  gap: 2px;
+  flex: 1 1 300px;
+}
+
+.ds .spending-form {
+  gap: 6px;
+  flex: 0 1 220px;
+}
+
+.ds .input.money {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  width: 140px;
+}
+
+.ds .input.money input {
+  border: 0;
+  outline: none;
+  background: transparent;
+  width: 100%;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.ds .input.money:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.ds .override-cell {
+  gap: 4px;
+}
+
+.ds .table .sw {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.ds .budgets-notes {
+  gap: 16px;
+  align-items: stretch;
+}
+
+.ds .budgets-notes > .card {
+  flex: 1 1 320px;
+  gap: 10px;
+}
+
+.ds .import-form {
+  gap: 12px;
+}
+
+.ds .import-diff {
+  gap: 8px;
+}
+
+.ds .diff {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+}
+
+.ds .diff summary {
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ds .diff ul {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  gap: 8px;
+}

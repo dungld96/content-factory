@@ -107,9 +107,18 @@ test('owner: cost-confirmation threshold per project, workspace default for oper
   await form.getByRole('button', { name: 'Save budget' }).click();
   await expect(page.getByText('Budget saved.')).toBeVisible();
   await page.goto('/settings/budgets');
-  await expect(page.getByRole('table', { name: 'Project overrides' })).toContainText(
-    '$0.50 (project)',
-  );
+  const overrides = page.getByRole('table', { name: 'Project overrides' });
+  await expect(overrides).toContainText('$0.50 (project)');
+  // Inline edit (canvas): invalid values are refused, Enter saves.
+  const inline = overrides.getByLabel('Confirm above for Demo Studio (USD)');
+  await expect(inline).toHaveValue('0.5');
+  await inline.fill('-2');
+  await inline.press('Enter');
+  await expect(overrides.getByRole('alert')).toContainText('at most two decimals');
+  await inline.fill('0.75');
+  await inline.press('Enter');
+  await expect(page.getByText('Threshold of Demo Studio saved.')).toBeVisible();
+  await expect(overrides).toContainText('$0.75 (project)');
   // Restore: the workspace threshold applies again.
   await openCosts(page);
   await page

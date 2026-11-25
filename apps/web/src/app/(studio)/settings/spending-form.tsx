@@ -39,10 +39,14 @@ export function SpendingForm(props: { readonly thresholdUsd: string; readonly ca
   }
 
   return (
-    <form className="form" aria-label={t('set.threshold')} onSubmit={(e) => void save(e)}>
+    <form
+      className="col spending-form"
+      aria-label={t('set.threshold')}
+      onSubmit={(e) => void save(e)}
+    >
       <label className="field">
         {t('set.workspaceThreshold')}
-        <span className="input-prefix">
+        <span className="input money">
           <span aria-hidden="true">$</span>
           <input
             inputMode="decimal"
@@ -56,20 +60,17 @@ export function SpendingForm(props: { readonly thresholdUsd: string; readonly ca
           />
         </span>
       </label>
-      <p id="threshold-hint" className="muted small-text">
+      <p id="threshold-hint" className="t-12 muted">
         {props.canEdit ? t('set.thresholdInvalid') : t('set.thresholdOperators')}
       </p>
-      <label className="checkbox">
-        <input type="checkbox" checked disabled readOnly /> {t('set.unknownAlways')}
-      </label>
       {error && (
-        <p className="form-error" role="alert">
+        <p className="err-text" role="alert">
           {error}
         </p>
       )}
       {props.canEdit && (
-        <div className="form-actions">
-          <button type="submit" className="btn primary" disabled={busy}>
+        <div className="row">
+          <button type="submit" className="btn sm primary" disabled={busy}>
             {busy ? t('common.saving') : t('common.save')}
           </button>
         </div>

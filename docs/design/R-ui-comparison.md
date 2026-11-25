@@ -30,7 +30,7 @@ system. The theme follows the system, or the sidebar moon/sun toggle (`acf_theme
 | Library | `/assets` | Matches: collections and types rail, chips, grid/list, asset cards with review state, details and lineage panel |
 | Operations | `/operations` | Matches: health cards, Needs attention with recovery actions, queues with load, last 24 hours with budgets |
 | Costs & budgets | `/costs` | Matches: four KPIs, spend per month, budgets with spent/reserved meters, most expensive items |
-| Settings (Models, Budgets, Language) | `/settings/*` | Matches: grouped section menu, section as page heading; section bodies keep their existing forms |
+| Settings (Models, Budgets, Language) | `/settings/*` | Matches: grouped section menu, section as page heading. Budgets: Ask before spending card, per-project overrides edited inline (owners), what people will see, validation. Models: Import from OpenRouter opens a dialog; the preview card groups new / to update / cannot be imported, with Discard and Apply n changes |
 
 ## Remaining differences (data or not yet built)
 
@@ -39,8 +39,8 @@ system. The theme follows the system, or the sidebar moon/sun toggle (`acf_theme
   - worker heartbeats and media tool health on Operations (the canvas "Workers", "Media tools" cards);
   - stacked spend per capability per month (the chart shows monthly totals; this month by stage is in the table view).
 - **Interactions not built yet:**
-  - import preview diff card in Settings › Models;
-  - inline per-project overrides in Settings › Budgets (edited on the project Costs tab);
+  - per-price old → new values in the import preview (the import API returns a summary per model, not the old and new prices);
+  - "Also confirm when a project budget would drop below 20 %" (no such setting in the API; budgets warn at 80 %);
   - "Regenerate with a note" on keyframes (the image API takes no note; "more candidates" regenerates);
   - "Reject & stop this item" in the Decision card (rejection asks for changes; stopping is Cancel run).
 - **Intentional:**

@@ -38,6 +38,7 @@ import { ActivityPanel, ModelsPanel, ProvidersPanel, RoutesPanel } from '../ai-s
 import { ImportModelsPanel } from '../model-admin';
 import { ProfileLanguage } from '../profile-language';
 import { SectionSelect } from '../section-select';
+import { OverrideTable, type OverrideRow } from '../override-table';
 import { SpendingForm } from '../spending-form';
 
 export const dynamic = 'force-dynamic';
@@ -282,65 +283,92 @@ async function BudgetsSection(props: {
     return <p className="notice error">{t('set.thresholdError')}</p>;
   }
   const workspace = spending.data.confirmThresholdUsd;
+  const rows: OverrideRow[] = props.list.map((p, i) => {
+    const b = budgets[i];
+    return {
+      projectId: p.id,
+      name: p.name,
+      canEdit: p.role === 'owner' && p.archivedAt === null,
+      overrideUsd: b?.kind === 'ok' ? b.data.confirmThresholdUsd : null,
+      monthlyLimitUsd: b?.kind === 'ok' ? b.data.monthly.limitUsd : null,
+    };
+  });
+  const example = rows[0];
+  const exampleUsd = example?.overrideUsd ?? workspace;
+  const below = (Number(exampleUsd) * 0.8).toFixed(2);
+  const above = (Number(exampleUsd) * 1.25 + 0.01).toFixed(2);
   return (
-    <div className="settings-columns">
-      <section className="card card-pad" aria-labelledby="threshold">
-        <div className="section-head">
-          <div>
-            <h3 id="threshold">{t('set.threshold')}</h3>
-            <p>{t('set.thresholdHint')}</p>
+    <div className="col budgets-settings">
+      <section className="card" aria-labelledby="threshold">
+        <div className="card-head">
+          <Icon name="shield" size={20} />
+          <h3 id="threshold">{t('set.askBefore')}</h3>
+          <span className="badge neutral">{t('set.workspaceDefaultBadge')}</span>
+        </div>
+        <div className="card-body col">
+          <div className="setting-row">
+            <div className="col setting-text">
+              <b>{t('set.threshold')}</b>
+              <span className="t-13 muted">{t('set.thresholdHint')}</span>
+            </div>
+            <SpendingForm thresholdUsd={workspace} canEdit={props.isOperator} />
+          </div>
+          <div className="setting-row locked">
+            <span className="switch on" aria-hidden="true" />
+            <div className="col setting-text">
+              <b className="row">
+                {t('set.unknownAlways')} <Icon name="lock" size={13} />
+              </b>
+              <span className="t-13 muted">{t('set.unknownAlwaysHint')}</span>
+            </div>
           </div>
         </div>
-        <SpendingForm thresholdUsd={workspace} canEdit={props.isOperator} />
       </section>
-      <section className="card card-pad" aria-labelledby="overrides">
-        <div className="section-head">
-          <div>
-            <h3 id="overrides">{t('set.projectOverrides')}</h3>
-            <p>{t('set.projectOverridesHint')}</p>
-          </div>
+
+      <section className="card" aria-labelledby="overrides">
+        <div className="card-head">
+          <h3 id="overrides">{t('set.projectOverrides')}</h3>
+          <span className="t-13 muted">{t('set.overridesEmpty')}</span>
         </div>
         {props.list.length === 0 ? (
-          <p className="muted small-text">{t('set.noProject')}</p>
-        ) : (
-          <div className="table-wrap">
-            <table className="table" aria-label={t('set.projectOverrides')}>
-              <thead>
-                <tr>
-                  <th scope="col">{t('set.colProject')}</th>
-                  <th scope="col">{t('set.colThreshold')}</th>
-                  <th scope="col">
-                    <span className="sr-only">{t('set.edit')}</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {props.list.map((p, i) => {
-                  const b = budgets[i];
-                  const override = b?.kind === 'ok' ? b.data.confirmThresholdUsd : null;
-                  return (
-                    <tr key={p.id}>
-                      <td className="table-title">{p.name}</td>
-                      <td>
-                        {override === null
-                          ? t('set.workspaceDefault', { amount: formatUsd(workspace) })
-                          : t('set.override', { amount: formatUsd(override) })}
-                      </td>
-                      <td>
-                        {p.role === 'owner' && (
-                          <Link className="link" href={`/projects/${p.id}/costs#budget-limits`}>
-                            {t('set.edit')}
-                          </Link>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="card-body">
+            <p className="muted t-13">{t('set.noProject')}</p>
           </div>
+        ) : (
+          <OverrideTable rows={rows} workspaceUsd={workspace} />
         )}
       </section>
+
+      {example && (
+        <div className="row wrap budgets-notes">
+          <section className="card pad col" aria-labelledby="see">
+            <span className="eyebrow" id="see">
+              {t('set.whatSee', { project: example.name, amount: formatUsd(exampleUsd) })}
+            </span>
+            <div className="row t-13">
+              <span className="badge success">~{formatUsd(below)}</span>
+              {t('set.seeBelow')}
+            </div>
+            <div className="row t-13">
+              <span className="badge review">~{formatUsd(above)}</span>
+              {t('set.seeAbove', { amount: formatUsd(exampleUsd) })}
+            </div>
+            <div className="row t-13">
+              <span className="badge review outline">
+                <Icon name="dollar" size={13} />? {t('set.unknownShort')}
+              </span>
+              {t('set.seeUnknown')}
+            </div>
+          </section>
+          <section className="card pad col" aria-labelledby="storage">
+            <span className="eyebrow" id="storage">
+              {t('set.validation')}
+            </span>
+            <p className="t-13">{t('set.validationText')}</p>
+            <p className="t-13 muted">{t('set.storageText')}</p>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -469,7 +497,7 @@ async function AiSection(props: {
       )}
       {props.section === 'models' && (
         <>
-          {props.isOperator && <ImportModelsPanel />}
+          {props.isOperator && <ImportModelsPanel known={modelList.map((m) => m.modelKey)} />}
           <ModelsPanel models={modelList} providers={providerList} isOperator={props.isOperator} />
         </>
       )}
