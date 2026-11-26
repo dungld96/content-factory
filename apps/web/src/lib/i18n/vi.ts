@@ -1052,6 +1052,26 @@ export const VI: Readonly<Record<keyof typeof EN, string>> = {
   'ai.routesHint':
     'Model mặc định của mỗi bước sản xuất. Thay đổi áp dụng cho yêu cầu mới; job đang chờ giữ model cũ.',
   'ai.colStep': 'Bước',
+  'gw.title': 'Đổi gateway',
+  'gw.hint':
+    'Chuyển mọi bước sang một gateway cùng lúc. Xem trước sẽ gợi ý model tương đương cho từng bước; đổi bước nào cũng được, rồi áp dụng. Bước nào không có model dùng được ở đó thì giữ nguyên.',
+  'gw.target': 'Gateway',
+  'gw.notReady': 'chưa sẵn sàng',
+  'gw.notReadyText':
+    '{name} đang tắt hoặc chưa có key trong bản triển khai này: chưa bước nào chuyển sang được. Bật nó ở trên và thêm key vào biến môi trường của server.',
+  'gw.preview': 'Xem trước',
+  'gw.planLabel': 'Kế hoạch đổi gateway',
+  'gw.now': 'Hiện tại',
+  'gw.after': 'Trên {name}',
+  'gw.keep': 'Giữ như cũ',
+  'gw.kept.already_on_gateway': 'Đã ở gateway này',
+  'gw.kept.no_candidate': 'Không có model nào đang bật — giữ nguyên',
+  'gw.kept.zdr_required': 'Cần zero-data-retention — giữ nguyên',
+  'gw.kept.not_chosen': 'Không tìm thấy model tương đương: chọn một model hoặc giữ như cũ.',
+  'gw.costNote':
+    'Giá khác nhau giữa các gateway. MixRoute không báo chi phí từng lần gọi: các lần gọi qua MixRoute được ghi theo giá ước tính.',
+  'gw.apply': 'Chuyển {count} bước',
+  'gw.done': '{count} bước đã chuyển sang {name}.',
   'ai.colModel': 'Model',
   'ai.colProvider': 'Nhà cung cấp',
   'ai.colStatus': 'Trạng thái',
@@ -1121,7 +1141,7 @@ export const VI: Readonly<Record<keyof typeof EN, string>> = {
   'import.action.unchanged': 'không đổi',
   'import.action.refused': 'bị từ chối',
   'import.done': 'Đã nhập xong. Model mới sẽ tắt cho tới khi bạn bật.',
-  'import.open': 'Import từ OpenRouter',
+  'import.open': 'Import model',
   'import.previewTitle': 'Xem trước import',
   'import.appliedTitle': 'Đã import',
   'import.previewNote': 'lấy lúc {time} · chưa thay đổi gì cho đến khi áp dụng',
@@ -1137,9 +1157,14 @@ export const VI: Readonly<Record<keyof typeof EN, string>> = {
   'import.refusedCount': '{count} không import được',
   'import.refusedText':
     'Không có trong catalog hoặc thiếu dữ liệu dùng được; không ghi gì cho chúng',
-  'import.title': 'Nhập từ OpenRouter',
+  'import.title': 'Nhập model',
   'import.hint':
-    'Đọc danh mục công khai (không cần key, không tốn phí). Xem trước đã; khi nhập sẽ tạo model ở trạng thái tắt và thêm giá mới, không sửa giá cũ.',
+    'Đọc danh mục của gateway (không cần key, không tốn phí). Xem trước đã; khi nhập sẽ tạo model ở trạng thái tắt và thêm giá mới, không sửa giá cũ.',
+  'import.gateway': 'Gateway',
+  'import.gw.openrouter': 'OpenRouter (danh mục công khai)',
+  'import.gw.mixroute': 'MixRoute (mọi model văn bản; ảnh: Seedream, Gemini)',
+  'import.keysHintMixroute':
+    '(mã MixRoute như trên mixroute.ai/models, ví dụ qwen3-max. Model ngoài danh sách đã xác minh chưa có giá: thêm bằng "Thêm giá")',
   'import.catalog': 'Danh mục',
   'import.keys': 'Mã model',
   'import.keysHint': '(tác giả/slug, mỗi dòng một mã, tối đa 10)',

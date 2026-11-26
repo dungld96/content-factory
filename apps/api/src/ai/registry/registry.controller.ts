@@ -19,6 +19,10 @@ import {
   aiTaskParamsSchema,
   paginationQuerySchema,
   setAiRouteRequestSchema,
+  switchAiGatewayRequestSchema,
+  switchAiGatewayResponseSchema,
+  type SwitchAiGatewayRequest,
+  type SwitchAiGatewayResponseDto,
   updateAiModelRequestSchema,
   updateAiProviderRequestSchema,
   type AiProviderDto,
@@ -155,6 +159,25 @@ export class RegistryController {
     @ValidParams() params: z.infer<typeof aiProviderKeyParamsSchema>,
   ): Promise<AiProviderKeyCheckDto> {
     return this.settings.testProvider(actor, params.providerKey);
+  }
+
+  @Post('gateways/:providerKey/switch')
+  @HttpCode(200)
+  @Endpoint({
+    summary:
+      'Preview or apply moving every task to one gateway (operators; tasks without an equivalent model stay)',
+    tags: ['ai'],
+    params: aiProviderKeyParamsSchema,
+    body: switchAiGatewayRequestSchema,
+    responses: { 200: { description: 'Plan or outcome', schema: switchAiGatewayResponseSchema } },
+    errors: [400, 401, 403, 404, 422],
+  })
+  switchGateway(
+    @CurrentActor() actor: Actor,
+    @ValidParams() params: z.infer<typeof aiProviderKeyParamsSchema>,
+    @ValidBody() body: SwitchAiGatewayRequest,
+  ): Promise<SwitchAiGatewayResponseDto> {
+    return this.settings.switchGateway(actor, params.providerKey, body);
   }
 
   @Patch('models/:modelId')

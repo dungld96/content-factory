@@ -200,6 +200,36 @@ describe('loadApiEnv', () => {
       );
     });
 
+    it('leaves MixRoute unconfigured by default and accepts its key (P5)', () => {
+      const unset = loadApiEnv({ ...valid, MIXROUTE_API_KEY: '' });
+      expect(unset.MIXROUTE_API_KEY).toBeUndefined();
+      expect(unset).toMatchObject({
+        MIXROUTE_BASE_URL: 'https://api.mixroute.ai/v1',
+        MIXROUTE_TIMEOUT_MS: 120_000,
+        MIXROUTE_IMAGE_TIMEOUT_MS: 240_000,
+      });
+      const set = loadApiEnv({ ...valid, MIXROUTE_API_KEY: ' sk-0123456789abcdefXYZ ' });
+      expect(set.MIXROUTE_API_KEY).toBe('sk-0123456789abcdefXYZ');
+    });
+
+    it.each([
+      ['a MixRoute key that is not sk-…', { MIXROUTE_API_KEY: 'mr-0123456789abcdef' }],
+      [
+        'an http MixRoute base URL in production',
+        {
+          NODE_ENV: 'production',
+          SESSION_COOKIE_SECURE: 'true',
+          MIXROUTE_BASE_URL: 'http://mixroute.example/v1',
+        },
+      ],
+    ])('rejects %s', (_name, overrides) => {
+      expect(() => loadApiEnv({ ...valid, ...overrides })).toThrow(
+        expect.objectContaining({
+          message: expect.stringContaining('MIXROUTE_') as string,
+        }) as Error,
+      );
+    });
+
     it('never echoes the key in errors', () => {
       const bad = 'sk-or-v1-has spaces and secrets';
       expect(() => loadApiEnv({ ...valid, OPENROUTER_API_KEY: bad })).toThrow(

@@ -33,5 +33,7 @@ STORAGE_ADMIN_ACCESS_KEY_ID=acf_admin_$(openssl rand -hex 6)
 STORAGE_ADMIN_SECRET_ACCESS_KEY=$(rand)
 # Optional, paid: real LLM calls. Set it, then: ./acf.sh up -d api worker
 OPENROUTER_API_KEY=
+# Optional, paid: the MixRoute gateway (P5). Switch steps to it in Settings › AI.
+MIXROUTE_API_KEY=
 ENV
 echo "✔ wrote $out (site: https://$site)"

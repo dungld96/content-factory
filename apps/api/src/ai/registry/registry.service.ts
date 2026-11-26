@@ -28,7 +28,7 @@ import { keysetAfter, NEWEST_FIRST, toPage } from '../../common/http/pagination.
 import { PrismaService } from '../../infrastructure/prisma.service.js';
 import { IMAGE_PROVIDERS, LLM_PROVIDERS, TTS_PROVIDERS, VIDEO_PROVIDERS } from '../ai.tokens.js';
 
-const ROUTED_TASKS: readonly AiTask[] = [
+export const ROUTED_TASKS: readonly AiTask[] = [
   'script_generation',
   'storyboard_generation',
   'image_generation',

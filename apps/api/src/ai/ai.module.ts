@@ -4,6 +4,7 @@ import type { ImageProvider, LlmProvider, TtsProvider, VideoProvider } from '@ac
 import {
   createImageProviders,
   createKeyChecks,
+  createModelListings,
   createLlmProviders,
   createTtsProviders,
   createVideoProviders,
@@ -22,6 +23,7 @@ import {
   IMAGE_PROVIDERS,
   KEY_CHECKS,
   LLM_PROVIDERS,
+  MODEL_LISTINGS,
   TTS_PROVIDERS,
   VIDEO_PROVIDERS,
 } from './ai.tokens.js';
@@ -56,6 +58,11 @@ import { RegistryService } from './registry/registry.service.js';
       provide: KEY_CHECKS,
       inject: [API_ENV],
       useFactory: (env: ApiEnv) => createKeyChecks(env),
+    },
+    {
+      provide: MODEL_LISTINGS,
+      inject: [API_ENV],
+      useFactory: (env: ApiEnv) => createModelListings(env),
     },
     {
       provide: TTS_PROVIDERS,
@@ -122,7 +129,7 @@ import { RegistryService } from './registry/registry.service.js';
         env: ApiEnv,
       ) =>
         new LlmService(prisma.client, catalog, providers, {
-          providerTimeoutMs: env.OPENROUTER_TIMEOUT_MS,
+          providerTimeoutMs: Math.max(env.OPENROUTER_TIMEOUT_MS, env.MIXROUTE_TIMEOUT_MS),
         }),
     },
     RegistryService,

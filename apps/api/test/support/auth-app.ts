@@ -23,6 +23,7 @@ import type { ImageProvider, LlmProvider, TtsProvider, VideoProvider } from '@ac
 import {
   IMAGE_PROVIDERS,
   LLM_PROVIDERS,
+  MODEL_LISTINGS,
   TTS_PROVIDERS,
   VIDEO_PROVIDERS,
 } from '../../src/ai/ai.tokens.js';
@@ -136,6 +137,8 @@ export interface StartAuthAppOptions {
   /** Replaces the configured video and TTS adapters (M5). */
   readonly videoProviders?: ReadonlyMap<string, VideoProvider>;
   readonly ttsProviders?: ReadonlyMap<string, TtsProvider>;
+  /** Replaces the gateway model listings (P5: MixRoute ids without a network call). */
+  readonly modelListings?: ReadonlyMap<string, (signal?: AbortSignal) => Promise<string[]>>;
 }
 
 export async function startAuthApp(
@@ -169,6 +172,9 @@ export async function startAuthApp(
   }
   if (options.llmProviders) {
     builder = builder.overrideProvider(LLM_PROVIDERS).useValue(options.llmProviders);
+  }
+  if (options.modelListings) {
+    builder = builder.overrideProvider(MODEL_LISTINGS).useValue(options.modelListings);
   }
   const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication({ logger: false });

@@ -248,8 +248,11 @@ async function main(): Promise<number> {
     }
     const ai = await seedAiRegistry(prisma, {
       openrouterConfigured: Boolean(process.env['OPENROUTER_API_KEY']),
+      mixrouteConfigured: Boolean(process.env['MIXROUTE_API_KEY']),
     });
-    console.info(`✔ AI registry: openrouter ${ai.openrouterStatus}; mock provider enabled.`);
+    console.info(
+      `✔ AI registry: openrouter ${ai.openrouterStatus}; mixroute ${ai.mixrouteStatus}; mock provider enabled.`,
+    );
     for (const m of ai.models)
       console.info(`    ${m.modelKey}: ${m.action} (disabled until reviewed)`);
     return 0;

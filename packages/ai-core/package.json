@@ -16,6 +16,10 @@
     "./openrouter": {
       "types": "./dist/openrouter/index.d.ts",
       "default": "./dist/openrouter/index.js"
+    },
+    "./mixroute": {
+      "types": "./dist/mixroute/index.d.ts",
+      "default": "./dist/mixroute/index.js"
     }
   },
   "files": [

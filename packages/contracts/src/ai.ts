@@ -243,16 +243,23 @@ export type AiProviderKeyCheckDto = z.infer<typeof aiProviderKeyCheckSchema>;
 
 // --- P1d: model import and prices over HTTP (operators) ---------------------------------------
 
+/** Gateways with an import catalog (P5): OpenRouter's public API, MixRoute's curated list. */
+export const aiGatewayKeySchema = z.enum(['openrouter', 'mixroute']).meta({ id: 'AiGatewayKey' });
+export type AiGatewayKey = z.infer<typeof aiGatewayKeySchema>;
+
 export const importAiModelsRequestSchema = z
   .strictObject({
-    /** Which OpenRouter catalog to read. */
+    /** P5: whose catalog to read; default OpenRouter. MixRoute has text and image models only. */
+    gateway: aiGatewayKeySchema.default('openrouter'),
+    /** Which catalog to read. */
     catalog: z.enum(['llm', 'image', 'video', 'tts']),
+    /** OpenRouter keys are `author/slug`; MixRoute keys have no author (`gemini-3.5-flash`). */
     modelKeys: z
       .array(
         z
           .string()
           .trim()
-          .regex(/^[a-z0-9._-]+\/[a-z0-9._:-]+$/i, 'author/slug'),
+          .regex(/^[a-z0-9._-]+(\/[a-z0-9._:-]+)?$/i, 'model key'),
       )
       .min(1)
       .max(10),
@@ -260,6 +267,14 @@ export const importAiModelsRequestSchema = z
     tier: aiQualityTierSchema.optional(),
     /** false = preview only (nothing written); true = write models and new price rows. */
     apply: z.boolean(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.gateway !== 'openrouter') return;
+    v.modelKeys.forEach((key, i) => {
+      if (!key.includes('/')) {
+        ctx.addIssue({ code: 'custom', path: ['modelKeys', i], message: 'author/slug' });
+      }
+    });
   })
   .meta({ id: 'ImportAiModelsRequest' });
 export type ImportAiModelsRequest = z.output<typeof importAiModelsRequestSchema>;
@@ -298,3 +313,49 @@ export const addAiModelPriceRequestSchema = z
   })
   .meta({ id: 'AddAiModelPriceRequest' });
 export type AddAiModelPriceRequest = z.output<typeof addAiModelPriceRequestSchema>;
+
+// --- P5: switch every task to one gateway (operators) ------------------------------------------
+
+/**
+ * `POST /ai/gateways/:providerKey/switch`. Preview (`apply: false`) suggests, per task, the
+ * target gateway's equivalent model; apply routes every task that has a choice. `choices`
+ * overrides a suggestion (`null` = keep the task where it is).
+ */
+export const switchAiGatewayRequestSchema = z
+  .strictObject({
+    apply: z.boolean(),
+    choices: z.partialRecord(aiTaskSchema, z.string().min(1).max(200).nullable()).optional(),
+  })
+  .meta({ id: 'SwitchAiGatewayRequest' });
+export type SwitchAiGatewayRequest = z.output<typeof switchAiGatewayRequestSchema>;
+
+const gatewayModelRefSchema = z.object({ modelKey: z.string(), displayName: z.string() });
+
+export const switchAiGatewayResponseSchema = z
+  .object({
+    providerKey: z.string(),
+    applied: z.boolean(),
+    tasks: z.array(
+      z.object({
+        task: aiTaskSchema,
+        current: z
+          .object({ providerKey: z.string(), modelKey: z.string(), displayName: z.string() })
+          .nullable(),
+        /** Routable models of the target gateway for this task (enabled, configured, capable). */
+        candidates: z.array(gatewayModelRefSchema),
+        /** What the switch routes to: the choice, else the equivalent model; null = kept. */
+        target: gatewayModelRefSchema.nullable(),
+        /**
+         * Why the task stays: already on the gateway, no routable model there, or its route
+         * needs zero-data-retention, which the gateway cannot provide.
+         */
+        keptBecause: z
+          .enum(['already_on_gateway', 'no_candidate', 'zdr_required', 'not_chosen'])
+          .nullable(),
+        /** Set when applied. */
+        action: z.enum(['switched', 'kept']).nullable(),
+      }),
+    ),
+  })
+  .meta({ id: 'SwitchAiGatewayResponse' });
+export type SwitchAiGatewayResponseDto = z.infer<typeof switchAiGatewayResponseSchema>;

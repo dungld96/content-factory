@@ -1,11 +1,12 @@
 // Vendor key checks are constructed only here (ESLint `no-restricted-imports`, M2 P6).
 import type { KeyCheckResult } from '@acf/ai-core';
+import { checkMixRouteKey, MIXROUTE_PROVIDER_KEY } from '@acf/ai-core/mixroute';
 import { checkOpenRouterKey, OPENROUTER_PROVIDER_KEY } from '@acf/ai-core/openrouter';
 import type { AiProviderEnv } from '@acf/config';
 
 export type KeyCheck = (signal?: AbortSignal) => Promise<KeyCheckResult>;
 
-/** Free credential checks for the providers this deployment has keys for (P1 design O3). */
+/** Free credential checks for the providers this deployment has keys for (P1 design O3; P5). */
 export function createKeyChecks(env: AiProviderEnv): ReadonlyMap<string, KeyCheck> {
   const checks = new Map<string, KeyCheck>();
   const apiKey = env.OPENROUTER_API_KEY;
@@ -13,6 +14,15 @@ export function createKeyChecks(env: AiProviderEnv): ReadonlyMap<string, KeyChec
     checks.set(OPENROUTER_PROVIDER_KEY, (signal) =>
       checkOpenRouterKey(
         { apiKey, baseUrl: env.OPENROUTER_BASE_URL, timeoutMs: env.OPENROUTER_TIMEOUT_MS },
+        signal,
+      ),
+    );
+  }
+  const mixRouteKey = env.MIXROUTE_API_KEY;
+  if (mixRouteKey !== undefined) {
+    checks.set(MIXROUTE_PROVIDER_KEY, (signal) =>
+      checkMixRouteKey(
+        { apiKey: mixRouteKey, baseUrl: env.MIXROUTE_BASE_URL, timeoutMs: env.MIXROUTE_TIMEOUT_MS },
         signal,
       ),
     );

@@ -168,6 +168,11 @@ gates, live job events over SSE (ADR-0022) with a Jobs tray, configurable cost-c
 threshold, settings sub-routes. All slices implemented; lint, typecheck, unit, build, live/auth
 integration and E2E (EN, VI, phone) pass.
 
+**2026-11-26 P5 — second gateway MixRoute (ADR-0023):** design package
+`docs/design/P5-design-review-package.md` (G1–G8; owner: phased, per-task routes + bulk switch).
+P5a implemented: text + Seedream image adapters (`@acf/ai-core/mixroute`), curated catalog,
+Settings › AI › Switch gateway, `MIXROUTE_API_KEY`. P5b (Seedance video) waits for review.
+
 Open items:
 - Off-server backups wait for the backup destination (rclone remote).
 - The paid image benchmark (G2) waits for an OpenRouter API key.

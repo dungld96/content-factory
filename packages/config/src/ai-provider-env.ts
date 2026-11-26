@@ -42,6 +42,26 @@ export const aiProviderEnvShape = {
     emptyAsUndefined,
     z.string().trim().min(1).max(120).optional(),
   ),
+  /**
+   * MixRoute API key (P5; `docs/design/p5/mixroute-verification.md`). Bearer token, documented as
+   * `sk-…`. Optional: when unset the `mixroute` gateway reports `configured: false`.
+   */
+  MIXROUTE_API_KEY: z.preprocess(
+    emptyAsUndefined,
+    z
+      .string()
+      .trim()
+      .regex(/^sk-[A-Za-z0-9_-]{16,}$/, 'must be a MixRoute API key (sk-…)')
+      .optional(),
+  ),
+  /** Default: the official API. Must be https in production; tests use a local fixture server. */
+  MIXROUTE_BASE_URL: urlWithProtocol(['https:', 'http:'], 'MIXROUTE_BASE_URL').default(
+    'https://api.mixroute.ai/v1',
+  ),
+  /** Per text call in milliseconds. */
+  MIXROUTE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(120_000),
+  /** Per image call (synchronous; Seedream can take minutes). */
+  MIXROUTE_IMAGE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(240_000),
 };
 
 export type AiProviderEnv = z.output<z.ZodObject<typeof aiProviderEnvShape>>;
@@ -62,11 +82,11 @@ export function checkAiProviderEnv(
       }
     }
   }
-  if (env.NODE_ENV === 'production' && !env.OPENROUTER_BASE_URL.startsWith('https:')) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['OPENROUTER_BASE_URL'],
-      message: 'must use https in production',
-    });
+  if (env.NODE_ENV === 'production') {
+    for (const key of ['OPENROUTER_BASE_URL', 'MIXROUTE_BASE_URL'] as const) {
+      if (!env[key].startsWith('https:')) {
+        ctx.addIssue({ code: 'custom', path: [key], message: 'must use https in production' });
+      }
+    }
   }
 }

@@ -15,6 +15,13 @@ import {
   type VideoModelRecord,
 } from '../ai/providers/openrouter-media-catalog.js';
 import {
+  MIXROUTE_CATALOG_KEYS,
+  mixRouteSourceUrl,
+  planMixRouteImageImport,
+  planMixRouteTextImport,
+} from '../ai/providers/mixroute-catalog.js';
+import {
+  MIXROUTE_PROVIDER_ROW,
   OPENROUTER_PROVIDER_ROW,
   RegistryAdminService,
   type ImportOutcome,
@@ -281,12 +288,13 @@ async function seedMockMediaModel(
 
 export interface AiSeedResult {
   readonly openrouterStatus: string;
+  readonly mixrouteStatus: string;
   readonly models: readonly ImportOutcome[];
 }
 
 export async function seedAiRegistry(
   prisma: PrismaClient,
-  options: { openrouterConfigured: boolean },
+  options: { openrouterConfigured: boolean; mixrouteConfigured?: boolean },
 ): Promise<AiSeedResult> {
   const provider = await prisma.aiProvider.upsert({
     where: { key: OPENROUTER_PROVIDER_ROW.key },
@@ -481,8 +489,42 @@ export async function seedAiRegistry(
       update: {},
     });
   }
+  // P5: the MixRoute gateway and its curated catalog, all models disabled until reviewed.
+  const mixroute = await prisma.aiProvider.upsert({
+    where: { key: MIXROUTE_PROVIDER_ROW.key },
+    create: {
+      ...MIXROUTE_PROVIDER_ROW,
+      status: options.mixrouteConfigured ? 'enabled' : 'disabled',
+    },
+    update: {},
+  });
+  const mixrouteModels: ImportOutcome[] = [];
+  for (const entry of planMixRouteTextImport(MIXROUTE_CATALOG_KEYS.llm)) {
+    mixrouteModels.push(
+      ...(await admin.applyOpenRouterImport([entry], {
+        tier: 'economy',
+        sourceUrl: mixRouteSourceUrl(entry.modelKey),
+        provider: MIXROUTE_PROVIDER_ROW,
+        priceSource: 'official_page',
+      })),
+    );
+  }
+  mixrouteModels.push(
+    ...(await admin.applyOpenRouterImageImport(
+      planMixRouteImageImport(MIXROUTE_CATALOG_KEYS.image),
+      {
+        tier: 'balanced',
+        sourceUrl: mixRouteSourceUrl,
+        provider: MIXROUTE_PROVIDER_ROW,
+        priceSource: 'official_page',
+        dataPolicyNotes: () =>
+          'MixRoute: request content passes through memory only (data-security FAQ); the upstream provider applies its own policy. No ZDR routing.',
+      },
+    )),
+  );
   return {
     openrouterStatus: provider.status,
-    models: [...models, ...imageModels, ...mediaModels],
+    mixrouteStatus: mixroute.status,
+    models: [...models, ...imageModels, ...mediaModels, ...mixrouteModels],
   };
 }

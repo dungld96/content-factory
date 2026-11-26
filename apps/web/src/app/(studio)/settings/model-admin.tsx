@@ -14,6 +14,18 @@ import { errorText, mutate } from '@/lib/api-client';
 import { countedLines } from '@/lib/format';
 
 const CATALOGS = ['llm', 'image', 'video', 'tts'] as const;
+const GATEWAYS = ['openrouter', 'mixroute'] as const;
+/** MixRoute's curated catalog covers text and image models only (P5a). */
+const GATEWAY_CATALOGS: Readonly<
+  Record<(typeof GATEWAYS)[number], readonly (typeof CATALOGS)[number][]>
+> = {
+  openrouter: CATALOGS,
+  mixroute: ['llm', 'image'],
+};
+const PLACEHOLDER: Readonly<Record<(typeof GATEWAYS)[number], string>> = {
+  openrouter: 'google/gemini-3.5-flash-lite',
+  mixroute: 'gemini-3.5-flash-lite',
+};
 
 const METRICS = [
   'input_tokens',
@@ -49,6 +61,7 @@ export function ImportModelsPanel(props: { readonly known: readonly string[] }) 
   const t = useT();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [gateway, setGateway] = useState<(typeof GATEWAYS)[number]>('openrouter');
   const [catalog, setCatalog] = useState<(typeof CATALOGS)[number]>('llm');
   const [keys, setKeys] = useState('');
   const [tier, setTier] = useState('economy');
@@ -65,6 +78,7 @@ export function ImportModelsPanel(props: { readonly known: readonly string[] }) 
     setBusy(true);
     setError(null);
     const r = await mutate<ImportAiModelsResponseDto>('POST', '/ai/models/import', {
+      gateway,
       catalog,
       modelKeys,
       tier,
@@ -115,6 +129,24 @@ export function ImportModelsPanel(props: { readonly known: readonly string[] }) 
       >
         <div className="col import-form">
           <label className="field">
+            {t('import.gateway')}
+            <select
+              className="input"
+              value={gateway}
+              onChange={(e) => {
+                const next = e.target.value as (typeof GATEWAYS)[number];
+                setGateway(next);
+                if (!GATEWAY_CATALOGS[next].includes(catalog)) setCatalog('llm');
+              }}
+            >
+              {GATEWAYS.map((g) => (
+                <option key={g} value={g}>
+                  {t(`import.gw.${g}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
             {t('import.catalog')}
             <select
               className="input"
@@ -123,7 +155,7 @@ export function ImportModelsPanel(props: { readonly known: readonly string[] }) 
                 setCatalog(e.target.value as typeof catalog);
               }}
             >
-              {CATALOGS.map((c) => (
+              {GATEWAY_CATALOGS[gateway].map((c) => (
                 <option key={c} value={c}>
                   {t(`import.cat.${c}`)}
                 </option>
@@ -131,12 +163,15 @@ export function ImportModelsPanel(props: { readonly known: readonly string[] }) 
             </select>
           </label>
           <label className="field import-keys">
-            {t('import.keys')} <span className="hint">{t('import.keysHint')}</span>
+            {t('import.keys')}{' '}
+            <span className="hint">
+              {t(gateway === 'mixroute' ? 'import.keysHintMixroute' : 'import.keysHint')}
+            </span>
             <textarea
               className="input"
               rows={3}
               value={keys}
-              placeholder="google/gemini-3.5-flash-lite"
+              placeholder={PLACEHOLDER[gateway]}
               onChange={(e) => {
                 setKeys(e.target.value);
               }}

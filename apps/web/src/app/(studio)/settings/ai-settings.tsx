@@ -226,6 +226,8 @@ export function RoutesPanel(props: {
 }) {
   const t = useT();
   const { busy, error, run } = useAction();
+  const gatewayCount = new Set(props.models.map((m) => m.providerKey)).size;
+  const providerName = (key: string) => props.providers.find((p) => p.key === key)?.name ?? key;
   return (
     <section className="card card-pad" aria-labelledby="ai-routes">
       <div className="section-head">
@@ -262,29 +264,32 @@ export function RoutesPanel(props: {
                       <select
                         className="compact-select"
                         aria-label={t('ai.modelFor', { task: label })}
-                        value={r.model?.modelKey ?? ''}
+                        value={r.model?.id ?? ''}
                         disabled={busy !== null}
                         onChange={(e) => {
-                          if (e.target.value) {
+                          const picked = eligible.find((m) => m.id === e.target.value);
+                          if (picked) {
+                            // The provider disambiguates a key offered by several gateways (P5).
                             void run(
                               r.task,
                               'PUT',
                               `/ai/routes/${r.task}`,
-                              { modelKey: e.target.value },
-                              t('ai.routed', { task: label, model: e.target.value }),
+                              { modelKey: picked.modelKey, providerKey: picked.providerKey },
+                              t('ai.routed', { task: label, model: picked.displayName }),
                             );
                           }
                         }}
                       >
                         {!r.model && <option value="">{t('ai.chooseModel')}</option>}
-                        {r.model && !eligible.some((m) => m.modelKey === r.model?.modelKey) && (
-                          <option value={r.model.modelKey}>
+                        {r.model && !eligible.some((m) => m.id === r.model?.id) && (
+                          <option value={r.model.id}>
                             {t('ai.currentCannotRun', { name: r.model.displayName })}
                           </option>
                         )}
                         {eligible.map((m) => (
-                          <option key={m.id} value={m.modelKey}>
+                          <option key={m.id} value={m.id}>
                             {m.displayName}
+                            {gatewayCount > 1 ? ` · ${providerName(m.providerKey)}` : ''}
                           </option>
                         ))}
                       </select>

@@ -28,6 +28,35 @@ export const OPENROUTER_PROVIDER_ROW = {
     'LLM gateway (text). Requests send data_collection=deny and require_parameters=true; zdr per call. Model commercial terms are per model.',
 } as const;
 
+/** MixRoute gateway row (P5; docs/design/p5/mixroute-verification.md). */
+export const MIXROUTE_PROVIDER_ROW = {
+  key: 'mixroute',
+  name: 'MixRoute',
+  kind: 'gateway',
+  termsUrl: 'https://mixroute.ai/docs/service-term',
+  dataPolicyUrl: 'https://mixroute.ai/docs/faq/data-security',
+  notes:
+    'OpenAI-compatible gateway (text, Seedream images in P5a). Reports no per-call cost: calls are recorded at the registry estimate. No per-request zero-data-retention routing; upstream providers apply their own data policies.',
+} as const;
+
+/**
+ * Gateways that can restrict a call to zero-data-retention endpoints (M4 decision G9). MixRoute
+ * cannot (P5 decision G5): a ZDR route never moves to it.
+ */
+export function supportsZeroDataRetention(providerKey: string): boolean {
+  return providerKey !== MIXROUTE_PROVIDER_ROW.key;
+}
+
+/** A gateway's registry row, created disabled on first import. */
+export interface ProviderRow {
+  readonly key: string;
+  readonly name: string;
+  readonly kind: string;
+  readonly termsUrl: string;
+  readonly dataPolicyUrl: string;
+  readonly notes: string;
+}
+
 /** Who made a registry change (P1 O6): an operator over HTTP; omitted for the CLI. */
 export interface RegistryChangeBy {
   readonly actorId: string;
@@ -209,42 +238,74 @@ export class RegistryAdminService {
     zeroDataRetention = false,
     by?: RegistryChangeBy,
   ): Promise<{ enabled: boolean }> {
-    const model = await this.prisma.aiModel.findFirst({
-      where: { modelKey, provider: { key: providerKey } },
-      include: { capabilities: true, provider: true },
-    });
-    if (!model) throw new RegistryAdminError(`unknown model ${providerKey}/${modelKey}`);
-    const needed =
-      task === 'image_generation' || task === 'video_generation'
-        ? task
-        : task === 'tts_generation'
-          ? 'tts'
-          : 'llm';
-    if (!model.capabilities.some((c) => c.capability === needed)) {
-      throw new RegistryAdminError(`${providerKey}/${modelKey} has no ${needed} capability`);
+    const [result] = await this.setRoutes([{ task, providerKey, modelKey, zeroDataRetention }], by);
+    return result ?? { enabled: false };
+  }
+
+  /**
+   * Routes several tasks in ONE transaction (P5 gateway switch): every entry is checked first,
+   * then all routes change together, each with its own `route_set` event.
+   */
+  async setRoutes(
+    entries: readonly {
+      task: GenerationJobKind;
+      providerKey: string;
+      modelKey: string;
+      zeroDataRetention: boolean;
+    }[],
+    by?: RegistryChangeBy,
+  ): Promise<{ enabled: boolean }[]> {
+    type RouteModel = Prisma.AiModelGetPayload<{ include: { capabilities: true; provider: true } }>;
+    const checked: ((typeof entries)[number] & { model: RouteModel })[] = [];
+    for (const entry of entries) {
+      const { task, providerKey, modelKey, zeroDataRetention } = entry;
+      const model = await this.prisma.aiModel.findFirst({
+        where: { modelKey, provider: { key: providerKey } },
+        include: { capabilities: true, provider: true },
+      });
+      if (!model) throw new RegistryAdminError(`unknown model ${providerKey}/${modelKey}`);
+      const needed =
+        task === 'image_generation' || task === 'video_generation'
+          ? task
+          : task === 'tts_generation'
+            ? 'tts'
+            : 'llm';
+      if (!model.capabilities.some((c) => c.capability === needed)) {
+        throw new RegistryAdminError(`${providerKey}/${modelKey} has no ${needed} capability`);
+      }
+      if (zeroDataRetention && !supportsZeroDataRetention(providerKey)) {
+        throw new RegistryAdminError(
+          `${providerKey} cannot restrict calls to zero-data-retention endpoints`,
+        );
+      }
+      checked.push({ ...entry, model });
     }
     await this.prisma.$transaction(async (tx) => {
-      const before = await tx.aiTaskRoute.findUnique({
-        where: { task },
-        include: { model: { select: { modelKey: true } } },
-      });
-      await tx.aiTaskRoute.upsert({
-        where: { task },
-        create: { task, modelId: model.id, zeroDataRetention },
-        update: { modelId: model.id, zeroDataRetention },
-      });
-      await this.record(
-        tx,
-        by,
-        'route_set',
-        task,
-        before
-          ? { modelKey: before.model.modelKey, zeroDataRetention: before.zeroDataRetention }
-          : null,
-        { modelKey: `${providerKey}/${modelKey}`, zeroDataRetention },
-      );
+      for (const { task, providerKey, modelKey, zeroDataRetention, model } of checked) {
+        const before = await tx.aiTaskRoute.findUnique({
+          where: { task },
+          include: { model: { select: { modelKey: true } } },
+        });
+        await tx.aiTaskRoute.upsert({
+          where: { task },
+          create: { task, modelId: model.id, zeroDataRetention },
+          update: { modelId: model.id, zeroDataRetention },
+        });
+        await this.record(
+          tx,
+          by,
+          'route_set',
+          task,
+          before
+            ? { modelKey: before.model.modelKey, zeroDataRetention: before.zeroDataRetention }
+            : null,
+          { modelKey: `${providerKey}/${modelKey}`, zeroDataRetention },
+        );
+      }
     });
-    return { enabled: model.status === 'enabled' && model.provider.status === 'enabled' };
+    return checked.map(({ model }) => ({
+      enabled: model.status === 'enabled' && model.provider.status === 'enabled',
+    }));
   }
 
   async addPrice(
@@ -305,15 +366,20 @@ export class RegistryAdminService {
    */
   async applyOpenRouterImport(
     plan: readonly ImportPlanEntry[],
-    options: { tier?: AiQualityTier; sourceUrl: string; now?: Date; by?: RegistryChangeBy },
+    options: {
+      tier?: AiQualityTier;
+      sourceUrl: string;
+      now?: Date;
+      by?: RegistryChangeBy;
+      /** Default OpenRouter (P5: also MixRoute's curated catalog). */
+      provider?: ProviderRow;
+      /** Default `official_api` (a catalog API); `official_page` for a published price page. */
+      priceSource?: AiPriceSource;
+    },
   ): Promise<ImportOutcome[]> {
     const now = options.now ?? new Date();
-    const provider = await this.prisma.aiProvider.upsert({
-      where: { key: OPENROUTER_PROVIDER_ROW.key },
-      create: { ...OPENROUTER_PROVIDER_ROW, status: 'disabled' },
-      update: {},
-      select: { id: true },
-    });
+    const provider = await this.upsertProvider(options.provider ?? OPENROUTER_PROVIDER_ROW);
+    const priceSource = options.priceSource ?? 'official_api';
     const outcomes: ImportOutcome[] = [];
     for (const entry of plan) {
       if (!entry.ok) {
@@ -326,11 +392,27 @@ export class RegistryAdminService {
         continue;
       }
       outcomes.push(
-        await this.importModel(provider.id, entry.model, options.tier, options.sourceUrl, now),
+        await this.importModel(
+          provider.id,
+          entry.model,
+          options.tier,
+          options.sourceUrl,
+          now,
+          priceSource,
+        ),
       );
     }
     await this.recordImports(outcomes, options.by);
     return outcomes;
+  }
+
+  private async upsertProvider(row: ProviderRow): Promise<{ id: string }> {
+    return this.prisma.aiProvider.upsert({
+      where: { key: row.key },
+      create: { ...row, status: 'disabled' },
+      update: {},
+      select: { id: true },
+    });
   }
 
   private async importModel(
@@ -339,6 +421,7 @@ export class RegistryAdminService {
     tier: AiQualityTier | undefined,
     sourceUrl: string,
     now: Date,
+    priceSource: AiPriceSource,
   ): Promise<ImportOutcome> {
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.aiModel.findUnique({
@@ -405,7 +488,7 @@ export class RegistryAdminService {
             sourceValue: price.sourceValue,
             minPromptTokens: price.minPromptTokens,
             effectiveFrom: now,
-            source: 'official_api',
+            source: priceSource,
             sourceUrl,
             capturedAt: now,
           },
@@ -432,15 +515,22 @@ export class RegistryAdminService {
       sourceUrl: (modelKey: string) => string;
       now?: Date;
       by?: RegistryChangeBy;
+      /** Default OpenRouter (P5: also MixRoute's curated catalog). */
+      provider?: ProviderRow;
+      priceSource?: AiPriceSource;
+      /** Default: the OpenRouter endpoint note. */
+      dataPolicyNotes?: (m: PlannedImageModel) => string;
     },
   ): Promise<ImportOutcome[]> {
     const now = options.now ?? new Date();
-    const provider = await this.prisma.aiProvider.upsert({
-      where: { key: OPENROUTER_PROVIDER_ROW.key },
-      create: { ...OPENROUTER_PROVIDER_ROW, status: 'disabled' },
-      update: {},
-      select: { id: true },
-    });
+    const provider = await this.upsertProvider(options.provider ?? OPENROUTER_PROVIDER_ROW);
+    const writeOptions = {
+      priceSource: options.priceSource ?? ('official_api' as const),
+      dataPolicyNotes:
+        options.dataPolicyNotes ??
+        ((m: PlannedImageModel) =>
+          `Endpoint ${m.endpoint}. Requests send data_collection=deny; zdr per route.`),
+    };
     const outcomes: ImportOutcome[] = [];
     for (const entry of plan) {
       if (!entry.ok) {
@@ -459,6 +549,7 @@ export class RegistryAdminService {
           options.tier,
           options.sourceUrl(entry.modelKey),
           now,
+          writeOptions,
         ),
       );
     }
@@ -472,6 +563,10 @@ export class RegistryAdminService {
     tier: AiQualityTier | undefined,
     sourceUrl: string,
     now: Date,
+    options: {
+      priceSource: AiPriceSource;
+      dataPolicyNotes: (m: PlannedImageModel) => string;
+    },
   ): Promise<ImportOutcome> {
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.aiModel.findUnique({
@@ -492,7 +587,7 @@ export class RegistryAdminService {
         inputModalities: m.constraints.maxReferences > 0 ? ['text', 'image'] : ['text'],
         outputModalities: ['image'],
         imageConstraints: { ...m.constraints },
-        dataPolicyNotes: `Endpoint ${m.endpoint}. Requests send data_collection=deny; zdr per route.`,
+        dataPolicyNotes: options.dataPolicyNotes(m),
       };
       const model = existing
         ? await tx.aiModel.update({ where: { id: existing.id }, data: metadata })
@@ -526,7 +621,7 @@ export class RegistryAdminService {
             sourceValue: price.sourceValue,
             minPromptTokens: 0,
             effectiveFrom: now,
-            source: 'official_api',
+            source: options.priceSource,
             sourceUrl,
             capturedAt: now,
           },

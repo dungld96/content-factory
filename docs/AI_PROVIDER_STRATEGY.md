@@ -34,9 +34,16 @@ Mocks for tests and local use: `MockLlmProvider`, `MockImageProvider`, `MockVide
 (renders a real MP4), `MockTtsProvider`; seeded as the free models `mock/echo`,
 `mock/solid-image`, `mock/still-video`, `mock/tone-tts`.
 
-## 3. Current provider: OpenRouter
+## 3. Current providers: OpenRouter, MixRoute
 
-One gateway is in production use. It was verified against official documentation before each
+**MixRoute (P5, ADR-0023)** is a second gateway for text and Seedream images (P5a; video and TTS
+later). It is OpenAI-compatible, reports **no per-call cost** (calls are recorded at the registry
+estimate) and has **no zero-data-retention routing** (ZDR routes cannot move to it). Its models
+and prices come from a curated catalog (`apps/api/src/ai/providers/mixroute-catalog.ts`;
+verification record `docs/design/p5/mixroute-verification.md`). Settings › AI › Switch gateway
+moves every task to one gateway in one audited step; there is still no automatic fallback.
+
+OpenRouter is the gateway in production use. It was verified against official documentation before each
 adapter was written (records in `docs/design/m2/`, `m4/`, `m5/`).
 
 | Capability | Endpoint | Data policy |

@@ -187,6 +187,13 @@ const ROWS: Record<string, Row> = {
     path: () => '/ai/providers/mock/test',
     expect: [401, 403, 403, 403, 403],
   },
+  // P5: operators only.
+  'POST /ai/gateways/:providerKey/switch': {
+    method: 'POST',
+    path: () => '/ai/gateways/openrouter/switch',
+    body: () => ({ apply: false }),
+    expect: [401, 403, 403, 403, 403],
+  },
   'PATCH /ai/models/:modelId': {
     method: 'PATCH',
     path: (_f, ids) => `/ai/models/${ids['aiModel'] ?? ''}`,

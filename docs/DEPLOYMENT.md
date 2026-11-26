@@ -175,6 +175,10 @@ set `OPENROUTER_API_KEY=` in `infra/deploy/.env.production` (on the server only)
 ./acf.sh up -d api worker
 ```
 
+To use MixRoute as well (P5), set `MIXROUTE_API_KEY=` the same way and restart the API and
+worker. The seed registers the `mixroute` gateway and its curated models disabled: enable the
+gateway and the models you reviewed in Settings › AI, then move steps with **Switch gateway**.
+
 Routes measured in the M8 pilot (`docs/design/m8/pilot-report.md`): scripts Gemini 3.5 Flash
 Lite, storyboards **Claude Haiku 5.5** (Gemini did not keep to the clip lengths), keyframes
 Seedream 5.0 Flash, clips Veo 3.1 Lite; narration is chosen per voice profile (MAI-Voice 2.1 has

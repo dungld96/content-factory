@@ -88,8 +88,9 @@ export default defineConfig(
         {
           patterns: [
             {
-              group: ['@acf/ai-core/*', '!@acf/ai-core/openrouter'],
-              message: 'Only the OpenRouter adapter subpath may be imported here.',
+              group: ['@acf/ai-core/*', '!@acf/ai-core/openrouter', '!@acf/ai-core/mixroute'],
+              message:
+                'Only the vendor adapter subpaths (openrouter, mixroute) may be imported here.',
             },
           ],
         },

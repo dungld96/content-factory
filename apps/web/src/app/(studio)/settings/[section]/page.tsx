@@ -35,6 +35,7 @@ import { formatUsd } from '@/lib/money';
 import { apiGetAll } from '@/lib/workspace';
 
 import { ActivityPanel, ModelsPanel, ProvidersPanel, RoutesPanel } from '../ai-settings';
+import { GatewaySwitchPanel } from '../gateway-switch';
 import { ImportModelsPanel } from '../model-admin';
 import { ProfileLanguage } from '../profile-language';
 import { SectionSelect } from '../section-select';
@@ -487,6 +488,7 @@ async function AiSection(props: {
             </div>
           </section>
           <ProvidersPanel providers={providerList} isOperator={props.isOperator} />
+          {props.isOperator && <GatewaySwitchPanel providers={providerList} />}
           <RoutesPanel
             routes={routes.data.data}
             providers={providerList}

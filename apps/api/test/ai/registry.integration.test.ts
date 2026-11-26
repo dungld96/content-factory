@@ -60,6 +60,7 @@ describe('seed (S1)', () => {
   it('registers OpenRouter (disabled without a key), three disabled models and the mock provider', async () => {
     const providers = await prisma.aiProvider.findMany({ orderBy: { key: 'asc' } });
     expect(providers.map((p) => [p.key, p.kind, p.status])).toEqual([
+      ['mixroute', 'gateway', 'disabled'], // P5
       ['mock', 'mock', 'enabled'],
       ['openrouter', 'gateway', 'disabled'],
     ]);
@@ -91,8 +92,10 @@ describe('seed (S1)', () => {
   it('is idempotent', async () => {
     const before = await prisma.aiModelPrice.count();
     const again = await seedAiRegistry(prisma, { openrouterConfigured: true });
-    expect(again.models.map((m) => m.action)).toEqual(Array(12).fill('unchanged'));
+    // 12 OpenRouter models + 6 MixRoute models (P5).
+    expect(again.models.map((m) => m.action)).toEqual(Array(18).fill('unchanged'));
     expect(again.openrouterStatus).toBe('disabled'); // existing rows are never changed by the seed
+    expect(again.mixrouteStatus).toBe('disabled');
     expect(await prisma.aiModelPrice.count()).toBe(before);
     expect(CATALOG_SNAPSHOT).toHaveLength(3);
   });
@@ -104,6 +107,7 @@ describe('GET /ai/providers', () => {
     expect(res.status).toBe(200);
     const body = aiProviderListSchema.parse(res.json);
     expect(body.data.map((p) => [p.key, p.configured])).toEqual([
+      ['mixroute', false],
       ['mock', false],
       ['openrouter', false],
     ]);
@@ -209,6 +213,8 @@ describe('GET /ai/models', () => {
       [
         'black-forest-labs/flux-3-image-klein',
         'bytedance-seed/seedream-5-0-flash',
+        'doubao-seedream-5-5-261028', // MixRoute (P5)
+        'gemini-2.5-flash-image', // MixRoute (P5)
         'mock/solid-image',
         'qwen/qwen-image-2.1-turbo',
       ],
@@ -230,9 +236,9 @@ describe('GET /ai/models', () => {
       cursor = page.page.nextCursor;
     }
     // M2 seed: 3 text models + mock/echo; M4 adds 3 image candidates + mock/solid-image;
-    // M5 adds 3 video + 3 TTS candidates and two mock media models.
-    expect(all).toHaveLength(16);
-    expect(new Set(all).size).toBe(16);
+    // M5 adds 3 video + 3 TTS candidates and two mock media models; P5 adds 6 MixRoute models.
+    expect(all).toHaveLength(22);
+    expect(new Set(all).size).toBe(22);
   });
 
   it('rejects unknown filters and bad cursors', async () => {

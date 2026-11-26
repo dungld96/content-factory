@@ -12,10 +12,12 @@ import {
   type ImportAiModelsRequest,
   type ImportAiModelsResponseDto,
   type SetAiRouteRequest,
+  type SwitchAiGatewayRequest,
+  type SwitchAiGatewayResponseDto,
   type UpdateAiModelRequest,
   type UpdateAiProviderRequest,
 } from '@acf/contracts';
-import type { KeyCheck } from '@acf/ai-runtime';
+import type { KeyCheck, ModelListing } from '@acf/ai-runtime';
 import type { ApiEnv } from '@acf/config';
 
 import type { Actor } from '../../auth/actor.js';
@@ -24,7 +26,7 @@ import { ApiError } from '../../common/api-error.js';
 import { notFound } from '../../common/domain-errors.js';
 import { API_ENV } from '../../config/api-config.module.js';
 import { PrismaService } from '../../infrastructure/prisma.service.js';
-import { KEY_CHECKS } from '../ai.tokens.js';
+import { KEY_CHECKS, MODEL_LISTINGS } from '../ai.tokens.js';
 import { catalogUrl, planOpenRouterImport } from '../providers/openrouter-catalog.js';
 import {
   imageEndpointsUrl,
@@ -35,11 +37,28 @@ import {
   planOpenRouterVideoImport,
 } from '../providers/openrouter-media-catalog.js';
 import {
+  MIXROUTE_CATALOG_CHECKED_AT,
+  MIXROUTE_CATALOG_KEYS,
+  type MixRouteAvailability,
+  mixRouteSourceUrl,
+  planMixRouteImageImport,
+  planMixRouteTextImport,
+} from '../providers/mixroute-catalog.js';
+import {
+  GatewayChoiceError,
+  planGatewaySwitch,
+  type CurrentRoute,
+  type GatewayModel,
+  type TaskSwitchPlan,
+} from './gateway-switch.js';
+import {
+  MIXROUTE_PROVIDER_ROW,
   RegistryAdminError,
   RegistryAdminService,
+  supportsZeroDataRetention,
   type ImportOutcome,
 } from './registry-admin.service.js';
-import { RegistryService } from './registry.service.js';
+import { ROUTED_TASKS, RegistryService } from './registry.service.js';
 
 /** The capability a task's model must have. */
 const TASK_CAPABILITY: Readonly<Record<AiTask, string>> = {
@@ -69,6 +88,7 @@ export class RegistrySettingsService {
     private readonly admin: RegistryAdminService,
     @Inject(API_ENV) private readonly env: ApiEnv,
     @Inject(KEY_CHECKS) private readonly keyChecks: ReadonlyMap<string, KeyCheck>,
+    @Inject(MODEL_LISTINGS) private readonly listings: ReadonlyMap<string, ModelListing>,
   ) {}
 
   async setRoute(actor: Actor, task: AiTask, input: SetAiRouteRequest): Promise<AiRouteDto> {
@@ -96,13 +116,16 @@ export class RegistrySettingsService {
     if (!this.registry.isConfiguredFor(capability, model.provider.key)) {
       throw notRoutable(`${model.provider.key} has no credentials in this deployment.`);
     }
-    await this.admin.setRoute(
-      task,
-      model.provider.key,
-      model.modelKey,
-      input.zeroDataRetention ?? false,
-      { actorId: actor.userId },
-    );
+    // Registry rules (e.g. zero-data-retention on MixRoute, P5) become 422.
+    await this.wrap(async () => {
+      await this.admin.setRoute(
+        task,
+        model.provider.key,
+        model.modelKey,
+        input.zeroDataRetention ?? false,
+        { actorId: actor.userId },
+      );
+    });
     const routes = await this.registry.listRoutes();
     const route = routes.data.find((r) => r.task === task);
     if (!route) throw notFound('route');
@@ -194,6 +217,7 @@ export class RegistrySettingsService {
     input: ImportAiModelsRequest,
   ): Promise<ImportAiModelsResponseDto> {
     requireOperator(this.env, actor);
+    if (input.gateway === 'mixroute') return this.importMixRouteModels(actor, input);
     const baseUrl = this.env.OPENROUTER_BASE_URL;
     const keys = [...new Set(input.modelKeys)];
     const by = { actorId: actor.userId };
@@ -322,6 +346,208 @@ export class RegistrySettingsService {
           detail: o ? [...o.detail] : [],
         };
       }),
+    };
+  }
+
+  /**
+   * P5: previews or applies an import from MixRoute's curated catalog (text and image models;
+   * prices from the official model pages). No network call: MixRoute publishes no price API.
+   */
+  private async importMixRouteModels(
+    actor: Actor,
+    input: ImportAiModelsRequest,
+  ): Promise<ImportAiModelsResponseDto> {
+    if (input.catalog !== 'llm' && input.catalog !== 'image') {
+      throw new ApiError({
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        code: ApiErrorCode.ValidationFailed,
+        message: 'MixRoute video and voice models are not available yet (P5b).',
+      });
+    }
+    const keys = [...new Set(input.modelKeys)];
+    const by = { actorId: actor.userId };
+    const tier = input.tier ? { tier: input.tier } : {};
+    const common = {
+      ...tier,
+      by,
+      provider: MIXROUTE_PROVIDER_ROW,
+      priceSource: 'official_page' as const,
+    };
+    // Ids are checked against what MixRoute offers this key (free GET /models): uncurated ones
+    // must be listed; verified ones get a warning when they are not.
+    const curated: readonly string[] =
+      input.catalog === 'llm' ? MIXROUTE_CATALOG_KEYS.llm : MIXROUTE_CATALOG_KEYS.image;
+    let available: MixRouteAvailability = null;
+    const listing = this.listings.get(MIXROUTE_PROVIDER_ROW.key);
+    if (listing) {
+      try {
+        available = new Set(await listing());
+      } catch {
+        available = null; // the preview says the list could not be read
+      }
+    }
+    const text = input.catalog === 'llm' ? planMixRouteTextImport(keys, available) : [];
+    const image = input.catalog === 'image' ? planMixRouteImageImport(keys, available) : [];
+    const previews = [...text, ...image].map((e) => {
+      if (!e.ok) {
+        return { modelKey: e.modelKey, ok: false, summary: null, warnings: [], reason: e.reason };
+      }
+      const prices = e.model.prices
+        .map((p) => {
+          const tierNote =
+            'minPromptTokens' in p && p.minPromptTokens > 0
+              ? ` (≥${String(p.minPromptTokens)} prompt tokens)`
+              : '';
+          return `${p.metric}${tierNote} = ${p.sourceValue}`;
+        })
+        .join(', ');
+      return {
+        modelKey: e.modelKey,
+        ok: true,
+        summary: curated.includes(e.modelKey)
+          ? `${prices}; source ${mixRouteSourceUrl(e.modelKey)} (checked ${MIXROUTE_CATALOG_CHECKED_AT})`
+          : `offered by MixRoute for this key; no price recorded; see ${mixRouteSourceUrl(e.modelKey)}`,
+        warnings: [...e.model.warnings],
+        reason: null,
+      };
+    });
+    if (!input.apply) {
+      return {
+        applied: false,
+        entries: previews.map((p) => ({ ...p, action: null, newPrices: null, detail: [] })),
+      };
+    }
+    const outcomes: ImportOutcome[] = [];
+    await this.wrap(async () => {
+      // One call per model: each carries its own source page.
+      for (const entry of text) {
+        outcomes.push(
+          ...(await this.admin.applyOpenRouterImport([entry], {
+            ...common,
+            sourceUrl: mixRouteSourceUrl(entry.modelKey),
+          })),
+        );
+      }
+      if (image.length > 0) {
+        outcomes.push(
+          ...(await this.admin.applyOpenRouterImageImport(image, {
+            ...common,
+            sourceUrl: mixRouteSourceUrl,
+            dataPolicyNotes: () =>
+              'MixRoute: request content passes through memory only (data-security FAQ); the upstream provider applies its own policy. No ZDR routing.',
+          })),
+        );
+      }
+    });
+    return {
+      applied: true,
+      entries: previews.map((p) => {
+        const o = outcomes.find((x) => x.modelKey === p.modelKey);
+        return {
+          ...p,
+          action: o?.action ?? null,
+          newPrices: o?.newPrices ?? null,
+          detail: o ? [...o.detail] : [],
+        };
+      }),
+    };
+  }
+
+  /**
+   * P5 (decision G6): moves every task to one gateway. Preview suggests the equivalent model per
+   * task; apply routes all chosen tasks in one transaction, with the same rules as
+   * `PUT /ai/routes/:task` (enabled model and provider, configured, capability). Tasks without a
+   * routable model, or whose route needs zero-data-retention the gateway lacks, stay where they are.
+   */
+  async switchGateway(
+    actor: Actor,
+    providerKey: string,
+    input: SwitchAiGatewayRequest,
+  ): Promise<SwitchAiGatewayResponseDto> {
+    requireOperator(this.env, actor);
+    const provider = await this.prisma.client.aiProvider.findUnique({
+      where: { key: providerKey },
+    });
+    if (!provider) throw notFound('provider');
+    if (provider.kind !== 'gateway') throw notRoutable(`${providerKey} is not a gateway.`);
+
+    const routeRows = await this.prisma.client.aiTaskRoute.findMany({
+      include: { model: { include: { provider: true } } },
+    });
+    const routes = new Map<AiTask, CurrentRoute>();
+    for (const r of routeRows) {
+      routes.set(r.task as AiTask, {
+        providerKey: r.model.provider.key,
+        modelKey: r.model.modelKey,
+        displayName: r.model.displayName,
+        zeroDataRetention: r.zeroDataRetention,
+      });
+    }
+    const models =
+      provider.status === 'enabled'
+        ? await this.prisma.client.aiModel.findMany({
+            where: { providerId: provider.id, status: 'enabled' },
+            include: { capabilities: true },
+            orderBy: { modelKey: 'asc' },
+          })
+        : [];
+    const candidates = new Map<AiTask, GatewayModel[]>();
+    for (const task of ROUTED_TASKS) {
+      const capability = TASK_CAPABILITY[task];
+      candidates.set(
+        task,
+        this.registry.isConfiguredFor(capability, providerKey)
+          ? models
+              .filter((m) => m.capabilities.some((c) => c.capability === capability))
+              .map((m) => ({ modelKey: m.modelKey, displayName: m.displayName }))
+          : [],
+      );
+    }
+    let plan: TaskSwitchPlan[];
+    try {
+      plan = planGatewaySwitch({
+        providerKey,
+        supportsZeroDataRetention: supportsZeroDataRetention(providerKey),
+        tasks: ROUTED_TASKS,
+        routes,
+        candidates,
+        ...(input.choices ? { choices: input.choices } : {}),
+      });
+    } catch (error) {
+      if (error instanceof GatewayChoiceError) throw notRoutable(error.message);
+      throw error;
+    }
+    const switching = plan.filter((p) => p.target !== null);
+    if (input.apply && switching.length > 0) {
+      await this.wrap(async () => {
+        await this.admin.setRoutes(
+          switching.map((p) => ({
+            task: p.task,
+            providerKey,
+            modelKey: p.target?.modelKey ?? '',
+            zeroDataRetention: false,
+          })),
+          { actorId: actor.userId },
+        );
+      });
+    }
+    return {
+      providerKey,
+      applied: input.apply,
+      tasks: plan.map((p) => ({
+        task: p.task,
+        current: p.current
+          ? {
+              providerKey: p.current.providerKey,
+              modelKey: p.current.modelKey,
+              displayName: p.current.displayName,
+            }
+          : null,
+        candidates: [...p.candidates],
+        target: p.target,
+        keptBecause: p.keptBecause,
+        action: input.apply ? (p.target ? 'switched' : 'kept') : null,
+      })),
     };
   }
 

@@ -13,3 +13,5 @@ export const VIDEO_PROVIDERS = Symbol('VIDEO_PROVIDERS');
 export const TTS_PROVIDERS = Symbol('TTS_PROVIDERS');
 /** Free credential checks per provider key (P1 O3). */
 export const KEY_CHECKS = Symbol('KEY_CHECKS');
+/** Model-id listings per gateway without a public catalog (P5: MixRoute import). */
+export const MODEL_LISTINGS = Symbol('MODEL_LISTINGS');

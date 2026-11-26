@@ -128,7 +128,12 @@ export async function startWorker(
   const storeOverride = overrides.store;
   const catalog = new ModelCatalog(prisma, providers, imageProviders, videoProviders, ttsProviders);
   const llm = new LlmService(prisma, catalog, providers, {
-    providerTimeoutMs: Math.max(env.OPENROUTER_TIMEOUT_MS, env.OPENROUTER_IMAGE_TIMEOUT_MS),
+    providerTimeoutMs: Math.max(
+      env.OPENROUTER_TIMEOUT_MS,
+      env.OPENROUTER_IMAGE_TIMEOUT_MS,
+      env.MIXROUTE_TIMEOUT_MS,
+      env.MIXROUTE_IMAGE_TIMEOUT_MS,
+    ),
   });
   const images = new ImageService(prisma, catalog, imageProviders, { pixelsOf });
   const videos = new VideoService(prisma, catalog, videoProviders);

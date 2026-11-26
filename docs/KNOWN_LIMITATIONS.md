@@ -34,7 +34,10 @@ workflow gaps it found (`docs/design/M8.5-design-review-package.md`).
 
 ## Providers and models
 
-- **One gateway in production use (OpenRouter)**; each task has one routed model. There is no
+- **OpenRouter in production use; MixRoute available for text and images (P5a)**, switchable per
+  task or all at once in Settings. MixRoute calls report no cost (recorded at the estimate) and
+  cannot be restricted to zero-data-retention endpoints; MixRoute video and TTS are not wired yet.
+  Each task has one routed model. There is no
   automatic fallback to another model or provider: when a provider's circuit is open, work waits
   (up to 2 h) and then fails.
 - **Model capabilities are recorded, not discovered**: a routable model can still reject a request
