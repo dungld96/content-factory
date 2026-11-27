@@ -1,0 +1,2604 @@
+/*
+ * Studio shell and page layouts of the redesign canvas, on top of ds.css (the canvas design
+ * system). Values come from the canvas stylesheet; the sidebar stays fixed and becomes a drawer
+ * below 760 px (UX review U4).
+ */
+
+/* --- Sidebar ------------------------------------------------------------------------------- */
+.ds .side {
+  width: 248px;
+  background: var(--nav);
+  color: var(--nav-text);
+  padding: 18px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ds .side .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 16px;
+  color: #fff;
+  font: 800 15px var(--font-display);
+  text-decoration: none;
+}
+
+.ds .side .brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--accent);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  box-shadow: none;
+}
+
+.ds .proj-switch-wrap {
+  position: relative;
+  margin: 0 4px 14px;
+}
+
+.ds .proj-switch {
+  width: 100%;
+  /* The wrapper carries the margin (ds.css also sets it on the button: 4 px overflow). */
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--nav-2);
+  border: 1px solid var(--nav-line);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ds .proj-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds .sw {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: #d9a441;
+  display: grid;
+  place-items: center;
+  color: #121826;
+  font-size: 10px;
+  font-weight: 800;
+  flex: none;
+}
+
+.ds .proj-switch-wrap .menu-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+}
+
+.ds .menu-pop .mi {
+  text-decoration: none;
+}
+
+.ds .menu-pop a.mi:hover {
+  background: var(--sunken);
+}
+
+.ds .side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ds .side .nav-label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--nav-muted);
+  padding: 14px 10px 6px;
+  margin: 0;
+}
+
+.ds .side .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--nav-text);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+.ds .side .nav-item:hover {
+  background: var(--nav-2);
+  color: #fff;
+}
+
+.ds .side .nav-item.on {
+  background: var(--nav-2);
+  color: #fff;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.ds .side .nav-item .icon {
+  color: inherit;
+}
+
+.ds .side .nav-item .count {
+  margin-left: auto;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: #f2b860;
+  color: #2a1a00;
+  font-size: 12px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.ds .side .nav-item .count.plain {
+  background: var(--nav-2);
+  color: var(--nav-text);
+  border: 1px solid var(--nav-line);
+}
+
+.ds .side-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 4px 0;
+  border-top: 1px solid var(--nav-line);
+}
+
+.ds .spend-mini {
+  padding: 10px;
+  border-radius: var(--r-md);
+  background: var(--nav-2);
+  font-size: 12px;
+  color: var(--nav-text);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-decoration: none;
+}
+
+.ds .spend-mini b {
+  color: #fff;
+  font-size: 13px;
+}
+
+.ds .spend-mini .meter {
+  background: var(--nav-line);
+  height: 5px;
+}
+
+.ds .spend-mini .meter > i.spent {
+  background: #c3cad7;
+}
+
+.ds .me-wrap {
+  position: relative;
+}
+
+.ds .me {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  color: #fff;
+}
+
+.ds .me-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ds .me-button:hover {
+  background: var(--nav-2);
+}
+
+.ds .me-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds .side .avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #3b4a63;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 12px;
+  flex: none;
+}
+
+.ds .theme-toggle {
+  color: var(--nav-text);
+}
+
+.ds .theme-toggle:hover {
+  color: #fff;
+  background: var(--nav-2);
+}
+
+.ds .account-pop {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+}
+
+.ds .account-pop .signout {
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  padding: 0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* --- Main column and topbar ----------------------------------------------------------------- */
+.ds .main {
+  margin-left: 248px;
+  width: calc(100% - 248px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.ds .topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  height: auto;
+  padding: 10px 28px;
+  row-gap: 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.ds .crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.ds .crumbs a {
+  color: var(--accent-ink);
+}
+
+.ds .crumbs b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ds .topbar-slot:empty {
+  display: none;
+}
+
+.ds .topbar-slot {
+  gap: 12px;
+}
+
+.ds .cmdk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  width: 300px;
+  max-width: 100%;
+  padding: 0 8px 0 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.ds .cmdk input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+}
+
+.ds .cmdk input::placeholder {
+  color: var(--muted);
+}
+
+.ds .cmdk input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.ds .jobs-tray {
+  position: relative;
+}
+
+.ds .jobs-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.ds .jobs-pill .dot {
+  color: var(--line-strong);
+}
+
+.ds .jobs-pill.busy .dot {
+  color: var(--info);
+}
+
+.ds .content {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1360px;
+  width: 100%;
+  margin: 0;
+}
+
+.ds .content > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Page heading (canvas `.page-head`); older pages use `.page-heading`. */
+.ds .page-head,
+.ds .page-heading {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+.ds .page-heading {
+  justify-content: space-between;
+}
+
+.ds .page-head h1,
+.ds .page-heading h1 {
+  font: 800 28px/36px var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.ds .page-head p,
+.ds .page-heading p {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 4px 0 0;
+}
+
+.ds .idx {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border-radius: 6px;
+  padding: 2px 7px;
+}
+
+.ds .btn .icon {
+  flex: none;
+}
+
+.ds a.btn {
+  color: var(--text);
+}
+
+.ds a.btn.primary {
+  color: var(--on-accent);
+}
+
+.ds select.input {
+  appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23586377' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  cursor: pointer;
+}
+
+.ds .input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.ds .seg button {
+  cursor: pointer;
+}
+
+.ds .switch {
+  cursor: pointer;
+}
+
+.ds .switch.on::after {
+  left: 19px;
+}
+
+.ds .kv dd.unknown {
+  color: var(--review);
+}
+
+/* --- New content (canvas "New content") ------------------------------------------------------ */
+.ds .brief-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.ds .brief-main {
+  flex: 999 1 560px;
+  min-width: 0;
+  gap: 16px;
+}
+
+.ds .brief-side {
+  flex: 1 1 320px;
+  min-width: 0;
+  gap: 16px;
+  position: sticky;
+  top: 80px;
+}
+
+.ds .brief-section {
+  gap: 14px;
+}
+
+/* Format fields: wide enough for the duration buttons on one line (four in Vietnamese). */
+.ds .brief-section .fgrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr));
+}
+
+.ds .brief-section .seg {
+  flex-wrap: wrap;
+}
+
+.ds .brief-section .seg button {
+  white-space: nowrap;
+}
+
+.ds .fgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 14px;
+}
+
+.ds .select-wrap {
+  position: relative;
+  display: block;
+}
+
+.ds .select-wrap .sw {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  font-size: 9px;
+  pointer-events: none;
+}
+
+.ds .select-wrap select.input {
+  width: 100%;
+  padding-left: 40px;
+}
+
+.ds .brief-photos {
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.ds .photo {
+  width: 84px;
+  height: 84px;
+  border-radius: 10px;
+  position: relative;
+  flex: none;
+}
+
+.ds .photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.ds .photo .rm {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  padding: 0;
+  cursor: pointer;
+}
+
+.ds .photo.add {
+  border: 1.5px dashed var(--line-strong);
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ds .photo.add .col {
+  align-items: center;
+  gap: 4px;
+}
+
+.ds .audio-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+.ds .audio-row.on {
+  background: var(--surface-2);
+}
+
+.ds .audio-text {
+  gap: 2px;
+  /* Narrow enough to stay beside the switch on a phone. */
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.ds .audio-profile {
+  flex: 1 1 220px;
+}
+
+.ds .check-list {
+  list-style: none;
+  margin: 0;
+  gap: 10px;
+}
+
+.ds .check-list li {
+  align-items: flex-start;
+}
+
+.ds .check-ic {
+  display: inline-grid;
+  flex: none;
+  margin-top: 1px;
+}
+
+.ds .check-ic.ok {
+  color: var(--success);
+}
+
+.ds .check-ic.review {
+  color: var(--review);
+}
+
+.ds .check-ic.danger {
+  color: var(--danger);
+}
+
+.ds .cost-body {
+  gap: 12px;
+}
+
+.ds .cost-body .kv {
+  margin: 0;
+}
+
+.ds .cost-total {
+  font-size: 18px;
+}
+
+.ds .submit-col {
+  gap: 8px;
+}
+
+.ds .submit-col .btn {
+  width: 100%;
+}
+
+.ds .submit-note {
+  text-align: center;
+}
+
+/* --- Phone ---------------------------------------------------------------------------------- */
+@media (width <= 1100px) {
+  .ds .side {
+    width: 215px;
+  }
+
+  .ds .main {
+    margin-left: 215px;
+    width: calc(100% - 215px);
+  }
+}
+
+@media (width <= 760px) {
+  .ds .side {
+    width: min(300px, 86vw);
+  }
+
+  .ds .main {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .ds .topbar {
+    padding: 8px 16px 8px 64px;
+  }
+
+  .ds .topbar .cmdk {
+    width: 100%;
+    order: 5;
+  }
+
+  .ds .topbar-new span {
+    display: none;
+  }
+
+  .ds .content {
+    padding: 20px 16px 96px;
+  }
+
+  .ds .brief-side {
+    position: static;
+  }
+}
+
+.ds .brief-section .field > span .hint {
+  display: block;
+  margin-top: 2px;
+}
+
+/* --- To-do (canvas "To-do") ----------------------------------------------------------------- */
+.ds .seg a {
+  border: 0;
+  background: transparent;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  text-decoration: none;
+}
+
+.ds .seg a.on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-1);
+}
+
+.ds .todo-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.ds .todo-main {
+  flex: 999 1 560px;
+  min-width: 0;
+  gap: 20px;
+}
+
+.ds .todo-side {
+  flex: 1 1 320px;
+  min-width: 0;
+  gap: 20px;
+}
+
+.ds .irow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.ds .irow:last-child {
+  border-bottom: 0;
+}
+
+.ds .irow .ttl {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
+.ds .irow .wait {
+  width: 92px;
+}
+
+.ds .ikind {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.ds .ikind.review {
+  background: var(--review-bg);
+  color: var(--review);
+}
+
+.ds .ikind.danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.ds .ikind.info {
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+.ds .ikind.neutral {
+  background: var(--neutral-bg);
+  color: var(--neutral);
+}
+
+.ds .prod-rows {
+  gap: 14px;
+}
+
+.ds .prod-row {
+  gap: 14px;
+}
+
+.ds .prod-title {
+  width: 200px;
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds .prod-row .meter {
+  flex: 1 1 200px;
+}
+
+.ds .running-list {
+  gap: 14px;
+}
+
+.ds .running-job {
+  gap: 6px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.ds .meter.indeterminate > i {
+  width: 35%;
+  animation: meter-slide 1.6s ease-in-out infinite;
+}
+
+@keyframes meter-slide {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds .meter.indeterminate > i {
+    animation: none;
+  }
+}
+
+.ds .ready-list {
+  gap: 12px;
+}
+
+.ds .ready-row {
+  gap: 12px;
+}
+
+.ds .ready-row .thumb {
+  width: 34px;
+}
+
+.ds .ready-text {
+  gap: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.ds .ready-title {
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.ds .empty h3 {
+  font-size: 16px;
+}
+
+/* --- Productions (canvas "Productions") ------------------------------------------------------ */
+.ds .prod-toolbar {
+  gap: 10px;
+}
+
+.ds .chips {
+  gap: 8px;
+}
+
+.ds a.chip {
+  text-decoration: none;
+}
+
+.ds .prod-toolbar .content-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+}
+
+.ds .prod-toolbar .content-toolbar input,
+.ds .prod-toolbar .content-toolbar select {
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.ds .board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: none;
+  grid-auto-columns: minmax(168px, 1fr);
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  align-items: start;
+}
+
+.ds .bcol {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--sunken);
+  border-radius: 14px;
+  padding: 10px;
+  min-width: 0;
+}
+
+.ds .bcol-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 2px;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.ds .bcol-empty {
+  padding: 4px;
+}
+
+.ds .bcard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.ds .bcard.waiting {
+  box-shadow: 0 0 0 2px var(--review);
+}
+
+.ds .bcard .top {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.ds .bcard .thumb {
+  width: 34px;
+}
+
+/* Month bars: labels wrap inside narrow columns (6 months on a phone). */
+.ds .bar-col > span {
+  max-width: 100%;
+  text-align: center;
+}
+
+@media (width <= 760px) {
+  .ds .plot {
+    gap: 6px;
+  }
+
+  .ds .bar-col > span {
+    font-size: 11px;
+  }
+}
+
+/* Stage rail: a long step name ("Storyboard") shortens; the gate chip keeps its place. */
+.ds .rail .st {
+  min-width: 0;
+}
+
+.ds .rail .st .lbl {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds .rail .gate {
+  flex: none;
+}
+
+.ds .bcard .row {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+/* Narrow board columns: long state labels ("Chờ duyệt kịch bản") wrap inside the card. */
+.ds .bcard .badge {
+  height: auto;
+  min-height: 22px;
+  max-width: 100%;
+  padding-block: 3px;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.ds .bcard-text {
+  gap: 2px;
+  min-width: 0;
+}
+
+/* --- Content workspace (canvas "Workspace") -------------------------------------------------- */
+.ds .ws-title {
+  gap: 6px;
+}
+
+.ds .ws-title .row {
+  gap: 10px;
+}
+
+.ds .ws-title p {
+  margin: 0;
+}
+
+.ds .ws-head-actions {
+  gap: 8px;
+}
+
+.ds .ws-spend {
+  gap: 2px;
+  text-align: right;
+  padding-right: 8px;
+}
+
+.ds .ws-spend b {
+  font-weight: 700;
+}
+
+.ds .rail {
+  display: flex;
+  align-items: stretch;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow-x: auto;
+  margin: 0;
+}
+
+.ds .rail > button {
+  flex: 1 1 0;
+  min-width: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-2);
+  position: relative;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ds .rail > button:last-child {
+  border-right: 0;
+}
+
+.ds .rail > button:hover {
+  background: var(--surface-2);
+}
+
+.ds .rail > button[aria-selected='true'] {
+  background: var(--accent-soft);
+}
+
+.ds .rail > button[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--accent);
+}
+
+.ds .rail > button.locked .st {
+  color: var(--muted);
+}
+
+.ds .rail .mk .icon {
+  width: 11px;
+  height: 11px;
+}
+
+.ds .rail .sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ds [role='tabpanel'] {
+  margin-top: 16px;
+}
+
+.ds .actionbar {
+  margin-top: 16px;
+}
+
+.ds .actionbar .actionbar-icon {
+  color: #ff8d9b;
+  flex: none;
+}
+
+.ds .actionbar-text {
+  gap: 2px;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.ds .actionbar-detail {
+  font-size: 13px;
+  color: color-mix(in srgb, var(--surface) 72%, transparent);
+}
+
+.ds .actionbar a.btn.primary {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--surface);
+}
+
+.ds .stage-compact {
+  display: none;
+}
+
+.ds .ws-bottom {
+  gap: 16px;
+  align-items: stretch;
+}
+
+.ds .ws-cost {
+  flex: 1 1 360px;
+}
+
+.ds .ws-cost .card-body {
+  gap: 12px;
+}
+
+.ds .ws-cost .kv {
+  margin: 0;
+}
+
+.ds .ws-activity {
+  flex: 2 1 480px;
+}
+
+.ds .ws-activity .card-body {
+  gap: 10px;
+}
+
+.ds .ev {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.ds .ev .d {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex: none;
+  background: var(--accent);
+}
+
+.ds .export-panel {
+  gap: 10px;
+  align-items: flex-start;
+}
+
+/* Scene board (U1) in the canvas table style. */
+.ds .scene-board {
+  padding: 0;
+  overflow: hidden;
+}
+
+.ds .scene-board > .section-head {
+  padding: 16px 20px 4px;
+  margin: 0;
+}
+
+.ds .scene-board .board-filters {
+  padding: 0 20px 12px;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.ds .scene-board .chip.active {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--surface);
+}
+
+.ds .scene-board .board-head {
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.ds .scene-board .board-row {
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  margin: 0;
+}
+
+.ds .scene-board .board-row.focused {
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
+}
+
+@media (width <= 760px) {
+  .ds .stage-compact {
+    display: block;
+  }
+}
+
+.ds .scene-board .board-head,
+.ds .scene-board .board-row {
+  padding: 10px 20px;
+}
+
+/* Only the stage being viewed is underlined; the current stage keeps its accent marker. */
+.ds .rail > button.now:not([aria-selected='true']) {
+  background: transparent;
+}
+
+.ds .rail > button.now:not([aria-selected='true'])::after {
+  display: none;
+}
+
+/* --- Focus review (canvas "Gate 1 · Script review") ------------------------------------------ */
+.ds .focus-review {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ds .focus-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--review-bg);
+}
+
+.ds .focus-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.ds .focus-main {
+  flex: 999 1 520px;
+  min-width: 0;
+}
+
+.ds .focus-side {
+  flex: 1 1 300px;
+  min-width: 0;
+  gap: 16px;
+}
+
+.ds .focus-side .review-panel {
+  margin: 0;
+}
+
+.ds .focus-brief .card-body {
+  gap: 10px;
+}
+
+.ds .focus-review.open {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: var(--bg);
+  overflow-y: auto;
+  gap: 0;
+}
+
+.ds .focus-review.open .focus-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 8px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.ds .focus-title {
+  gap: 2px;
+}
+
+.ds .focus-review.open .focus-body {
+  padding: 24px 32px 48px;
+  max-width: 1360px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.ds .focus-review.open .focus-main {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  padding: 20px;
+}
+
+.ds .focus-review.open .focus-side {
+  position: sticky;
+  top: 84px;
+}
+
+body.focus-open {
+  overflow: hidden;
+}
+
+@media (width <= 760px) {
+  .ds .focus-review.open .focus-body {
+    padding: 16px;
+  }
+
+  .ds .focus-review.open .focus-side {
+    position: static;
+  }
+}
+
+/* Review side cards (canvas "Before you approve" and "Decision"). */
+.ds .review-panel {
+  gap: 16px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.ds .review-panel .card-head h3 {
+  font-size: 16px;
+}
+
+.ds .check-card .card-body,
+.ds .decision-card .card-body {
+  gap: 10px;
+}
+
+.ds .review-checklist {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.ds .review-checklist ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+}
+
+.ds .claim label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.ds .claim:not(.on) label {
+  border-color: var(--review);
+  background: var(--review-bg);
+  box-shadow: 0 0 0 1px var(--review);
+}
+
+.ds .claim input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
+  flex: none;
+}
+
+.ds .claim-text {
+  gap: 2px;
+  font-size: 13px;
+}
+
+.ds .decision-card .btn.lg {
+  width: 100%;
+}
+
+.ds .decision-card .btn kbd {
+  margin-left: auto;
+}
+
+/* Script sections as in the canvas: separated by rules, small uppercase labels. */
+.ds .focus-main .section-head {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0;
+}
+
+.ds .focus-main .script-block {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding: 16px 0;
+  margin: 0;
+}
+
+.ds .focus-main .script-block:last-child {
+  border-bottom: 0;
+}
+
+.ds .focus-main .script-block-head h3 {
+  font: 700 12px var(--font);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ds .focus-main .script-block p {
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* Scene board header: title and filter chips on one row (canvas). */
+.ds .scene-board {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ds .scene-board > .section-head {
+  flex: 0 1 auto;
+  padding: 14px 12px 14px 20px;
+  border-bottom: 1px solid var(--line);
+  align-self: stretch;
+}
+
+.ds .scene-board > .section-head p {
+  display: none;
+}
+
+.ds .scene-board > .board-filters {
+  flex: 1 1 300px;
+  padding: 14px 20px 14px 0;
+  align-self: stretch;
+  align-items: center;
+}
+
+.ds .scene-board > :not(.section-head, .board-filters) {
+  flex: 1 1 100%;
+}
+
+/* --- Render & export (canvas "Render") ------------------------------------------------------- */
+.ds .render-layout {
+  gap: 16px;
+}
+
+.ds .render-blockers {
+  list-style: none;
+  margin: 0;
+  gap: 4px;
+}
+
+.ds .render-top {
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.ds .render-settings {
+  flex: 1 1 340px;
+  min-width: 0;
+  gap: 14px;
+}
+
+.ds .render-review {
+  flex: 2 1 620px;
+  min-width: 0;
+}
+
+.ds .step-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ds .step-h h3 {
+  font-size: 16px;
+}
+
+.ds .render-step-2 {
+  margin-top: 8px;
+}
+
+.ds .step-n {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--sunken);
+  color: var(--muted);
+  flex: none;
+}
+
+.ds .step-n.done {
+  background: var(--success);
+  color: #fff;
+}
+
+.ds .step-n.cur {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.ds .layer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  cursor: default;
+}
+
+.ds .layer-name {
+  width: 84px;
+}
+
+.ds .layer select.input,
+.ds .layer input.input {
+  flex: 1 1 140px;
+  height: 32px;
+}
+
+.ds .render-settings .audio-section,
+.ds .render-settings details {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+}
+
+.ds .render-card {
+  overflow: hidden;
+}
+
+.ds .render-body {
+  gap: 20px;
+  padding: 20px;
+  align-items: flex-start;
+}
+
+.ds .render-player-col {
+  gap: 10px;
+  width: 240px;
+  flex: none;
+}
+
+.ds .render-player {
+  width: 240px;
+  aspect-ratio: 9 / 16;
+  border-radius: 14px;
+  background: #0d1118;
+  object-fit: contain;
+}
+
+.ds .render-checks {
+  gap: 14px;
+  flex: 1 1 300px;
+  min-width: 0;
+}
+
+.ds .render-qc {
+  gap: 8px;
+}
+
+.ds .render-qc .plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 6px;
+}
+
+.ds .qc {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  align-items: flex-start;
+}
+
+.ds .render-decision {
+  gap: 10px;
+}
+
+.ds .render-export {
+  border-top: 1px solid var(--line);
+}
+
+.ds .render-export .card-head {
+  border-bottom: 0;
+}
+
+.ds .file-cell {
+  gap: 0;
+}
+
+.ds .earlier-renders summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.ds .earlier-renders > .col {
+  gap: 16px;
+  margin-top: 16px;
+}
+
+/* --- Library (canvas "Library") -------------------------------------------------------------- */
+.ds .lib-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.ds .lib-rail {
+  flex: 1 1 200px;
+  max-width: 220px;
+  padding: 10px;
+  gap: 2px;
+}
+
+.ds .lib-rail .eyebrow {
+  padding: 6px 10px;
+}
+
+.ds .lib-rail .divider {
+  margin: 8px 0;
+}
+
+.ds .coll {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  text-decoration: none;
+}
+
+.ds .coll:hover {
+  background: var(--surface-2);
+}
+
+.ds .coll.on {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.ds .coll .n {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ds .coll-hint {
+  padding: 4px 10px;
+}
+
+.ds .lib-rail form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 10px;
+}
+
+.ds .lib-rail form .field {
+  font-size: 12px;
+}
+
+.ds .lib-main {
+  flex: 999 1 640px;
+  min-width: 0;
+  gap: 14px;
+}
+
+.ds .lib-head {
+  gap: 10px;
+}
+
+.ds .lib-head h1 {
+  font: 800 24px/32px var(--font-display);
+}
+
+.ds .lib-head a.chip {
+  text-decoration: none;
+}
+
+.ds .lib-filters .content-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+}
+
+.ds .lib-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.ds .agrid,
+.ds .alist {
+  flex: 999 1 420px;
+  min-width: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ds .agrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 14px;
+}
+
+.ds .alist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ds .asset {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.ds .alist .asset {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.ds .asset-visual {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 3 / 4;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+}
+
+.ds .alist .asset-visual {
+  width: 56px;
+  flex: none;
+}
+
+.ds .asset-visual img,
+.ds .asset-visual video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ds .asset.sel .asset-visual {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ds .asset .tp {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  background: rgb(10 14 22 / 72%);
+  color: #fff;
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ds .asset-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  align-items: flex-start;
+}
+
+.ds .asset-meta b {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.ds .lib-aside {
+  flex: 1 1 300px;
+  min-width: 0;
+  position: sticky;
+  top: 80px;
+}
+
+.ds .lib-detail-body {
+  gap: 14px;
+}
+
+.ds .lib-preview {
+  width: 100%;
+  max-width: 240px;
+  align-self: center;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+
+.ds .lib-detail .kv {
+  margin: 0;
+  grid-template-columns: auto 1fr;
+}
+
+.ds .lib-detail .kv dd {
+  text-align: left;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+@media (width <= 900px) {
+  .ds .lib-rail {
+    max-width: none;
+  }
+
+  .ds .lib-aside {
+    position: static;
+  }
+}
+
+/* --- Operations (canvas "Operations") -------------------------------------------------------- */
+.ds .health {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 14px;
+}
+
+.ds .hcell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+}
+
+.ds .hcell .big {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 700 17px var(--font-display);
+}
+
+.ds .hcell.ok .big .icon {
+  color: var(--success);
+}
+
+.ds .hcell.warn .big .icon {
+  color: var(--info);
+}
+
+.ds .hcell.bad {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+
+.ds .hcell.bad .big {
+  color: var(--danger);
+}
+
+.ds .ops-bottom {
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.ds .ops-queues {
+  flex: 2 1 520px;
+  min-width: 0;
+}
+
+.ds .ops-24h {
+  flex: 1 1 300px;
+  min-width: 0;
+}
+
+.ds .ops-24h .card-body {
+  gap: 12px;
+}
+
+.ds .ops-budgets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 6px;
+}
+
+.ds .load-cell {
+  width: 160px;
+}
+
+.ds .bad-num {
+  color: var(--danger);
+}
+
+/* --- Costs (canvas "Costs & budgets") -------------------------------------------------------- */
+.ds .kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  gap: 14px;
+}
+
+.ds .kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+}
+
+.ds .kpi .v {
+  font: 800 26px/32px var(--font-display);
+}
+
+.ds .kpi.unknown {
+  border-color: var(--review);
+}
+
+.ds .kpi.unknown .v {
+  color: var(--review);
+}
+
+.ds .costs-mid {
+  gap: 20px;
+  align-items: stretch;
+}
+
+.ds .costs-chart {
+  flex: 3 1 560px;
+  min-width: 0;
+}
+
+.ds .costs-chart .card-body {
+  gap: 14px;
+}
+
+.ds .plot {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  height: 220px;
+  padding: 8px 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.ds .bar-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  height: 100%;
+  padding-bottom: 6px;
+}
+
+.ds .bar {
+  width: min(44px, 70%);
+  border-radius: 4px 4px 0 0;
+  background: color-mix(in srgb, var(--accent) 55%, var(--surface));
+}
+
+.ds .bar.now {
+  background: var(--accent);
+}
+
+.ds .bar-v {
+  color: var(--text-2);
+}
+
+.ds .costs-budgets {
+  flex: 2 1 380px;
+  min-width: 0;
+}
+
+.ds .costs-budgets .card-body {
+  gap: 18px;
+}
+
+.ds .budget-row {
+  gap: 6px;
+}
+
+.ds .budget-row .sw {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.ds .warn-text {
+  color: var(--review);
+}
+
+.ds .legend {
+  gap: 14px;
+}
+
+.ds .legend .row {
+  gap: 6px;
+}
+
+.ds .legend .key {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--text-2);
+}
+
+.ds .legend .key.reserved {
+  background: var(--review);
+}
+
+/* --- Settings (canvas "Settings › Models & prices") ----------------------------------------- */
+.ds .settings-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.ds .settings-nav {
+  flex: 1 1 200px;
+  max-width: 220px;
+  gap: 2px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  position: sticky;
+  top: 80px;
+}
+
+.ds .settings-nav .eyebrow {
+  padding: 14px 10px 6px;
+}
+
+.ds .settings-nav .eyebrow:first-child {
+  padding-top: 6px;
+}
+
+.ds .snav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  text-decoration: none;
+}
+
+.ds .snav:hover {
+  background: var(--surface);
+}
+
+.ds .snav.on {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+  box-shadow: var(--shadow-1);
+}
+
+.ds .settings-main {
+  flex: 999 1 600px;
+  min-width: 0;
+  gap: 16px;
+}
+
+@media (width <= 760px) {
+  .ds .settings-nav {
+    display: none;
+  }
+}
+
+.ds .settings-section-select {
+  display: none;
+}
+
+@media (width <= 760px) {
+  .ds .settings-section-select {
+    display: flex;
+    flex: 1 1 100%;
+  }
+}
+
+/* Phone (canvas "Phone · To-do"): compact topbar, decision cards with a full-width action. */
+@media (width <= 760px) {
+  .ds .topbar .cmdk {
+    display: none;
+  }
+
+  /* One row: long breadcrumbs ("Cài đặt › Nhà cung cấp AI") shrink with an ellipsis instead of
+     pushing the New button onto a second row. */
+  .ds .topbar {
+    flex-wrap: nowrap;
+  }
+
+  .ds .topbar .crumbs {
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+
+  .ds .topbar .crumbs > * {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Phone: only the current page; the menu and section pickers lead back up. */
+  .ds .topbar .crumbs > :not(:last-child) {
+    display: none;
+  }
+
+  /* The brief's autosave note: the page title needs the room on a phone (saving still runs). */
+  .ds .topbar .saved-note {
+    display: none;
+  }
+
+  .ds .todo-main .irow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .ds .todo-main .irow .ikind {
+    display: none;
+  }
+
+  .ds .todo-main .irow .ttl {
+    flex: 0 0 auto;
+  }
+
+  .ds .todo-main .irow .wait {
+    width: auto;
+    order: -1;
+    text-align: right;
+  }
+
+  .ds .todo-main .irow .btn {
+    width: 100%;
+    height: 44px;
+    font-size: 15px;
+  }
+
+  .ds .page-head .seg {
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  /* One line per tab: Vietnamese labels ("Đang theo dõi") wrapped inside the 30 px height. */
+  .ds .page-head .seg a,
+  .ds .page-head .seg button {
+    flex: 1 0 auto;
+    justify-content: center;
+    white-space: nowrap;
+  }
+}
+
+/* --- Keyframe review, gate 3 (canvas "Gate 3 · Pick keyframes") ------------------------------ */
+.ds .kf-bar {
+  margin-bottom: 16px;
+}
+
+.ds .kf-review:focus {
+  outline: none;
+}
+
+.ds .kf-progress {
+  gap: 8px;
+  min-width: 200px;
+}
+
+.ds .kf-progress .meter {
+  flex: 1;
+}
+
+.ds .kf-strip {
+  display: flex;
+  gap: 10px;
+  padding: 14px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  align-items: center;
+}
+
+.ds .sc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  flex: none;
+  cursor: pointer;
+}
+
+.ds .sc.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.ds .sc-thumb {
+  width: 22px;
+  height: 39px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--sunken);
+}
+
+.ds .sc-thumb.empty {
+  display: block;
+  border: 1.5px dashed var(--line-strong);
+}
+
+.ds .sc .ok-ic {
+  color: var(--success);
+}
+
+.ds .kf-strip .row {
+  gap: 4px;
+  flex: none;
+}
+
+.ds .kf-main {
+  flex: 999 1 560px;
+  min-width: 0;
+  gap: 16px;
+}
+
+.ds .kf-scene-head {
+  gap: 10px;
+}
+
+.ds .kf-scene-head h2 {
+  font-size: 22px;
+}
+
+.ds .kf-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 220px));
+  gap: 16px;
+}
+
+.ds .cand {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ds .cand-img {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 9 / 16;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--sunken);
+  color: var(--info);
+}
+
+.ds .cand-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ds .cand-img.sel {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ds .cand-img.empty {
+  border: 1.5px dashed var(--line-strong);
+}
+
+.ds .cand-img .knum {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+}
+
+.ds .cand-img .tag {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+
+.ds .kf-actions {
+  gap: 10px;
+}
+
+.ds .kf-actions .btn kbd {
+  margin-left: auto;
+}
+
+.ds .kf-gate {
+  gap: 8px;
+}
+
+.ds .check-ic.muted {
+  color: var(--muted);
+}
+
+/* Scene board selection (canvas: checkboxes, "n selected", Retry selected, Generate · ~$). */
+.ds .scene-board .board-head,
+.ds .scene-board .board-row {
+  grid-template-columns: 30px 56px repeat(3, minmax(0, 1fr)) 120px;
+}
+
+.ds .cb {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid var(--line-strong);
+  background: var(--surface);
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  cursor: pointer;
+}
+
+.ds .cb.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.ds .scene-board > .batch-actions {
+  flex: 0 1 auto;
+  gap: 8px;
+  padding: 14px 20px 14px 0;
+  border-bottom: 1px solid var(--line);
+  align-self: stretch;
+}
+
+.ds .scene-board > .board-filters {
+  border-bottom: 1px solid var(--line);
+}
+
+@media (width <= 760px) {
+  .ds .scene-board .board-row {
+    grid-template-columns: 30px 1fr auto;
+  }
+
+  .ds .scene-board .board-row > .board-select {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .ds .scene-board .board-row > .board-scene {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .ds .scene-board .board-row > .board-status {
+    grid-row: 1;
+    grid-column: 3;
+  }
+}
+
+/* Focus review header: version switch, changes, To-do position. */
+.ds .focus-head .seg {
+  flex: none;
+}
+
+.ds .focus-queue {
+  gap: 6px;
+}
+
+.ds .icon.flip {
+  transform: scaleX(-1);
+}
+
+.ds .focus-main.changes ins {
+  background: var(--success-bg);
+  color: var(--success);
+  text-decoration: none;
+}
+
+.ds .focus-main.changes del {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.ds .focus-previous {
+  gap: 12px;
+}
+
+/* --- Settings › Budgets and Models (canvas) -------------------------------------------------- */
+.ds .budgets-settings {
+  gap: 16px;
+}
+
+.ds .setting-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.ds .setting-row.locked {
+  background: var(--surface-2);
+  align-items: center;
+}
+
+.ds .setting-text {
+  gap: 2px;
+  flex: 1 1 300px;
+}
+
+.ds .spending-form {
+  gap: 6px;
+  flex: 0 1 220px;
+}
+
+.ds .input.money {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  width: 140px;
+}
+
+.ds .input.money input {
+  border: 0;
+  outline: none;
+  background: transparent;
+  width: 100%;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.ds .input.money:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.ds .override-cell {
+  gap: 4px;
+}
+
+.ds .table .sw {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.ds .budgets-notes {
+  gap: 16px;
+  align-items: stretch;
+}
+
+.ds .budgets-notes > .card {
+  flex: 1 1 320px;
+  gap: 10px;
+}
+
+.ds .import-form {
+  gap: 12px;
+}
+
+.ds .import-diff {
+  gap: 8px;
+}
+
+.ds .diff {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+}
+
+.ds .diff summary {
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ds .diff ul {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  gap: 8px;
+}

@@ -1,0 +1,21 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# pnpm 10 blocks dependency lifecycle scripts by default. Allow only the ones we need.
+onlyBuiltDependencies:
+  # argon2: node-gyp-build uses the bundled prebuild when one exists (linux/win/arm macOS) and
+  # compiles otherwise (e.g. Intel macOS).
+  - argon2
+  - '@prisma/engines'
+  - '@swc/core'
+  - esbuild
+  - prisma
+  - sharp
+  - unrs-resolver
+
+# Security overrides (M8b dependency audit). Remove each once the parent pins a patched version.
+overrides:
+  # GHSA-7589-6fvf-x4pw (ReDoS, high) via prisma > @prisma/config, which pins effect 3.20.0. Only
+  # our static prisma.config.ts reaches it; patched in 3.22.1, same major.
+  effect: 3.22.4

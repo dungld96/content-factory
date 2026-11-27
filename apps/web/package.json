@@ -1,0 +1,30 @@
+{
+  "name": "@acf/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Next.js dashboard for AI Content Factory.",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "typecheck": "next typegen && tsc -p tsconfig.json --noEmit",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@acf/config": "workspace:*",
+    "@acf/contracts": "workspace:*",
+    "lucide-react": "1.70.0",
+    "next": "16.4.6",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "server-only": "0.0.1"
+  },
+  "devDependencies": {
+    "@acf/database": "workspace:*",
+    "@acf/storage": "workspace:*",
+    "@playwright/test": "1.63.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0"
+  }
+}

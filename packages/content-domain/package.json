@@ -1,0 +1,32 @@
+{
+  "name": "@acf/content-domain",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Content pipeline domain rules: brief validation, script/storyboard schemas, prompt templates, output repair, status transitions (M3).",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    },
+    "./schemas": {
+      "types": "./dist/schemas.d.ts",
+      "default": "./dist/schemas.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@acf/ai-core": "workspace:*",
+    "zod": "4.6.7"
+  }
+}

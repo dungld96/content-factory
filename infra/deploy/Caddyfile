@@ -1,0 +1,18 @@
+# Public entry point: HTTPS (automatic certificates) → Next.js. The API is never exposed;
+# Next.js forwards /api/v1/* to it on the internal network. Caddy replaces client-sent
+# X-Forwarded-* headers (no trusted_proxies), which the session cookie and CSRF checks rely on.
+{$SITE_ADDRESS} {
+	encode zstd gzip
+	reverse_proxy web:3000
+	# Security headers for every response, pages included (M8b review: Next.js pages had none;
+	# the API's own helmet headers are kept). No CSP yet: see docs/KNOWN_LIMITATIONS.md.
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+		-X-Powered-By
+	}
+}

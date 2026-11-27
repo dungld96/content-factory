@@ -1,160 +1,104 @@
 # System Architecture
 
-## 1. Architectural style
+## 1. Style
 
-Use a **monorepo with modular architecture**. Deploy API and workers as separate processes from the same codebase. Do not split into microservices until measured scaling, isolation, or deployment needs justify it.
+A **modular monorepo** (ADR-0001): one codebase, deployed as separate processes (web, API,
+worker). No microservices without an ADR and owner approval.
 
-## 2. Logical components
+## 2. Components
 
-### Web app (`apps/web`)
-- Project and content management UI.
-- Script/storyboard editor.
-- Asset gallery and approval controls.
-- Generation job progress.
-- Cost and usage views.
-- Final video preview and download.
+| Component | Role |
+|---|---|
+| `apps/web` (Next.js) | Content Studio UI: overview, projects, content library, pipeline board, content workspace (script → storyboard → keyframes → clips → voice-overs → render), masters, asset library, costs, operations, settings. The browser talks only to the web origin, which proxies `/api/v1/*` to the API. |
+| `apps/api` (NestJS) | Authentication and roles, REST endpoints, validation, domain commands, budget checks, job creation. Persists job intent, then enqueues. No long-running work. |
+| `apps/worker` (plain TypeScript) | BullMQ consumers: script/storyboard, image, video (async submit → poll → download), TTS and render jobs; retries, dead-letter, and a reconciler that re-enqueues jobs Redis lost. No HTTP surface (ADR-0013). |
+| PostgreSQL | Source of truth for all production state (ADR-0002). |
+| Redis + BullMQ | Queue transport only (ADR-0003). |
+| S3-compatible storage | Binary files (SeaweedFS locally and on staging; ADR-0006). |
 
-### API (`apps/api`)
-- Authentication and authorization.
-- REST endpoints.
-- Domain validation.
-- Project/content orchestration commands.
-- Provider/model registry administration.
-- Budget checks.
-- Job creation and status queries.
+Shared packages:
 
-### Worker (`apps/worker`)
-- BullMQ consumers.
-- Research/script/storyboard jobs.
-- Image/video/TTS generation.
-- Provider polling and webhook handling.
-- Asset download and validation.
-- FFmpeg render jobs.
-- Retry and compensation logic.
-
-### Shared packages
-- `contracts`: DTOs, Zod schemas, enums.
-- `database`: Prisma client and repositories.
-- `ai-core`: provider interfaces, model registry, routing, metering.
-- `content-domain`: content, script, storyboard, approval rules.
-- `media`: file validation, FFmpeg commands, metadata extraction.
-- `config`: typed environment configuration.
+| Package | Contents |
+|---|---|
+| `contracts` | Zod request/response schemas and error codes; also generate OpenAPI |
+| `database` | Prisma schema, migrations (with SQL triggers/CHECKs), error mapping |
+| `content-domain` | Pipeline rules: brief, script and storyboard schemas, content statuses, execution keys, media and render planning, budgets, prompt templates, format/platform registries |
+| `ai-core` | Capability interfaces (`LlmProvider`, `ImageProvider`, `VideoProvider`, `TtsProvider`), normalized errors, exact money, routing filters, OpenRouter adapters, mock providers |
+| `ai-runtime` | Services shared by API and worker: LLM/image/video/TTS calls with ledger, model catalog, budget reservations, circuit breaker |
+| `storage` | Write-once checksummed object store, image validation, content-addressed keys, backup |
+| `media` | FFprobe/FFmpeg: media validation, captions, rendering, QC, self-test |
+| `config` | Typed environment validation for each app |
 
 ## 3. Runtime flow
 
-1. Web calls API to create a content item.
-2. API persists the item and initial production run.
-3. API enqueues a job and returns a run ID.
-4. Worker claims the job and records state transitions.
-5. Worker calls the appropriate capability adapter.
-6. Provider result is normalized.
-7. Output is downloaded and stored in object storage.
-8. Database records asset and generation lineage.
-9. Worker enqueues the next stage only when prerequisites and approvals are satisfied.
-10. Web polls or subscribes to run updates.
-11. User reviews outputs and approves/rejects.
-12. Render worker assembles approved assets.
+1. The web app sends a command to the API (for example "generate clips").
+2. The API checks the role, the gate, the plan and the budget, then in **one transaction**
+   writes the production run, one job per unit of work, and the budget reservation.
+3. The API enqueues the jobs (BullMQ id = job id, so a duplicate enqueue does nothing) and
+   returns `202` with the job IDs.
+4. The worker claims a job, records each state change, re-checks the budget and the provider
+   circuit, then calls the provider through its capability interface.
+5. Outputs are validated, stored write-once in object storage, and recorded as assets linked to
+   their job, scene and inputs. Usage and cost go to the ledger.
+6. The web app polls job and run status. A person reviews and approves at each gate.
+7. The render job assembles the chosen clips and voice-overs with FFmpeg and runs QC.
 
-## 4. Orchestration boundaries
+Queues: `generation` (script, storyboard), `generation-images`, `generation-video`,
+`generation-audio`, `generation-render`.
 
-- NestJS owns domain state and permissions.
-- PostgreSQL is the source of truth for production state.
-- BullMQ/Redis transports asynchronous work; it is not the source of truth.
-- n8n is optional for external integrations, scheduled research, notifications, and operator workflows. Do not store the only copy of a production state machine in n8n.
-- Workers must be idempotent and safe to retry.
+## 4. Providers and routing
 
-## 5. Provider architecture
+- One interface per capability; a provider declares each capability it supports. Chat support
+  does not imply image or video support (ADR-0004).
+- Each generation task has one routed model (`ai_task_routes`, set by the operator CLI). A model
+  is routable only if enabled and its recorded limits fit the request.
+- No automatic fallback to another model. A provider that keeps failing opens its circuit and
+  work waits.
 
-Separate capability interfaces:
+Details: `docs/AI_PROVIDER_STRATEGY.md`.
 
-- `LlmProvider`
-- `ImageProvider`
-- `VideoProvider`
-- `TtsProvider`
-- Optional later: `TranscriptionProvider`, `MusicProvider`, `VisionEvaluationProvider`
+## 5. Storage
 
-A provider may implement more than one capability, but it must register each capability explicitly. Do not assume OpenAI-compatible chat support implies image/video support.
+- PostgreSQL: metadata, state, prompt snapshots, usage, cost, asset references.
+- Object storage: images, clips, audio, subtitles, renders. Keys are
+  `projects/{projectId}/assets/{assetId}/{sha256}.{ext}`; objects are never overwritten.
+- Redis: queues and short-lived coordination only.
+- Browsers never reach storage directly: uploads and downloads go through the API.
 
-## 6. Routing
+## 6. Reliability
 
-Routing inputs:
-- Capability.
-- Requested quality tier.
-- Required features (reference image, image edit, duration, aspect ratio, audio, etc.).
-- Project allowlist/denylist.
-- Budget remaining.
-- Provider/model availability.
-- Estimated latency.
-- Data policy constraints.
+- Job intent is persisted before enqueueing; an **execution key** (hash of all inputs) lets
+  identical requests reuse earlier results instead of paying again.
+- One active job per content item and kind (text, render) or per scene and kind (media).
+- Bounded retries: 3 attempts, exponential backoff from 5 s with ±50 % jitter, capped at 5 min,
+  respecting `Retry-After`. No retry for invalid input, policy blocks, authentication failures or
+  budget blocks.
+- Exhausted jobs go to a dead-letter queue and appear on the Operations page with **Resume**.
+- Video: the provider job ID is persisted; polling survives worker restarts. A submit whose
+  response was lost is never resubmitted automatically (`SUBMIT_OUTCOME_UNKNOWN`).
+- Provider circuit breaker: 5 failures in 10 minutes opens it; one trial job closes it again.
+- Budgets reserve the estimated cost when jobs are queued (ADR-0019).
 
-Routing output:
-- Provider ID.
-- Model ID.
-- Capability configuration.
-- Estimated cost or unknown.
-- Explanation/routing reason.
+## 7. Security
 
-Fallback is permitted only when the alternative supports the same required capability and constraints. Do not silently downgrade quality or remove required features.
+- Server-side sessions in an HttpOnly cookie, Origin check and CSRF token (ADR-0009).
+- Roles per project (`owner` > `editor` > `viewer`), checked on every request; non-members get `404`.
+- Provider keys live only in server environment variables; never sent to the browser or logged.
+  Logs redact credentials and sensitive headers.
+- Uploads are checked by magic bytes, size and FFprobe.
+- The runtime database role cannot change schema or disable triggers (`docs/DATABASE.md` §8).
+- Web pages send a Content-Security-Policy with a per-request script nonce.
 
-## 7. Storage
+## 8. Deployment
 
-- PostgreSQL stores metadata, state, prompts, usage, and asset references.
-- Object storage stores generated images, clips, audio, subtitles, and exports.
-- Redis stores queue/cache/short-lived coordination data.
-- Do not store large binary media in PostgreSQL.
+| Environment | Topology |
+|---|---|
+| Local | `pnpm dev` + `pnpm dev:worker`; PostgreSQL, Redis and SeaweedFS in Docker (`infra/compose`) |
+| Staging | One Ubuntu VPS, Docker Compose: Caddy (TLS) → web → API, plus worker, PostgreSQL, Redis, SeaweedFS on an internal network (ADR-0014, ADR-0021; `docs/DEPLOYMENT.md`) |
 
-Use private object storage by default. Generate short-lived signed URLs for downloads/previews.
+A production setup would add managed PostgreSQL and Redis, central logs and high availability;
+it is not built yet.
 
-## 8. Reliability patterns
+## 9. Decisions
 
-- Idempotency key for generation requests.
-- Unique stage execution key per content version + scene + stage + attempt policy.
-- Exponential backoff with jitter for transient errors.
-- No automatic retry for invalid input, policy rejection, or insufficient funds.
-- Provider polling with bounded attempts and deadline.
-- Dead-letter queue for exhausted jobs.
-- Persist provider job IDs.
-- Persist every state transition.
-- Reconcile orphaned provider jobs after worker restart.
-- Use an outbox pattern if database commit and queue enqueue must be made atomic.
-
-## 9. Security
-
-- Secrets only in server environment/secret store.
-- Never return provider credentials to frontend.
-- Redact authorization headers and sensitive prompt data from logs where required.
-- Validate all uploaded files and limit size/type.
-- Restrict object storage access.
-- Apply per-user/project authorization.
-- Add rate limits to expensive endpoints.
-- Record admin changes to provider configuration and budgets.
-
-## 10. Suggested deployment topology
-
-Local development:
-- `web`
-- `api`
-- `worker`
-- `postgres`
-- `redis`
-- `minio` (optional local S3-compatible storage)
-- `n8n` (optional)
-- `langfuse` (optional; can be deferred)
-
-Production pilot:
-- Web/API/worker containers.
-- Managed PostgreSQL.
-- Managed Redis.
-- S3-compatible storage.
-- Reverse proxy/TLS.
-- Centralized logs and backups.
-
-## 11. Architecture decision records
-
-Create `docs/adr/` and record material decisions. Initial ADRs:
-- ADR-001: Monorepo modular architecture.
-- ADR-002: PostgreSQL as source of truth.
-- ADR-003: BullMQ for background execution.
-- ADR-004: Capability-specific provider adapters.
-- ADR-005: Human approval gates.
-- ADR-006: S3-compatible object storage.
+All architecture decisions are in `docs/adr/` (index: `docs/adr/README.md`).

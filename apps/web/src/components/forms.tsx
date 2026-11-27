@@ -1,0 +1,817 @@
+'use client';
+
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState, type ReactNode, type SyntheticEvent } from 'react';
+
+import type {
+  AssetDto,
+  ContentBrief,
+  ContentItemDto,
+  ContentMasterDetailDto,
+  ContentMasterDto,
+  Page,
+  ProjectDto,
+  VersionedEntityDto,
+} from '@acf/contracts';
+
+import { useT } from '@/components/i18n-provider';
+import { Icon } from '@/components/icon';
+import { fetchJson, mutate, uploadImage, type MutationResult } from '@/lib/api-client';
+import { platformOptions } from '@/lib/format';
+import type { MessageKey, Translate } from '@/lib/i18n';
+
+import { Modal } from './modal';
+import { toast } from './toast';
+
+/** A project the caller can write to, as the pickers need it. */
+export interface ProjectOption {
+  readonly id: string;
+  readonly name: string;
+  readonly defaultLanguage: string;
+}
+
+type SubmitEvent_ = SyntheticEvent<HTMLFormElement, SubmitEvent>;
+
+/** A text field of a submitted form (never a File), trimmed. */
+function field(form: FormData, name: string): string {
+  const value = form.get(name);
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/** Optional brief fields: empty inputs are omitted (the API rejects empty strings). */
+function optionalBrief(
+  form: FormData,
+  names: readonly (keyof ContentBrief)[],
+): Partial<ContentBrief> {
+  const brief: Record<string, string> = {};
+  for (const name of names) {
+    const value = field(form, name);
+    if (value) brief[name] = value;
+  }
+  return brief;
+}
+
+const failure = (t: Translate, r: MutationResult<unknown>) =>
+  r.message ?? t('form.requestFailed', { status: r.status });
+
+/** Busy/error state around one submit. */
+function useSubmit() {
+  const t = useT();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function run<T>(request: () => Promise<MutationResult<T>>): Promise<T | null> {
+    setBusy(true);
+    setError(null);
+    const r = await request();
+    setBusy(false);
+    if (!r.ok || r.data === null) {
+      setError(failure(t, r));
+      return null;
+    }
+    return r.data;
+  }
+  return { busy, error, run };
+}
+
+function FormError({ error }: { readonly error: string | null }) {
+  return error ? (
+    <p className="form-error" role="alert">
+      {error}
+    </p>
+  ) : null;
+}
+
+function Actions(props: {
+  readonly busy: boolean;
+  readonly submit: string;
+  readonly onCancel: () => void;
+}) {
+  const t = useT();
+  return (
+    <div className="form-actions">
+      <button type="button" className="btn" onClick={props.onCancel}>
+        {t('common.cancel')}
+      </button>
+      <button type="submit" className="btn primary" disabled={props.busy}>
+        {props.busy ? t('common.saving') : props.submit}
+      </button>
+    </div>
+  );
+}
+
+/** A button that opens a modal; `children` gets a close callback. */
+function ModalButton(props: {
+  readonly label: ReactNode;
+  readonly className?: string;
+  readonly title: string;
+  readonly description?: string | undefined;
+  readonly disabled?: boolean;
+  readonly children: (close: () => void) => ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const close = () => {
+    setOpen(false);
+  };
+  return (
+    <>
+      <button
+        type="button"
+        className={props.className ?? 'btn'}
+        disabled={props.disabled}
+        onClick={() => {
+          setOpen(true);
+        }}
+      >
+        {props.label}
+      </button>
+      <Modal open={open} onClose={close} title={props.title} description={props.description}>
+        {props.children(close)}
+      </Modal>
+    </>
+  );
+}
+
+function ProjectSelect(props: {
+  readonly projects: readonly ProjectOption[];
+  readonly value: string;
+  readonly onChange: (id: string) => void;
+}) {
+  const t = useT();
+  return (
+    <label className="field">
+      {t('form.project')}
+      <select
+        name="projectId"
+        value={props.value}
+        onChange={(e) => {
+          props.onChange(e.target.value);
+        }}
+        required
+      >
+        {props.projects.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function SpecFields(props: { readonly language: string }) {
+  const t = useT();
+  return (
+    <div className="form-row">
+      <label className="field">
+        {t('form.duration')}
+        <input name="duration" type="number" min={5} max={180} defaultValue={30} required />
+      </label>
+      <label className="field">
+        {t('form.aspectRatio')}
+        <select name="aspectRatio" defaultValue="9:16">
+          <option value="9:16">9:16</option>
+          <option value="1:1">1:1</option>
+          <option value="16:9">16:9</option>
+        </select>
+      </label>
+      <label className="field">
+        {t('form.language')}
+        <input name="language" defaultValue={props.language} required maxLength={35} />
+      </label>
+      <label className="field">
+        {t('form.platform')}
+        <select name="targetPlatform" defaultValue="">
+          <option value="">—</option>
+          {platformOptions(t).map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
+
+function specBody(form: FormData) {
+  const platform = field(form, 'targetPlatform');
+  return {
+    format: 'short_video' as const,
+    targetDurationSeconds: Number(field(form, 'duration')),
+    aspectRatio: field(form, 'aspectRatio'),
+    language: field(form, 'language'),
+    ...(platform ? { targetPlatform: platform } : {}),
+  };
+}
+
+// --- Content -------------------------------------------------------------------------------
+
+/**
+ * Opens the New content page (redesign canvas: a full page, not a dialog). `projectId`
+ * preselects the project; `projects` only decides whether the caller may create anything.
+ */
+export function NewContentButton(props: {
+  readonly projects: readonly ProjectOption[];
+  readonly projectId?: string;
+  readonly label?: string;
+}) {
+  const t = useT();
+  if (props.projects.length === 0) return null;
+  const href = props.projectId
+    ? `/productions/new?project=${encodeURIComponent(props.projectId)}`
+    : '/productions/new';
+  return (
+    <Link className="btn primary" href={href}>
+      <Icon name="plus" /> {props.label ?? t('form.newContent')}
+    </Link>
+  );
+}
+
+// --- Projects ------------------------------------------------------------------------------
+
+const slugify = (name: string) =>
+  name
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+
+function NewProjectForm({ onCancel }: { readonly onCancel: () => void }) {
+  const t = useT();
+  const router = useRouter();
+  const [slug, setSlug] = useState('');
+  const [slugEdited, setSlugEdited] = useState(false);
+  const { busy, error, run } = useSubmit();
+
+  async function create(event: SubmitEvent_) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const description = field(form, 'description');
+    const created = await run(() =>
+      mutate<ProjectDto>('POST', '/projects', {
+        name: field(form, 'name'),
+        slug: field(form, 'slug'),
+        defaultLanguage: field(form, 'defaultLanguage'),
+        timezone: field(form, 'timezone'),
+        ...(description ? { description } : {}),
+      }),
+    );
+    if (created) {
+      toast(t('form.projectCreated', { name: created.name }));
+      router.push(`/projects/${created.id}`);
+    }
+  }
+
+  return (
+    <form className="form" aria-label={t('form.newProject')} onSubmit={(e) => void create(e)}>
+      <label className="field">
+        {t('form.name')}
+        <input
+          name="name"
+          required
+          maxLength={120}
+          onChange={(e) => {
+            if (!slugEdited) setSlug(slugify(e.target.value));
+          }}
+        />
+      </label>
+      <label className="field">
+        {t('form.slug')} <small>{t('form.slugHint')}</small>
+        <input
+          name="slug"
+          required
+          maxLength={60}
+          value={slug}
+          onChange={(e) => {
+            setSlugEdited(true);
+            setSlug(e.target.value);
+          }}
+        />
+      </label>
+      <label className="field">
+        {t('form.description')} <small>{t('form.optional')}</small>
+        <textarea name="description" rows={2} maxLength={5000} />
+      </label>
+      <div className="form-row">
+        <label className="field">
+          {t('form.defaultLanguage')}
+          <input name="defaultLanguage" defaultValue="en" required maxLength={35} />
+        </label>
+        <label className="field">
+          {t('form.timezone')}
+          <input
+            name="timezone"
+            required
+            maxLength={64}
+            defaultValue={Intl.DateTimeFormat().resolvedOptions().timeZone}
+          />
+        </label>
+      </div>
+      <FormError error={error} />
+      <Actions busy={busy} submit={t('form.createProject')} onCancel={onCancel} />
+    </form>
+  );
+}
+
+export function NewProjectButton() {
+  const t = useT();
+  return (
+    <ModalButton
+      className="btn primary"
+      label={
+        <>
+          <span aria-hidden="true">＋</span> {t('form.newProject')}
+        </>
+      }
+      title={t('form.newProjectTitle')}
+      description={t('form.newProjectDesc')}
+    >
+      {(close) => <NewProjectForm onCancel={close} />}
+    </ModalButton>
+  );
+}
+
+/** Owner-only project settings (PATCH /projects/:id). */
+export function ProjectSettingsForm({ project }: { readonly project: ProjectDto }) {
+  const t = useT();
+  const router = useRouter();
+  const { busy, error, run } = useSubmit();
+
+  async function save(event: SubmitEvent_) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const description = field(form, 'description');
+    const saved = await run(() =>
+      mutate<ProjectDto>('PATCH', `/projects/${project.id}`, {
+        name: field(form, 'name'),
+        description: description || null,
+        defaultLanguage: field(form, 'defaultLanguage'),
+        timezone: field(form, 'timezone'),
+      }),
+    );
+    if (saved) {
+      toast(t('form.projectSaved'));
+      router.refresh();
+    }
+  }
+
+  return (
+    <form
+      key={project.updatedAt}
+      className="form"
+      aria-label={t('form.projectSettings')}
+      onSubmit={(e) => void save(e)}
+    >
+      <label className="field">
+        {t('form.projectName')}
+        <input name="name" defaultValue={project.name} required maxLength={120} />
+      </label>
+      <label className="field">
+        {t('form.description')}
+        <textarea
+          name="description"
+          defaultValue={project.description ?? ''}
+          rows={2}
+          maxLength={5000}
+        />
+      </label>
+      <div className="form-row">
+        <label className="field">
+          {t('form.defaultLanguage')}
+          <input
+            name="defaultLanguage"
+            defaultValue={project.defaultLanguage}
+            required
+            maxLength={35}
+          />
+        </label>
+        <label className="field">
+          {t('form.timezone')}
+          <input name="timezone" defaultValue={project.timezone} required maxLength={64} />
+        </label>
+      </div>
+      <FormError error={error} />
+      <div className="form-actions">
+        <button type="submit" className="btn primary" disabled={busy}>
+          {busy ? t('common.saving') : t('form.saveChanges')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// --- Content masters -----------------------------------------------------------------------
+
+function BriefFields(props: { readonly brief?: ContentBrief }) {
+  const t = useT();
+  return (
+    <>
+      <label className="field">
+        {t('form.coreIdea')}
+        <textarea
+          name="topic"
+          required
+          maxLength={500}
+          rows={3}
+          defaultValue={props.brief?.topic}
+        />
+      </label>
+      <div className="form-row">
+        <label className="field">
+          {t('form.audience')} <small>{t('form.optional')}</small>
+          <input name="audience" maxLength={500} defaultValue={props.brief?.audience} />
+        </label>
+        <label className="field">
+          {t('form.tone')} <small>{t('form.optional')}</small>
+          <input name="tone" maxLength={200} defaultValue={props.brief?.tone} />
+        </label>
+      </div>
+      <label className="field">
+        {t('form.objective')} <small>{t('form.optional')}</small>
+        <input name="objective" maxLength={500} defaultValue={props.brief?.objective} />
+      </label>
+    </>
+  );
+}
+
+const BRIEF_OPTIONAL = ['audience', 'tone', 'objective'] as const;
+const BRIEF_BRAND = ['characterId', 'environmentId'] as const;
+
+/**
+ * Character and environment of the brief (P2b L4): entities of the project with an approved
+ * master. Storyboards pin the master version they use, so a later version never changes them.
+ */
+function BrandSelects(props: { readonly projectId: string; readonly brief?: ContentBrief }) {
+  const t = useT();
+  const [options, setOptions] = useState<{
+    characters: VersionedEntityDto[];
+    environments: VersionedEntityDto[];
+  } | null>(null);
+  useEffect(() => {
+    let live = true;
+    void Promise.all([
+      fetchJson<Page<VersionedEntityDto>>(`/projects/${props.projectId}/characters?limit=100`),
+      fetchJson<Page<VersionedEntityDto>>(`/projects/${props.projectId}/environments?limit=100`),
+    ]).then(([c, e]) => {
+      if (!live) return;
+      const ready = (list: Page<VersionedEntityDto> | null) =>
+        (list?.data ?? []).filter((x) => x.master !== null);
+      setOptions({ characters: ready(c), environments: ready(e) });
+    });
+    return () => {
+      live = false;
+    };
+  }, [props.projectId]);
+  if (!options) return null;
+  return (
+    <div className="form-row">
+      <label className="field">
+        {t('form.character')} <small>{t('form.optional')}</small>
+        <select name="characterId" defaultValue={props.brief?.characterId ?? ''}>
+          <option value="">{t('form.none')}</option>
+          {options.characters.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name} (v{c.master?.version})
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        {t('form.environment')} <small>{t('form.optional')}</small>
+        <select name="environmentId" defaultValue={props.brief?.environmentId ?? ''}>
+          <option value="">{t('form.none')}</option>
+          {options.environments.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.name} (v{e.master?.version})
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
+
+function NewMasterForm(props: {
+  readonly projects: readonly ProjectOption[];
+  readonly onCancel: () => void;
+}) {
+  const t = useT();
+  const router = useRouter();
+  const [projectId, setProjectId] = useState(props.projects[0]?.id ?? '');
+  const { busy, error, run } = useSubmit();
+  const project = props.projects.find((p) => p.id === projectId);
+
+  async function create(event: SubmitEvent_) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const created = await run(() =>
+      mutate<ContentMasterDto>('POST', `/projects/${projectId}/content-masters`, {
+        title: field(form, 'title'),
+        language: field(form, 'language'),
+        brief: { topic: field(form, 'topic'), ...optionalBrief(form, BRIEF_OPTIONAL) },
+      }),
+    );
+    if (created) router.push(`/masters/${created.id}`);
+  }
+
+  return (
+    <form className="form" aria-label={t('form.newMaster')} onSubmit={(e) => void create(e)}>
+      <ProjectSelect projects={props.projects} value={projectId} onChange={setProjectId} />
+      <label className="field">
+        {t('form.title')}
+        <input name="title" required maxLength={200} />
+      </label>
+      <BriefFields />
+      <label className="field" key={projectId}>
+        {t('form.masterLanguage')}
+        <input
+          name="language"
+          defaultValue={project?.defaultLanguage ?? 'en'}
+          required
+          maxLength={35}
+        />
+      </label>
+      <FormError error={error} />
+      <Actions busy={busy} submit={t('form.createMaster')} onCancel={props.onCancel} />
+    </form>
+  );
+}
+
+export function NewMasterButton({ projects }: { readonly projects: readonly ProjectOption[] }) {
+  const t = useT();
+  if (projects.length === 0) return null;
+  return (
+    <ModalButton
+      className="btn primary"
+      label={
+        <>
+          <span aria-hidden="true">＋</span> {t('form.createMaster')}
+        </>
+      }
+      title={t('form.newMasterTitle')}
+      description={t('form.newMasterDesc')}
+    >
+      {(close) => <NewMasterForm projects={projects} onCancel={close} />}
+    </ModalButton>
+  );
+}
+
+function EditMasterForm(props: {
+  readonly master: ContentMasterDetailDto;
+  readonly onDone: () => void;
+}) {
+  const t = useT();
+  const router = useRouter();
+  const { master } = props;
+  const { busy, error, run } = useSubmit();
+
+  async function save(event: SubmitEvent_) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    // Fields this form does not show (notes, sources) are kept as they are.
+    const shown: readonly string[] = [...BRIEF_OPTIONAL, ...BRIEF_BRAND];
+    const kept = Object.fromEntries(
+      Object.entries(master.brief).filter(([key]) => !shown.includes(key)),
+    );
+    // Without the brand lists loaded, keep the stored character/environment.
+    const brand = form.has('characterId')
+      ? optionalBrief(form, BRIEF_BRAND)
+      : Object.fromEntries(
+          Object.entries(master.brief).filter(([key]) =>
+            (BRIEF_BRAND as readonly string[]).includes(key),
+          ),
+        );
+    const saved = await run(() =>
+      mutate<ContentMasterDto>('PATCH', `/content-masters/${master.id}`, {
+        title: field(form, 'title'),
+        brief: {
+          ...kept,
+          topic: field(form, 'topic'),
+          ...optionalBrief(form, BRIEF_OPTIONAL),
+          ...brand,
+        },
+      }),
+    );
+    if (saved) {
+      toast(t('form.masterSaved', { revision: saved.briefRevision }));
+      props.onDone();
+      router.refresh();
+    }
+  }
+
+  return (
+    <form className="form" aria-label={t('form.editMaster')} onSubmit={(e) => void save(e)}>
+      <label className="field">
+        {t('form.title')}
+        <input name="title" required maxLength={200} defaultValue={master.title} />
+      </label>
+      <BriefFields brief={master.brief} />
+      <BrandSelects projectId={master.projectId} brief={master.brief} />
+      <FormError error={error} />
+      <Actions busy={busy} submit={t('form.saveBrief')} onCancel={props.onDone} />
+    </form>
+  );
+}
+
+export function EditMasterButton({ master }: { readonly master: ContentMasterDetailDto }) {
+  const t = useT();
+  return (
+    <ModalButton
+      label={t('form.editMaster')}
+      title={t('form.editMaster')}
+      description={t('form.editMasterDesc')}
+    >
+      {(close) => <EditMasterForm master={master} onDone={close} />}
+    </ModalButton>
+  );
+}
+
+function NewVariantForm(props: {
+  readonly masterId: string;
+  readonly language: string;
+  readonly onDone: () => void;
+}) {
+  const t = useT();
+  const router = useRouter();
+  const { busy, error, run } = useSubmit();
+
+  async function create(event: SubmitEvent_) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const title = field(form, 'title');
+    const created = await run(() =>
+      mutate<ContentItemDto>('POST', `/content-masters/${props.masterId}/variants`, {
+        ...specBody(form),
+        ...(title ? { title } : {}),
+      }),
+    );
+    if (created) {
+      toast(t('form.variantAdded', { title: created.title }));
+      props.onDone();
+      router.refresh();
+    }
+  }
+
+  return (
+    <form className="form" aria-label={t('form.newVariant')} onSubmit={(e) => void create(e)}>
+      <label className="field">
+        {t('form.variantTitle')}
+        <input name="title" maxLength={200} />
+      </label>
+      <SpecFields language={props.language} />
+      <FormError error={error} />
+      <Actions busy={busy} submit={t('form.addVariant')} onCancel={props.onDone} />
+    </form>
+  );
+}
+
+/** Adds a variant to a content master (R0): the master's brief is copied into it. */
+export function NewVariantButton(props: { readonly masterId: string; readonly language: string }) {
+  const t = useT();
+  return (
+    <ModalButton
+      className="btn primary small"
+      label={
+        <>
+          <span aria-hidden="true">＋</span> {t('form.addVariant')}
+        </>
+      }
+      title={t('form.addVariantTitle')}
+      description={t('form.addVariantDesc')}
+    >
+      {(close) => (
+        <NewVariantForm masterId={props.masterId} language={props.language} onDone={close} />
+      )}
+    </ModalButton>
+  );
+}
+
+// --- Assets --------------------------------------------------------------------------------
+
+type UploadKind = 'reference' | 'voiceover' | 'music' | 'sfx';
+
+const AUDIO_ACCEPT = 'audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/aac,.mp3,.wav,.m4a';
+const UPLOAD_KINDS: Readonly<
+  Record<UploadKind, { label: MessageKey; accept: string; hint: MessageKey }>
+> = {
+  reference: {
+    label: 'upload.reference',
+    accept: 'image/png,image/jpeg,image/webp',
+    hint: 'upload.referenceHint',
+  },
+  voiceover: { label: 'upload.voiceover', accept: AUDIO_ACCEPT, hint: 'upload.voiceoverHint' },
+  music: { label: 'upload.music', accept: AUDIO_ACCEPT, hint: 'upload.musicHint' },
+  sfx: { label: 'upload.sfx', accept: AUDIO_ACCEPT, hint: 'upload.sfxHint' },
+};
+
+function UploadForm(props: {
+  readonly projects: readonly ProjectOption[];
+  readonly projectId: string;
+  readonly onDone: () => void;
+}) {
+  const t = useT();
+  const router = useRouter();
+  const [projectId, setProjectId] = useState(props.projectId);
+  const [kind, setKind] = useState<UploadKind>('reference');
+  const { busy, error, run } = useSubmit();
+
+  async function upload(event: SubmitEvent_) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const file = form.get('file');
+    if (!(file instanceof File) || file.size === 0) return;
+    const label = field(form, 'label');
+    const licenseNote = field(form, 'licenseNote');
+    const asset = await run(() =>
+      uploadImage<AssetDto>(projectId, file, {
+        assetType: kind === 'reference' ? 'reference' : 'audio',
+        ...(kind === 'reference' ? {} : { purpose: kind }),
+        ...(label ? { label } : {}),
+        ...((kind === 'music' || kind === 'sfx') && licenseNote ? { licenseNote } : {}),
+      }),
+    );
+    if (asset) {
+      toast(t('upload.done', { name: asset.originalFilename ?? t('upload.theFile') }));
+      props.onDone();
+      router.refresh();
+    }
+  }
+
+  const spec = UPLOAD_KINDS[kind];
+  return (
+    <form className="form" aria-label={t('upload.formLabel')} onSubmit={(e) => void upload(e)}>
+      <ProjectSelect projects={props.projects} value={projectId} onChange={setProjectId} />
+      <div className="field">
+        <label htmlFor="upload-kind">{t('upload.kind')}</label>
+        <select
+          id="upload-kind"
+          name="kind"
+          value={kind}
+          onChange={(e) => {
+            setKind(e.target.value as UploadKind);
+          }}
+        >
+          {(Object.keys(UPLOAD_KINDS) as UploadKind[]).map((k) => (
+            <option key={k} value={k}>
+              {t(UPLOAD_KINDS[k].label)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <label className="field">
+        {t(spec.label)} <small>({t(spec.hint)})</small>
+        <input key={kind} name="file" type="file" accept={spec.accept} required />
+      </label>
+      <label className="field">
+        {t('upload.label')} <small>{t('form.optional')}</small>
+        <input name="label" maxLength={200} />
+      </label>
+      {(kind === 'music' || kind === 'sfx') && (
+        <label className="field">
+          {t('upload.license')} <small>{t('upload.licenseHint')}</small>
+          <textarea name="licenseNote" minLength={3} maxLength={1000} required rows={3} />
+        </label>
+      )}
+      <FormError error={error} />
+      <div className="form-actions">
+        <button type="button" className="btn" onClick={props.onDone}>
+          {t('common.cancel')}
+        </button>
+        <button type="submit" className="btn primary" disabled={busy}>
+          {busy ? t('upload.uploading') : t('upload.submit')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Uploads a reference image (M4a) or audio (M5 §7.3: voice-over or licensed music): raw body
+ * through the API, ≤ 25 MB, validated server-side (magic bytes, FFprobe for audio).
+ */
+export function UploadAssetButton(props: {
+  readonly projects: readonly ProjectOption[];
+  readonly projectId?: string | undefined;
+}) {
+  const t = useT();
+  const first = props.projectId ?? props.projects[0]?.id;
+  if (!first) return null;
+  return (
+    <ModalButton
+      className="btn primary"
+      label={
+        <>
+          <Icon name="upload" /> {t('upload.button')}
+        </>
+      }
+      title={t('upload.title')}
+      description={t('upload.desc')}
+    >
+      {(close) => <UploadForm projects={props.projects} projectId={first} onDone={close} />}
+    </ModalButton>
+  );
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@acf/worker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Background worker: BullMQ consumers for generation jobs (M3, ADR-0013).",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node --env-file-if-exists=../../.env --enable-source-maps dist/main.js"
+  },
+  "dependencies": {
+    "@acf/ai-core": "workspace:*",
+    "@acf/ai-runtime": "workspace:*",
+    "@acf/config": "workspace:*",
+    "@acf/content-domain": "workspace:*",
+    "@acf/database": "workspace:*",
+    "@acf/media": "workspace:*",
+    "@acf/storage": "workspace:*",
+    "bullmq": "6.7.7",
+    "ioredis": "6.0.0",
+    "zod": "4.6.7"
+  }
+}

@@ -1,0 +1,21 @@
+node_modules
+dist
+.next
+coverage
+test-results
+playwright-report
+pnpm-lock.yaml
+packages/database/src/generated
+packages/database/prisma/migrations
+apps/web/next-env.d.ts
+
+# Specification pack: keep authored formatting (do not reflow tables/lists).
+CLAUDE.md
+README.md
+docs/*.md
+
+# Design verification scripts (reference only)
+docs/design/**/evidence/**
+
+# Design reference supplied as-is (M4.5); not reformatted.
+docs/design/content-studio-ui-prototype.html

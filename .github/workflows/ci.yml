@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: checks (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22 is the development baseline (.nvmrc). 24 is a compatibility target only:
+        # the default runtime does not change until every app and dependency passes on it.
+        node: ['22', '24']
+    services:
+      postgres:
+        image: postgres:17.12-alpine
+        env:
+          POSTGRES_USER: acf
+          POSTGRES_PASSWORD: acf_ci_only
+          POSTGRES_DB: acf
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U acf -d acf" --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7.4.12-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      # Role separation (ADR-0011 §8): `pnpm db:setup` creates acf_migrator / acf_app from these.
+      DATABASE_ADMIN_URL: postgresql://acf:acf_ci_only@localhost:5432/acf
+      DATABASE_MIGRATION_URL: postgresql://acf_migrator:acf_migrator_ci_only@localhost:5432/acf?schema=public
+      DATABASE_URL: postgresql://acf_app:acf_app_ci_only@localhost:5432/acf?schema=public
+      REDIS_URL: redis://localhost:6379
+      # CI-only values (no real secrets): required by the API environment schema.
+      SESSION_SECRETS: ci-session-secret-not-for-production-0001
+      CSRF_SECRET: ci-csrf-secret-not-for-production-00000001
+      # Object storage (M4a): SeaweedFS started below with these CI-only keys.
+      S3_ENDPOINT: http://127.0.0.1:8333
+      S3_BUCKET: acf-assets
+      S3_ACCESS_KEY_ID: acf_app_ci
+      S3_SECRET_ACCESS_KEY: acf_app_ci_only
+      STORAGE_ADMIN_ACCESS_KEY_ID: acf_storage_admin_ci
+      STORAGE_ADMIN_SECRET_ACCESS_KEY: acf_storage_admin_ci_only
+    steps:
+      # Third-party actions are pinned to full commit SHAs (tag in the trailing comment).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: node --version
+      # FFmpeg/FFprobe (M5a): media validation and the mock video/TTS providers.
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg && ffprobe -version | head -1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm db:setup
+      # Service containers cannot take a command, so SeaweedFS runs here with the repo's script.
+      - name: Start object storage (SeaweedFS 4.54)
+        run: |
+          docker run -d --name seaweedfs -p 127.0.0.1:8333:8333 \
+            -e STORAGE_ADMIN_ACCESS_KEY_ID -e STORAGE_ADMIN_SECRET_ACCESS_KEY \
+            -e S3_ACCESS_KEY_ID -e S3_SECRET_ACCESS_KEY \
+            -v "$PWD/infra/seaweedfs/start.sh:/opt/acf/start.sh:ro" \
+            --entrypoint /bin/sh chrislusf/seaweedfs:4.54 /opt/acf/start.sh
+          for i in $(seq 1 60); do
+            docker exec seaweedfs wget -q -O /dev/null http://127.0.0.1:9333/cluster/status && break
+            sleep 1
+          done
+      - run: pnpm storage:setup
+      - run: pnpm test:integration
+      - run: pnpm build
+      - name: Install the Playwright browser
+        if: matrix.node == '22'
+        run: pnpm --filter @acf/web exec playwright install --with-deps chromium
+      - name: End-to-end tests (login → projects → logout)
+        if: matrix.node == '22'
+        run: pnpm test:e2e
+      - name: Dependency audit
+        if: matrix.node == '22'
+        run: pnpm audit --audit-level=moderate

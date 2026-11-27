@@ -1,0 +1,133 @@
+import { expect, test, type Page } from '@playwright/test';
+
+// M7: the Costs tab with the owner's budget editor, the read-only view for editors, and the
+// Operations page. Runs against the seeded demo workspace; the budget is restored at the end.
+const OWNER = 'owner@demo.acf.test';
+const EDITOR = 'editor@demo.acf.test';
+const passwordOf = (who: 'OWNER' | 'EDITOR') => process.env[`E2E_PASSWORD_${who}`] ?? '';
+
+async function signIn(page: Page, email: string, password: string) {
+  await page.goto('/login');
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page).toHaveURL(/:\d+\/$/);
+}
+
+async function openCosts(page: Page) {
+  await page.goto('/projects');
+  await page.getByRole('link', { name: 'Demo Studio' }).click();
+  await page
+    .getByRole('navigation', { name: 'Project sections' })
+    .getByRole('link', { name: 'Costs' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Costs and budget' })).toBeVisible();
+}
+
+async function saveBudget(page: Page, monthly: string, mode: 'hard' | 'soft') {
+  const form = page.getByRole('form', { name: 'Budget limits' });
+  await form.getByLabel('Monthly limit (USD)').fill(monthly);
+  await form.getByLabel('Monthly mode').selectOption(mode);
+  await form.getByRole('button', { name: 'Save budget' }).click();
+  await expect(page.getByText('Budget saved.')).toBeVisible();
+}
+
+test.describe.configure({ mode: 'serial' });
+
+test('owner: sees this month’s costs and changes the budget', async ({ page }) => {
+  await signIn(page, OWNER, passwordOf('OWNER'));
+  await openCosts(page);
+  const budget = page.getByRole('region', { name: 'Budget' });
+  await expect(budget).toContainText('This month');
+  await expect(budget).toContainText('Remaining');
+  await expect(page.getByRole('region', { name: 'Six-month trend' }).getByRole('link')).toHaveCount(
+    6,
+  );
+
+  await saveBudget(page, '25', 'soft');
+  await page.reload();
+  const form = page.getByRole('form', { name: 'Budget limits' });
+  await expect(form.getByLabel('Monthly limit (USD)')).toHaveValue('25');
+  await expect(form.getByLabel('Monthly mode')).toHaveValue('soft');
+  await expect(budget).toContainText('of $25 (soft)');
+
+  // Invalid amounts never reach the API.
+  await form.getByLabel('Per request limit (USD)').fill('two dollars');
+  await form.getByRole('button', { name: 'Save budget' }).click();
+  await expect(form.getByRole('alert')).toContainText('Per request: enter an amount in USD');
+
+  // Restore the seeded default for the other specs.
+  await form.getByLabel('Per request limit (USD)').fill('2');
+  await saveBudget(page, '10', 'hard');
+});
+
+test('editor: sees the limits read-only', async ({ page }) => {
+  await signIn(page, EDITOR, passwordOf('EDITOR'));
+  await openCosts(page);
+  await expect(page.getByRole('form', { name: 'Budget limits' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Budget limits' })).toContainText(
+    'Only project owners change them',
+  );
+});
+
+test('operations page: queues, failures, providers and budgets', async ({ page }) => {
+  await signIn(page, OWNER, passwordOf('OWNER'));
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Operations' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Operations' })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Queues' })).toContainText('generation-dlq');
+  await expect(page.getByRole('heading', { name: 'Needs attention' })).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Project budgets' })).toContainText('Demo Studio');
+});
+
+test('workspace costs: every project against its monthly limit', async ({ page }) => {
+  await signIn(page, OWNER, passwordOf('OWNER'));
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Costs' }).click();
+  await expect(page).toHaveURL(/\/costs$/);
+  await expect(page.getByRole('heading', { level: 1, name: /^Costs/ })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Budgets this month' })).toContainText(
+    'Demo Studio',
+  );
+});
+
+test('owner: cost-confirmation threshold per project, workspace default for operators (R-D4)', async ({
+  page,
+}) => {
+  await signIn(page, OWNER, passwordOf('OWNER'));
+  await openCosts(page);
+  const form = page.getByRole('form', { name: 'Budget limits' });
+  const threshold = form.getByLabel('Cost-confirmation threshold (USD)');
+  await expect(threshold).toHaveValue('');
+  await threshold.fill('1.234');
+  await form.getByRole('button', { name: 'Save budget' }).click();
+  await expect(form.getByRole('alert')).toContainText('at most two decimals');
+  await threshold.fill('0.5');
+  await form.getByRole('button', { name: 'Save budget' }).click();
+  await expect(page.getByText('Budget saved.')).toBeVisible();
+  await page.goto('/settings/budgets');
+  const overrides = page.getByRole('table', { name: 'Project overrides' });
+  await expect(overrides).toContainText('$0.50 (project)');
+  // Inline edit (canvas): invalid values are refused, Enter saves.
+  const inline = overrides.getByLabel('Confirm above for Demo Studio (USD)');
+  await expect(inline).toHaveValue('0.5');
+  await inline.fill('-2');
+  await inline.press('Enter');
+  await expect(overrides.getByRole('alert')).toContainText('at most two decimals');
+  await inline.fill('0.75');
+  await inline.press('Enter');
+  await expect(page.getByText('Threshold of Demo Studio saved.')).toBeVisible();
+  await expect(overrides).toContainText('$0.75 (project)');
+  // Restore: the workspace threshold applies again.
+  await openCosts(page);
+  await page
+    .getByRole('form', { name: 'Budget limits' })
+    .getByLabel('Cost-confirmation threshold (USD)')
+    .fill('');
+  await page
+    .getByRole('form', { name: 'Budget limits' })
+    .getByRole('button', { name: 'Save budget' })
+    .click();
+  await expect(page.getByText('Budget saved.')).toBeVisible();
+});

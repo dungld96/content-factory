@@ -128,17 +128,67 @@ Do not implement direct social publishing, multi-tenant SaaS billing, fine-tunin
 
 Do not build all milestones in one task. Implement one milestone at a time and wait for review.
 
-## 12. First task
+## 12. Project status
 
-Start with M0 only:
-- Inspect repository.
-- Create monorepo skeleton.
-- Configure pnpm, TypeScript, lint, formatting, and tests.
-- Add Docker Compose for PostgreSQL and Redis.
-- Add validated environment configuration.
-- Add NestJS health endpoint and Next.js shell.
-- Add Prisma bootstrap.
-- Add ADR directory and initial ADRs.
-- Document exact commands to run locally.
+The MVP is complete: M0–M8.5 are done and approved (2026-11-20). Details per milestone:
+`docs/IMPLEMENTATION_PLAN.md` §2 and the design packages in `docs/design/`.
 
-Do not implement AI provider integrations or content generation during M0.
+Post-MVP: audit `docs/post-mvp/POST_MVP_AUDIT.md` (owner decisions recorded there). **P3 —
+Worker monitoring & smart recovery:** design package revision 1 approved
+(`docs/design/P3-design-review-package.md`; W1–W6, 2026-11-20); slices P3a–P3c implemented,
+integration/E2E verification pending (package §10).
+**P2a — Asset Library integrity:** design package revision 1 approved
+(`docs/design/P2a-design-review-package.md`; A1–A3, 2026-11-20); slices P2a-1–P2a-3 implemented,
+API integration/E2E verification pending (package §9).
+**P2b — Asset Library features:** design package revision 1 approved
+(`docs/design/P2b-design-review-package.md`; L1–L6, collections per project); slices
+P2b-1–P2b-4 implemented, API integration/E2E verification pending (package §10).
+**P1 — OpenRouter Settings UI:** design package revision 1 approved
+(`docs/design/P1-design-review-package.md`; O1–O7); slices P1a–P1c implemented, API
+integration/E2E verification pending (package §10). Operators: `OPERATOR_EMAILS`.
+**P4 — Audio configuration:** design package revision 1 approved
+(`docs/design/P4-design-review-package.md`; S1–S7); slices P4a–P4c implemented, API
+integration/E2E verification pending (package §9). Renders without `audio` stay `render.v1`.
+
+**2026-11-21 follow-ups (owner: "decide by recommendation until done"):**
+P3d — keep paid media when a later step fails (`docs/design/P3d-design-review-package.md`; tool
+check before paying, delivered output stored before validation, finish without a new charge);
+UX review U1–U8 (`docs/design/UX-review-package.md`; Scenes board, Next step, phone shell,
+foundations, `lucide-react` icons); P4d — voice-over on/off per content item (P4 package §11);
+P2c — picker uploads into the Library (P2b package §11); P1d — model import and prices in
+Settings (P1 package §11); product photos in the brief, sent with every keyframe (P2b package
+§12). All implemented; unit, integration and E2E suites pass except the
+backup drill, which fails on the local SeaweedFS running out of volumes (environment).
+
+**2026-11-23 redesign R (owner approved R-D1–R-D6; "làm tới khi xong toàn bộ"):** design package
+`docs/design/R-redesign-package.md` (visual design in the linked canvas). Bilingual UI (EN/VI,
+`lib/i18n/`, every UI string through `t()`), 7-entry menu with To-do as home, Productions
+(list/board), workspace Costs, stage rail + Next-step bar + history drawer, review mode for the
+gates, live job events over SSE (ADR-0022) with a Jobs tray, configurable cost-confirmation
+threshold, settings sub-routes. All slices implemented; lint, typecheck, unit, build, live/auth
+integration and E2E (EN, VI, phone) pass.
+
+**2026-11-26 P5 — second gateway MixRoute (ADR-0023):** design package
+`docs/design/P5-design-review-package.md` (G1–G8; owner: phased, per-task routes + bulk switch).
+P5a implemented: text + Seedream image adapters (`@acf/ai-core/mixroute`), curated catalog,
+Settings › AI › Switch gateway, `MIXROUTE_API_KEY`. P5b (Seedance video) waits for review.
+
+Open items:
+- Off-server backups wait for the backup destination (rclone remote).
+- The paid image benchmark (G2) waits for an OpenRouter API key.
+- Staging targets a generic Ubuntu VPS (ADR-0021). After deploys run `pnpm media:selftest` in the
+  image (Debian FFmpeg 5.1).
+
+Routed models (pilot): scripts Gemini 3.5 Flash Lite, storyboards Claude Haiku 5.5, images
+Seedream 5.0 Flash, clips Veo 3.1 Lite, voice per voice profile.
+
+Read before working in an area:
+
+| Area | Read |
+|---|---|
+| Domain, persistence, auth (M1) | `docs/design/M1-design-review-package.md`, ADR-0009 to ADR-0011 |
+| AI core, registry, money (M2) | `docs/design/M2-design-review-package.md`, `docs/design/m2/`, ADR-0012 |
+| Storage, images (M4) | `docs/design/M4-design-review-package.md` §12, ADR-0006, ADR-0016 |
+| Video, audio (M5) | `docs/design/M5-design-review-package.md`, `docs/design/m5/openrouter-video-tts-verification.md` |
+| Rendering, export (M6) | `docs/design/M6-design-review-package.md` |
+| Budgets, reliability (M7) | `docs/design/M7-design-review-package.md` |

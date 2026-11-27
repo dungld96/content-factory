@@ -1,0 +1,42 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+.next/
+out/
+*.tsbuildinfo
+coverage/
+test-results/
+playwright-report/
+
+# generated
+packages/database/src/generated/
+
+# env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# logs & OS
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+
+# editor
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Next.js-generated files (re-created by `next dev` / `next typegen`)
+apps/web/next-env.d.ts
+apps/web/AGENTS.md
+
+# Paid benchmark outputs (media; results are recorded in docs/design/m5/benchmark-results.md)
+benchmark/
+
+# Backups taken on the VM (M8, infra/deploy/backup.sh)
+infra/deploy/backups/

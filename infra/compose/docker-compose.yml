@@ -1,0 +1,74 @@
+# Local development dependencies only. Not a production topology.
+# Start:  pnpm infra:up      Stop: pnpm infra:down      Wipe data: pnpm infra:reset
+name: acf
+
+services:
+  postgres:
+    image: postgres:17.12-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-acf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (copy .env.example)}
+      POSTGRES_DB: ${POSTGRES_DB:-acf}
+      TZ: UTC
+      PGTZ: UTC
+    ports:
+      # Bound to loopback only: never expose dev databases on the network.
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  redis:
+    image: redis:7.4.12-alpine
+    restart: unless-stopped
+    # BullMQ requires maxmemory-policy=noeviction; AOF keeps queued jobs across restarts.
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    ports:
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # S3-compatible object storage for asset bytes (M4a; replaces MinIO, ADR-0006).
+  # Bucket: `pnpm storage:setup`. Credentials come from .env (dev-only values).
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.54
+    restart: unless-stopped
+    # Strips Windows line endings first: a CRLF checkout of start.sh would not run in /bin/sh.
+    entrypoint:
+      [
+        '/bin/sh',
+        '-c',
+        "tr -d '\\r' < /opt/acf/start.sh > /tmp/start.sh && exec /bin/sh /tmp/start.sh",
+      ]
+    environment:
+      STORAGE_ADMIN_ACCESS_KEY_ID: ${STORAGE_ADMIN_ACCESS_KEY_ID:?Set STORAGE_ADMIN_ACCESS_KEY_ID in .env (copy .env.example)}
+      STORAGE_ADMIN_SECRET_ACCESS_KEY: ${STORAGE_ADMIN_SECRET_ACCESS_KEY:?Set STORAGE_ADMIN_SECRET_ACCESS_KEY in .env}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?Set S3_ACCESS_KEY_ID in .env}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?Set S3_SECRET_ACCESS_KEY in .env}
+    ports:
+      - '127.0.0.1:${S3_PORT:-8333}:8333'
+    volumes:
+      - ../seaweedfs/start.sh:/opt/acf/start.sh:ro
+      - seaweedfs-data:/data
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:9333/cluster/status']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+volumes:
+  postgres-data:
+  redis-data:
+  seaweedfs-data:

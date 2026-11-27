@@ -1,168 +1,83 @@
 # Implementation Plan
 
-## 1. Delivery strategy
+## 1. Approach
 
-Implement in vertical slices. Each milestone must leave the application runnable and testable. Do not generate the entire codebase in one Claude Code task.
+Build in vertical slices. Each milestone leaves the application runnable and tested, has a design
+review package approved before coding, and is reviewed before the next starts.
 
 ## 2. Milestones
 
-### M0 — Foundation
-Deliverables:
-- Monorepo and package manager setup.
-- TypeScript configuration.
-- Lint, format, test setup.
-- Docker Compose for PostgreSQL and Redis.
-- Environment validation.
-- NestJS health endpoint.
-- Next.js shell.
-- Prisma initial setup.
-- ADR directory and first decisions.
+All MVP milestones are done and approved. Scope, decisions and acceptance evidence for each are in
+its design package in `docs/design/`.
 
-Acceptance:
-- One command starts local dependencies.
-- Web and API start.
-- Health checks pass.
-- No secrets committed.
+| Milestone | Delivered | Design | Done |
+|---|---|---|---|
+| M0 Foundation | Workspace, toolchain, env validation, health checks, Prisma, Docker Compose, ADRs | — | 2026-11-17 |
+| M1 Domain, persistence, identity | Projects, members, channels, content, characters, environments, versioned assets; sessions and roles; database-enforced integrity | `M1-design-review-package.md` (rev. 4) | 2026-11-17 |
+| M2 AI core and registry | Capability interfaces, OpenRouter LLM adapter, model/price registry, usage ledger, exact money | `M2-design-review-package.md` | 2026-11-17 |
+| M3 Script and storyboard | Brief validation, async jobs and worker, script and storyboard generation, versions, gates 1–2 | `M3-design-review-package.md` | 2026-11-18 |
+| M3.5 / R0 Multi-format foundation | Content masters and variants, format and platform registries | `M3.5-multiformat-architecture-review.md` | 2026-11-18 |
+| M4 Images and assets | Object storage, uploads, image generation, lineage, keyframes (gate 3) | `M4-design-review-package.md` | 2026-11-19 |
+| M4.5 UI refinement | Content Studio redesign | `M4.5-ui-refinement.md` | 2026-11-19 |
+| M5 Video and audio | Async video jobs, TTS, voice profiles, audio uploads, gate 4 | `M5-design-review-package.md` | 2026-11-19 |
+| M6 Rendering and export | FFmpeg render, captions, music, QC, gate 5, export package | `M6-design-review-package.md` | 2026-11-20 |
+| M7 Reliability and cost | Budgets with reservations, circuit breakers, resume, dead-letter, Costs and Operations pages, log redaction | `M7-design-review-package.md` | 2026-11-20 |
+| M8 Pilot and hardening | Real-provider pilot, UAT, backup/restore, deployment docs, known limitations | `M8-design-review-package.md` | 2026-11-20 |
+| M8.5 Production polish | Clip-length storyboards, voice picker, phrase captions, CSP, scheduled off-server backups, VPS staging | `M8.5-design-review-package.md` | 2026-11-20 |
 
-### M1 — Domain and persistence
-Deliverables:
-- Initial Prisma schema.
-- Project/content/character/environment/asset/job entities.
-- Migrations and seed data.
-- Repository/service patterns.
-- API CRUD for projects and content.
+Open items:
+- Off-server backups need a backup destination (rclone remote) to be named.
+- Paid image benchmark G2 waits for an OpenRouter API key.
+- Owner UAT run on staging (`docs/UAT.md`, run 2).
 
-Acceptance:
-- Migrations work on empty DB.
-- Integration tests cover core CRUD.
-- Authorization boundaries are defined.
+### Post-MVP packages
 
-### M2 — AI core and model registry
-Deliverables:
-- Capability interfaces.
-- Provider registry.
-- Model registry.
-- One LLM adapter.
-- Usage/cost normalization.
-- Provider configuration validation.
-- Mock providers for automated tests.
+Audited in `docs/post-mvp/POST_MVP_AUDIT.md`; each package has its own design package and was
+implemented in slices. API integration and E2E runs are pending for all of them (see each package's
+last section).
 
-Acceptance:
-- Business logic uses interfaces, not vendor SDKs.
-- Mock tests do not make paid calls.
-- Provider errors are normalized.
+| Package | Delivered | Design |
+|---|---|---|
+| P3 Monitoring & recovery | Resume confirmations, cancel, error catalogue, job history, hold-and-ask for unconfirmed text/speech calls | `P3-design-review-package.md` |
+| P2a Asset Library integrity | Review in the Library, immutable system metadata, production lineage | `P2a-design-review-package.md` |
+| P1 OpenRouter Settings | Operator allowlist, routes and status in Settings, free key check, registry audit | `P1-design-review-package.md` |
+| P2b Asset Library features | Server-side filters, asset picker, characters and environments pages, scene references, collections | `P2b-design-review-package.md` |
+| P4 Audio | Audio layers (voice, clip audio, music fades/ducking/mute, sound effects, voice offsets) | `P4-design-review-package.md` |
 
-### M3 — Script and storyboard pipeline
-Deliverables:
-- Brief validation.
-- Research adapter (optional source search provider).
-- Script generation.
-- JSON schema validation.
-- Storyboard generation.
-- Versioning and approval endpoints/UI.
+Not in the MVP: direct social publishing, multi-tenant billing, fine-tuning, livestream avatars,
+large-scale analytics, formats other than short vertical video.
 
-Acceptance:
-- A brief produces valid script/storyboard JSON.
-- Invalid model output is repaired/rejected safely.
-- User edits create a new version.
+## 3. Testing
 
-### M4 — Image and asset management
-Deliverables:
-- Image provider adapter.
-- Reference asset upload.
-- Image generation jobs.
-- Asset lineage.
-- Candidate review/approval UI.
+| Kind | Scope | Command |
+|---|---|---|
+| Unit | Domain rules, routing, cost, state machines, prompt builders | `pnpm test` |
+| Contract | Provider adapters against documented fixtures | `pnpm test` |
+| Integration | PostgreSQL, Redis, object storage, worker, API | `pnpm test:integration` |
+| End-to-end | Browser: project → content → script/storyboard → mocked media → render | `pnpm test:e2e` |
+| Media | FFprobe checks codec, dimensions, duration, audio | in unit/integration; `pnpm media:selftest` |
+| Paid smoke | One real call, capped, manual only | `ACF_PAID_SMOKE=1 pnpm ai:registry smoke…` |
 
-Acceptance:
-- At least one configured provider generates an image.
-- Output stored in object storage.
-- Asset links to prompt, model, inputs, and job.
+No test may reach a real provider (network guard in `test-support/network-guard.ts`).
 
-### M5 — Video and audio generation
-Deliverables:
-- Video provider adapter.
-- Async job submission and polling/webhook path.
-- TTS adapter or audio import.
-- Scene-level retries.
-- Usage/cost records.
+## 4. Process per milestone
 
-Acceptance:
-- Video job completes or returns a clear actionable error.
-- Worker restart does not lose provider job tracking.
-- Retry does not duplicate completed scenes.
+1. Read `CLAUDE.md` and the relevant docs.
+2. Inspect the repository.
+3. Write a design review package; wait for approval.
+4. Implement in slices, only the agreed scope.
+5. Run `pnpm check`, integration and relevant E2E tests.
+6. Report changed files, tests, risks and follow-ups; update docs and ADRs.
+7. Wait for review before the next milestone.
 
-### M6 — Rendering and export
-Deliverables:
-- FFmpeg worker.
-- Media normalization.
-- Subtitle/audio mix.
-- Final MP4 export.
-- Preview/download.
+## 5. Definition of Done
 
-Acceptance:
-- Valid 9:16 MP4 produced from approved scenes.
-- Metadata and cost report included.
-- Final export has approval state.
-
-### M7 — Reliability and cost controls
-Deliverables:
-- Budget enforcement.
-- Retry/backoff.
-- Dead-letter queue.
-- Job event history.
-- Monitoring and logs.
-- Provider circuit breaker.
-
-Acceptance:
-- Hard budget blocks expensive work.
-- Failed jobs can resume.
-- Logs redact credentials.
-- Costs distinguish reported vs estimated.
-
-### M8 — Pilot and hardening
-Deliverables:
-- Pilot content project.
-- Benchmark report.
-- User acceptance testing.
-- Backup/restore procedure.
-- Deployment documentation.
-- Known limitations list.
-
-Acceptance:
-- One complete content item reaches approved export.
-- Cost per output is measured.
-- Failures and manual interventions are documented.
-
-## 3. Testing strategy
-
-- Unit tests: routing, cost calculations, prompt builders, state transitions.
-- Contract tests: provider adapters using fixtures/mocks.
-- Integration tests: PostgreSQL, Redis, object storage.
-- End-to-end tests: project → content → script/storyboard → mocked media → render.
-- Paid smoke tests: manually enabled, budget capped, never part of default CI.
-- Media tests: FFprobe validates codec, dimensions, duration, and audio streams.
-
-## 4. Claude Code execution protocol
-
-For each milestone:
-1. Read `CLAUDE.md` and relevant docs.
-2. Inspect the current repository before editing.
-3. Propose a short implementation plan.
-4. Implement only the selected milestone.
-5. Run lint, typecheck, unit tests, and relevant integration tests.
-6. Summarize changed files, decisions, tests, and remaining risks.
-7. Update docs/ADR when architecture changes.
-8. Wait for user review before starting the next milestone.
-
-## 5. Definition of Done per task
-
-- Code follows project conventions.
-- Input validation exists.
-- Errors are handled and observable.
+- Follows project conventions; strict TypeScript, no `any`.
+- Input validated at boundaries.
+- Errors handled, typed and observable.
 - Tests cover success and failure paths.
-- No secret or real API key in code/tests.
-- Database changes have migrations.
-- API changes update OpenAPI docs.
-- User-visible behavior has loading/error/empty states.
-- Documentation is updated.
+- No secrets or real API keys in code or tests.
+- Schema changes have migrations.
+- API changes update the `@Endpoint` contracts (OpenAPI) and `docs/API_SPEC.md`.
+- UI has loading, error and empty states.
+- Documentation updated.
