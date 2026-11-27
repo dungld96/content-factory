@@ -2,10 +2,18 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
-import type { BudgetDto, ContentItemDto, ContentMasterDto, ProjectDto } from '@acf/contracts';
+import type {
+  BudgetDto,
+  ContentItemDto,
+  ContentMasterDto,
+  MemberDto,
+  ProjectDto,
+} from '@acf/contracts';
 
+import { ArchiveAction } from '@/components/archive-action';
 import { ContentTable } from '@/components/content-table';
 import { NewContentButton } from '@/components/forms';
+import { ProjectMembers } from '@/components/project-members';
 import { ProjectTabs } from '@/components/project-tabs';
 import { QueryFilters } from '@/components/query-filters';
 import { RecentActivity, StageList } from '@/components/snapshot';
@@ -19,6 +27,7 @@ import {
   type SearchParams,
 } from '@/lib/content-filters';
 import { getT } from '@/lib/i18n/server';
+import { getMe } from '@/lib/me';
 import { writableProjects } from '@/lib/project-options';
 import { apiGetAll } from '@/lib/workspace';
 
@@ -35,11 +44,13 @@ export default async function ProjectPage(props: {
   readonly searchParams: Promise<SearchParams>;
 }) {
   const [{ projectId }, query] = await Promise.all([props.params, props.searchParams]);
-  const [project, content, masters, budget, t] = await Promise.all([
+  const [project, content, masters, budget, members, me, t] = await Promise.all([
     apiGet<ProjectDto>(`/projects/${projectId}`),
     apiGetAll<ContentItemDto>(`/projects/${projectId}/content`),
     apiGetAll<ContentMasterDto>(`/projects/${projectId}/content-masters`),
     apiGet<BudgetDto>(`/projects/${projectId}/budget`),
+    apiGet<{ data: MemberDto[] }>(`/projects/${projectId}/members`),
+    getMe(),
     getT(),
   ]);
   if (project.kind === 'unauthenticated') redirect('/login');
@@ -72,6 +83,15 @@ export default async function ProjectPage(props: {
         </div>
         <div className="actions">
           {writable.length > 0 && <NewContentButton projects={writable} projectId={projectId} />}
+          {project.data.role === 'owner' && (
+            <ArchiveAction
+              kind="project"
+              path={`/projects/${projectId}`}
+              name={project.data.name}
+              archived={project.data.archivedAt !== null}
+              afterArchive="/projects"
+            />
+          )}
         </div>
       </div>
       <ProjectTabs projectId={projectId} />
@@ -138,6 +158,14 @@ export default async function ProjectPage(props: {
           <RecentActivity items={items} limit={4} />
         </aside>
       </div>
+      {members.kind === 'ok' && (
+        <ProjectMembers
+          projectId={projectId}
+          members={members.data.data}
+          canRemove={project.data.role === 'owner' && project.data.archivedAt === null}
+          selfId={me.kind === 'ok' ? me.data.user.id : null}
+        />
+      )}
     </>
   );
 }

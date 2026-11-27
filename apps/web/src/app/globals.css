@@ -2143,6 +2143,25 @@ input.filter {
   color: var(--muted);
 }
 
+/* Long labels (Vietnamese "Nhà cung cấp thử nghiệm") wrap inside the card instead of overflowing. */
+.provider-head > div {
+  min-width: 0;
+}
+
+.provider-head .tag {
+  white-space: normal;
+  text-align: right;
+  max-width: 55%;
+}
+
+.provider-facts dd {
+  min-width: 0;
+}
+
+.provider-facts .status {
+  white-space: normal;
+}
+
 .provider-facts {
   display: grid;
   grid-template-columns: 88px 1fr;
@@ -2267,7 +2286,19 @@ input.filter {
 }
 
 .price-list b {
-  white-space: nowrap;
+  /* Breaks at " / " in narrow price columns. */
+  white-space: normal;
+}
+
+.price-list li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Long ids (model keys, paths) break inside table cells instead of widening the table. */
+.table td.mono,
+.table .cell-sub.mono {
+  overflow-wrap: anywhere;
 }
 
 .price-more {
@@ -2289,6 +2320,10 @@ input.filter {
   gap: 6px;
   align-items: center;
   justify-content: flex-end;
+  /* Several controls (status, schema mode, add price) wrap instead of widening the table. */
+  flex-wrap: wrap;
+  max-width: 300px;
+  margin-left: auto;
 }
 
 .health-tiles {
@@ -2327,6 +2362,11 @@ input.filter {
   .table.stack-mobile td {
     display: block;
     width: 100%;
+  }
+
+  /* Stacked tables fit the screen: never the 640 px minimum of scrolling tables. */
+  .table.stack-mobile {
+    min-width: 0;
   }
 
   .table.stack-mobile tr {
@@ -2720,6 +2760,16 @@ input.filter {
 
   .master-hero {
     flex-wrap: wrap;
+  }
+
+  /* Phone: the text keeps a readable width next to the cover; the button gets its own row. */
+  .master-hero .master-info {
+    flex: 1 1 180px;
+  }
+
+  .master-hero > .btn {
+    flex: 1 1 100%;
+    justify-content: center;
   }
 
   .kv {
@@ -3254,21 +3304,21 @@ img.board-thumb {
   background: var(--surface);
 }
 
-.switch {
+.check-switch {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   cursor: pointer;
 }
 
-.switch input {
+.check-switch input {
   width: 20px;
   height: 20px;
   margin-top: 2px;
   accent-color: var(--accent);
 }
 
-.switch span {
+.check-switch span {
   display: flex;
   flex-direction: column;
 }
@@ -3369,4 +3419,54 @@ img.board-thumb {
   .import-form {
     grid-template-columns: 1fr;
   }
+}
+
+/* Storyboard scene foot: a long camera-motion tag stays inside the card. */
+.scene-foot .tag {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Phone: one storyboard scene per row; two columns left ~150 px for the prompts. */
+@media (width <= 560px) {
+  .storyboard-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Archive / restore (Productions › Archived, Brand, Library rail, Members). */
+.member-row,
+.job-row:has(> .channel-row) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.member-name,
+.channel-row {
+  flex: 1 1 220px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.job-row > .row-actions {
+  margin-top: 6px;
+}
+
+.coll.archived {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.coll.archived .coll-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

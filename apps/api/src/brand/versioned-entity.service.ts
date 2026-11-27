@@ -228,6 +228,16 @@ export class VersionedEntityService {
     return toEntityDto(await this.loadParent(id));
   }
 
+  /** Brings an archived character/environment back (editor, idempotent). */
+  async restore(actor: Actor, id: string): Promise<VersionedEntityDto> {
+    const row = await this.loadParent(id);
+    await this.access.require(actor, row.project_id, 'editor', { mutation: true });
+    await this.db.$executeRaw`
+      UPDATE ${this.kind.parentTable} SET archived_at = NULL, updated_at = now()
+       WHERE id = ${id}::uuid AND archived_at IS NOT NULL`;
+    return toEntityDto(await this.loadParent(id));
+  }
+
   // ------------------------------------------------------------------ versions
 
   private versionSelect(where: Prisma.Sql): Prisma.Sql {

@@ -18,8 +18,8 @@ import { platformLabel } from '@/lib/format';
 import type { MessageKey, Translate } from '@/lib/i18n';
 import { getT } from '@/lib/i18n/server';
 import { loadItemCosts, type ItemCost } from '@/lib/item-costs';
-import { formatUsd } from '@/lib/money';
-import { loadWorkspace, type WorkspaceContent } from '@/lib/workspace';
+import { formatUsdSummary } from '@/lib/money';
+import { loadArchivedContent, loadWorkspace, type WorkspaceContent } from '@/lib/workspace';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,15 +81,21 @@ export default async function ProductionsPage(props: {
     );
   }
   const { projects, content } = workspace.data;
-  const board = param(query, 'view') === 'board';
+  const board = param(query, 'view') === 'board' && param(query, 'chip') !== 'archived';
   const rawChip = param(query, 'chip');
   const chip: Chip =
     rawChip === 'needs' || rawChip === 'running' || rawChip === 'failed' ? rawChip : 'all';
+  // Archived items (restorable) are a separate list, read only when asked for.
+  const showArchived = rawChip === 'archived';
+  const archivedResult = showArchived ? await loadArchivedContent(projects) : null;
+  const archived = archivedResult?.kind === 'ok' ? archivedResult.data : [];
   const filter = contentFilterFrom(query);
   const base = filterContent(content, filter);
-  const shown = base.filter(CHIP_MATCH[chip]);
+  const shown = showArchived ? filterContent(archived, filter) : base.filter(CHIP_MATCH[chip]);
   const filtered =
-    Boolean(filter.q ?? filter.status ?? filter.platform ?? filter.project) || chip !== 'all';
+    Boolean(filter.q ?? filter.status ?? filter.platform ?? filter.project) ||
+    chip !== 'all' ||
+    showArchived;
 
   const href = (changes: Record<string, string | null>) => {
     const next = new URLSearchParams();
@@ -145,12 +151,19 @@ export default async function ProductionsPage(props: {
             <Link
               key={c.id}
               href={href({ chip: c.id === 'all' ? null : c.id })}
-              className={chip === c.id ? 'chip on' : 'chip'}
-              aria-current={chip === c.id ? 'page' : undefined}
+              className={chip === c.id && !showArchived ? 'chip on' : 'chip'}
+              aria-current={chip === c.id && !showArchived ? 'page' : undefined}
             >
               {t(c.label)} <span className="n">{base.filter(CHIP_MATCH[c.id]).length}</span>
             </Link>
           ))}
+          <Link
+            href={href({ chip: 'archived', view: null })}
+            className={showArchived ? 'chip on' : 'chip'}
+            aria-current={showArchived ? 'page' : undefined}
+          >
+            <Icon name="archive" size={13} /> {t('projects.archived')}
+          </Link>
         </nav>
         <span className="spacer" />
         <QueryFilters
@@ -164,7 +177,10 @@ export default async function ProductionsPage(props: {
             },
             platformSelect(t),
           ]}
-          count={t('productions.count', { shown: shown.length, total: content.length })}
+          count={t('productions.count', {
+            shown: shown.length,
+            total: showArchived ? archived.length : content.length,
+          })}
         />
         <Link className="btn sm" href="/masters">
           <Icon name="masters" /> {t('productions.masters')}
@@ -214,7 +230,12 @@ export default async function ProductionsPage(props: {
               </p>
             </div>
           ) : (
-            <ContentTable items={shown} label={t('productions.tableLabel')} showProject />
+            <ContentTable
+              items={shown}
+              label={t('productions.tableLabel')}
+              showProject
+              restore={showArchived}
+            />
           )}
         </section>
       )}
@@ -266,7 +287,9 @@ function BoardCard(props: {
         </span>
         <span className="spacer" />
         <span className="t-12 muted num" title={t('productions.costThisMonth')}>
-          {cost ? `${formatUsd(cost.totalUsd)}${cost.unknownCalls > 0 ? ' + ?' : ''}` : '$0.00'}
+          {cost
+            ? `${formatUsdSummary(cost.totalUsd)}${cost.unknownCalls > 0 ? ' + ?' : ''}`
+            : '$0.00'}
         </span>
       </span>
     </Link>

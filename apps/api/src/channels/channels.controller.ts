@@ -104,4 +104,17 @@ export class ChannelsController {
   archive(@CurrentActor() actor: Actor, @ValidParams() params: ChannelParams): Promise<ChannelDto> {
     return this.channels.archive(actor, params.channelId);
   }
+
+  @Post('channels/:channelId/restore')
+  @HttpCode(200)
+  @Endpoint({
+    summary: 'Restore an archived channel (editor)',
+    tags: ['channels'],
+    params: channelIdParamsSchema,
+    responses: { 200: { description: 'Restored', schema: channelSchema } },
+    errors: [400, 401, 403, 404, 409],
+  })
+  restore(@CurrentActor() actor: Actor, @ValidParams() params: ChannelParams): Promise<ChannelDto> {
+    return this.channels.restore(actor, params.channelId);
+  }
 }

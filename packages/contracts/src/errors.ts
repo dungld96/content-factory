@@ -157,6 +157,8 @@ export const ApiErrorCode = {
   PlatformChannelMismatch: 'PLATFORM_CHANNEL_MISMATCH',
   /** A content master is archived only after all of its variants are archived. */
   MasterHasActiveVariants: 'MASTER_HAS_ACTIVE_VARIANTS',
+  /** A content item is archived only when none of its jobs is queued or running. */
+  ContentHasActiveJobs: 'CONTENT_HAS_ACTIVE_JOBS',
   /** A content item never moves to another content master (AC014). */
   ContentMasterImmutable: 'CONTENT_MASTER_IMMUTABLE',
 

@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 
 import type { ChannelDto, ContentItemDto, ProjectDto } from '@acf/contracts';
 
+import { ArchiveAction } from '@/components/archive-action';
 import { NewProjectButton } from '@/components/forms';
 import { QueryFilters } from '@/components/query-filters';
 import { Pill } from '@/components/status-pill';
@@ -121,7 +122,18 @@ export default async function ProjectsPage(props: {
                     <span className="actions">
                       <span className="tag">{t(ROLE_LABEL[project.role])}</span>
                       {project.archivedAt ? (
-                        <Pill tone="gray">{t('projects.archived')}</Pill>
+                        <>
+                          <Pill tone="gray">{t('projects.archived')}</Pill>
+                          {project.role === 'owner' && (
+                            <ArchiveAction
+                              kind="project"
+                              path={`/projects/${project.id}`}
+                              name={project.name}
+                              archived
+                              small
+                            />
+                          )}
+                        </>
                       ) : (
                         <Pill tone="green">{t('projects.activeBadge')}</Pill>
                       )}

@@ -233,6 +233,19 @@ export class ContentMastersService {
     return toContentMasterDto(result);
   }
 
+  /** Brings an archived master back (idempotent); its variants are restored one by one. */
+  async restore(actor: Actor, masterId: string): Promise<ContentMasterDto> {
+    const master = await this.load(masterId);
+    await this.access.require(actor, master.projectId, 'editor', { mutation: true });
+    if (!master.archivedAt) return toContentMasterDto(master);
+    const row = await this.prisma.client.contentMaster.update({
+      where: { id: masterId },
+      data: { archivedAt: null },
+      include: ACTIVE_VARIANT_COUNT,
+    });
+    return toContentMasterDto(row);
+  }
+
   private async load(masterId: string): Promise<MasterRow> {
     const master = await this.prisma.client.contentMaster.findUnique({
       where: { id: masterId },

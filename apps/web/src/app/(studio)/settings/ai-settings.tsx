@@ -264,6 +264,7 @@ export function RoutesPanel(props: {
                       <select
                         className="compact-select"
                         aria-label={t('ai.modelFor', { task: label })}
+                        title={r.model?.displayName}
                         value={r.model?.id ?? ''}
                         disabled={busy !== null}
                         onChange={(e) => {
@@ -286,12 +287,24 @@ export function RoutesPanel(props: {
                             {t('ai.currentCannotRun', { name: r.model.displayName })}
                           </option>
                         )}
-                        {eligible.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.displayName}
-                            {gatewayCount > 1 ? ` · ${providerName(m.providerKey)}` : ''}
-                          </option>
-                        ))}
+                        {gatewayCount > 1
+                          ? // Several gateways: group by provider so names stay short (P5).
+                            [...new Set(eligible.map((m) => m.providerKey))].map((key) => (
+                              <optgroup key={key} label={providerName(key)}>
+                                {eligible
+                                  .filter((m) => m.providerKey === key)
+                                  .map((m) => (
+                                    <option key={m.id} value={m.id}>
+                                      {m.displayName}
+                                    </option>
+                                  ))}
+                              </optgroup>
+                            ))
+                          : eligible.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.displayName}
+                              </option>
+                            ))}
                       </select>
                     ) : r.model ? (
                       <>

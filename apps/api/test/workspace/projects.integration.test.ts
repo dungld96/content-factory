@@ -147,4 +147,17 @@ describe('projects', () => {
     );
     expect(withArchived.data.some((p) => p.id === f.projectId)).toBe(true);
   });
+
+  it('restoring (owner only) makes the project writable again', async () => {
+    const f = await ctx.fixture();
+    expect((await ctx.as('owner', 'POST', `/projects/${f.projectId}/archive`)).status).toBe(200);
+    expect((await ctx.as('editor', 'POST', `/projects/${f.projectId}/restore`)).status).toBe(403);
+    const restored = await ctx.as('owner', 'POST', `/projects/${f.projectId}/restore`);
+    expect(restored.status).toBe(200);
+    expect(bodyOf<ProjectDto>(restored).archivedAt).toBeNull();
+    const edit = await ctx.as('owner', 'PATCH', `/projects/${f.projectId}`, {
+      body: { name: 'Back' },
+    });
+    expect(edit.status).toBe(200);
+  });
 });

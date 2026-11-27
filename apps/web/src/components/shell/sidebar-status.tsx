@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 import { isFinished } from '@/lib/content-status';
 import { getLocale, getT } from '@/lib/i18n/server';
-import { formatUsd } from '@/lib/money';
+import { formatUsdSummary } from '@/lib/money';
 import { loadOpsSummary } from '@/lib/ops-summary';
 import { loadMonthSpend } from '@/lib/spend';
 import { buildTodo } from '@/lib/todo';
@@ -55,7 +55,7 @@ export async function SidebarSpend() {
       <span className="row">
         {t('nav.spend', { month })}
         <span className="spacer" />
-        <b className="num">{formatUsd(spend.spentUsd)}</b>
+        <b className="num">{formatUsdSummary(spend.spentUsd)}</b>
       </span>
       <span className="meter" aria-hidden="true">
         <i className="spent" style={{ width: `${String(used)}%` }} />
@@ -63,8 +63,8 @@ export async function SidebarSpend() {
       </span>
       <span>
         {t('nav.spendOf', {
-          limit: formatUsd(spend.limitUsd),
-          reserved: formatUsd(spend.reservedUsd),
+          limit: formatUsdSummary(spend.limitUsd),
+          reserved: formatUsdSummary(spend.reservedUsd),
         })}
       </span>
     </Link>

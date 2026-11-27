@@ -226,6 +226,80 @@ describe('content masters', () => {
     expect(all.data.map((m) => m.id)).toContain(f.contentMasterId);
   });
 
+  it('restores a master, then its variants; a variant waits for its master', async () => {
+    const f = await ctx.fixture();
+    expect((await ctx.as('editor', 'POST', `/content/${f.contentId}/archive`)).status).toBe(200);
+    expect(
+      (await ctx.as('editor', 'POST', `/content-masters/${f.contentMasterId}/archive`)).status,
+    ).toBe(200);
+
+    const early = await ctx.as('editor', 'POST', `/content/${f.contentId}/restore`);
+    expect([early.status, codeOf(early)]).toEqual([409, 'ARCHIVED']);
+    expect(
+      (await ctx.as('viewer', 'POST', `/content-masters/${f.contentMasterId}/restore`)).status,
+    ).toBe(403);
+
+    const master = await ctx.as('editor', 'POST', `/content-masters/${f.contentMasterId}/restore`);
+    expect(master.status).toBe(200);
+    expect(bodyOf<ContentMasterDto>(master).archivedAt).toBeNull();
+    const item = await ctx.as('editor', 'POST', `/content/${f.contentId}/restore`);
+    expect(item.status).toBe(200);
+    expect(bodyOf<ContentItemDto>(item).archivedAt).toBeNull();
+    // Idempotent, and the item is editable again.
+    expect((await ctx.as('editor', 'POST', `/content/${f.contentId}/restore`)).status).toBe(200);
+    const edit = await ctx.as('editor', 'PATCH', `/content/${f.contentId}`, {
+      body: { title: 'Back' },
+    });
+    expect(edit.status).toBe(200);
+  });
+
+  it('refuses to archive an item while one of its jobs is queued or running', async () => {
+    const f = await ctx.fixture();
+    const provider = await ctx.prisma.aiProvider.upsert({
+      where: { key: 'archive-test' },
+      update: {},
+      create: { key: 'archive-test', name: 'Archive test', kind: 'mock' },
+    });
+    const model = await ctx.prisma.aiModel.upsert({
+      where: { providerId_modelKey: { providerId: provider.id, modelKey: 'script' } },
+      update: {},
+      create: {
+        providerId: provider.id,
+        modelKey: 'script',
+        displayName: 'Script',
+        qualityTier: 'economy',
+      },
+    });
+    const editor = { id: ctx.ids['editor'] ?? '' };
+    const run = await ctx.prisma.productionRun.create({
+      data: { projectId: f.projectId, contentItemId: f.contentId, requestedById: editor.id },
+    });
+    const job = await ctx.prisma.generationJob.create({
+      data: {
+        projectId: f.projectId,
+        contentItemId: f.contentId,
+        productionRunId: run.id,
+        kind: 'script_generation',
+        activeKey: `${f.contentId}:script_generation`,
+        idempotencyKey: `archive-${run.id}`,
+        executionKey: 'a'.repeat(64),
+        input: {},
+        previousContentStatus: 'draft',
+        promptTemplateId: 'script.v1',
+        modelId: model.id,
+        requestedById: editor.id,
+      },
+    });
+    const blocked = await ctx.as('editor', 'POST', `/content/${f.contentId}/archive`);
+    expect([blocked.status, codeOf(blocked)]).toEqual([409, 'CONTENT_HAS_ACTIVE_JOBS']);
+
+    await ctx.prisma.generationJob.update({
+      where: { id: job.id },
+      data: { status: 'canceled', activeKey: null, completedAt: new Date() },
+    });
+    expect((await ctx.as('editor', 'POST', `/content/${f.contentId}/archive`)).status).toBe(200);
+  });
+
   it('rejects channels from other projects and unknown masters', async () => {
     const f = await ctx.fixture();
     const other = await ctx.fixture();

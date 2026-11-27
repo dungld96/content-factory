@@ -117,7 +117,7 @@ export function StageRail(props: {
                   <Icon name="resume" size={11} />
                 ) : null}
               </span>
-              {stage.label}
+              <span className="lbl">{stage.label}</span>
               {stage.gate && (
                 <span className={stage.state === 'done' ? 'gate ok' : 'gate'}>{stage.gate}</span>
               )}

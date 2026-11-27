@@ -4,6 +4,7 @@ import Link from 'next/link';
 
 import type { ContentItemDto } from '@acf/contracts';
 
+import { ArchiveAction } from '@/components/archive-action';
 import { useT } from '@/components/i18n-provider';
 import { Icon } from '@/components/icon';
 import { formatLabel, platformLabel } from '@/lib/format';
@@ -22,6 +23,8 @@ export function ContentTable(props: {
   readonly label: string;
   readonly showProject?: boolean;
   readonly compact?: boolean;
+  /** Archived items: the last column restores instead of opening. */
+  readonly restore?: boolean;
 }) {
   const t = useT();
   return (
@@ -74,14 +77,24 @@ export function ContentTable(props: {
                 <RelativeTime iso={item.updatedAt} />
               </td>
               <td>
-                <Link
-                  href={`/content/${item.id}`}
-                  className="row-arrow"
-                  aria-hidden="true"
-                  tabIndex={-1}
-                >
-                  →
-                </Link>
+                {props.restore ? (
+                  <ArchiveAction
+                    kind="content"
+                    path={`/content/${item.id}`}
+                    name={item.title}
+                    archived
+                    small
+                  />
+                ) : (
+                  <Link
+                    href={`/content/${item.id}`}
+                    className="row-arrow"
+                    aria-hidden="true"
+                    tabIndex={-1}
+                  >
+                    →
+                  </Link>
+                )}
               </td>
             </tr>
           ))}

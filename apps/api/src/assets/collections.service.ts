@@ -83,6 +83,21 @@ export class CollectionsService {
     return toDto(row);
   }
 
+  /**
+   * Brings an archived collection back (idempotent). Refused (`409 NAME_TAKEN`) when an active
+   * collection took its name meanwhile: rename that one first.
+   */
+  async restore(actor: Actor, collectionId: string): Promise<CollectionDto> {
+    const c = await this.load(actor, collectionId);
+    if (c.archivedAt) await this.refuseDuplicate(c.projectId, c.name, c.id);
+    const row = await this.db.assetCollection.update({
+      where: { id: c.id },
+      data: { archivedAt: null },
+      include: WITH_COUNT,
+    });
+    return toDto(row);
+  }
+
   /** Idempotent: adding an asset twice keeps one membership. */
   async add(actor: Actor, collectionId: string, assetId: string): Promise<CollectionDto> {
     const c = await this.load(actor, collectionId);

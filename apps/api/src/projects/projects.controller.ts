@@ -98,4 +98,17 @@ export class ProjectsController {
   archive(@CurrentActor() actor: Actor, @ValidParams() params: ProjectParams): Promise<ProjectDto> {
     return this.projects.archive(actor, params.projectId);
   }
+
+  @Post(':projectId/restore')
+  @HttpCode(200)
+  @Endpoint({
+    summary: 'Restore an archived project (owner); it becomes writable again',
+    tags: ['projects'],
+    params: projectIdParamsSchema,
+    responses: { 200: { description: 'Restored', schema: projectSchema } },
+    errors: [400, 401, 403, 404],
+  })
+  restore(@CurrentActor() actor: Actor, @ValidParams() params: ProjectParams): Promise<ProjectDto> {
+    return this.projects.restore(actor, params.projectId);
+  }
 }

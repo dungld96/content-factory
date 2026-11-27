@@ -37,7 +37,7 @@ export function AudioPlan(props: {
 
   return (
     <div className="audio-plan" aria-label={t('ap.label')}>
-      <label className="switch">
+      <label className="check-switch">
         <input
           type="checkbox"
           role="switch"

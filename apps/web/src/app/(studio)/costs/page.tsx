@@ -10,7 +10,7 @@ import { apiGet } from '@/lib/api-server';
 import { jobKindLabel } from '@/lib/format';
 import { getLocale, getT } from '@/lib/i18n/server';
 import { getMe } from '@/lib/me';
-import { addUsd, formatUsd } from '@/lib/money';
+import { addUsd, formatUsd, formatUsdSummary } from '@/lib/money';
 import { projectSwatch } from '@/lib/project-swatch';
 
 export const dynamic = 'force-dynamic';
@@ -114,20 +114,22 @@ export default async function CostsPage() {
       <section className="kpis" aria-label={t('costs.thisMonth')}>
         <div className="card kpi">
           <span className="eyebrow">{t('costs.spent')}</span>
-          <span className="v num">{formatUsd(total)}</span>
+          <span className="v num" title={formatUsd(total)}>
+            {formatUsdSummary(total)}
+          </span>
           <span className="t-13 muted">{t('costs.ofLimits', { limit: formatUsd(limits) })}</span>
         </div>
         <div className="card kpi">
           <span className="eyebrow">{t('costs.reserved')}</span>
-          <span className="v num">{formatUsd(reserved)}</span>
+          <span className="v num">{formatUsdSummary(reserved)}</span>
           <span className="t-13 muted">
             {t('costs.reservedFoot')}
-            {held !== '0' ? ` · ${t('costs.heldPart', { amount: formatUsd(held) })}` : ''}
+            {held !== '0' ? ` · ${t('costs.heldPart', { amount: formatUsdSummary(held) })}` : ''}
           </span>
         </div>
         <div className="card kpi">
           <span className="eyebrow">{t('costs.perVideo')}</span>
-          <span className="v num">{perVideo ? formatUsd(perVideo) : '—'}</span>
+          <span className="v num">{perVideo ? formatUsdSummary(perVideo) : '—'}</span>
           <span className="t-13 muted">{t('costs.perVideoFoot', { count: approvedVideos })}</span>
         </div>
         <div className={unknownCalls > 0 ? 'card kpi unknown' : 'card kpi'}>
@@ -161,7 +163,7 @@ export default async function CostsPage() {
                   className="bar-col"
                   title={`${monthLabel(p.month, 'long')}: ${formatUsd(p.total)}`}
                 >
-                  <span className="bar-v t-12 num">{formatUsd(p.total)}</span>
+                  <span className="bar-v t-12 num">{formatUsdSummary(p.total)}</span>
                   <span
                     className={p.month === month ? 'bar now' : 'bar'}
                     style={{
@@ -178,7 +180,7 @@ export default async function CostsPage() {
                 {[...byStage.entries()].map(([kind, amount]) => (
                   <Fragment key={kind}>
                     <dt>{jobKindLabel(t, kind)}</dt>
-                    <dd>{formatUsd(amount)}</dd>
+                    <dd>{formatUsdSummary(amount)}</dd>
                   </Fragment>
                 ))}
               </dl>
@@ -213,7 +215,7 @@ export default async function CostsPage() {
                     <span className="spacer" />
                     {b ? (
                       <span className="num">
-                        {formatUsd(b.spentUsd)}{' '}
+                        {formatUsdSummary(b.spentUsd)}{' '}
                         <span className="muted">/ {formatUsd(b.monthly.limitUsd)}</span>
                       </span>
                     ) : (
@@ -245,10 +247,10 @@ export default async function CostsPage() {
                       </div>
                       <span className={b.warning ? 't-12 warn-text' : 't-12 muted'}>
                         {b.warning
-                          ? t('costs.warnLine', { left: formatUsd(b.remainingUsd) })
+                          ? t('costs.warnLine', { left: formatUsdSummary(b.remainingUsd) })
                           : t('costs.okLine', {
-                              reserved: formatUsd(b.reservedUsd),
-                              left: formatUsd(b.remainingUsd),
+                              reserved: formatUsdSummary(b.reservedUsd),
+                              left: formatUsdSummary(b.remainingUsd),
                             })}
                       </span>
                     </>

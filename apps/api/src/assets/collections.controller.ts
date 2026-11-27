@@ -92,6 +92,22 @@ export class CollectionsController {
     return this.collections.archive(actor, params.collectionId);
   }
 
+  @Post('collections/:collectionId/restore')
+  @HttpCode(200)
+  @Endpoint({
+    summary: 'Restore an archived asset collection (editor); its name must be free',
+    tags,
+    params: collectionIdParamsSchema,
+    responses: { 200: { description: 'The collection', schema: collectionSchema } },
+    errors: [400, 401, 403, 404, 409],
+  })
+  restore(
+    @CurrentActor() actor: Actor,
+    @ValidParams() params: z.infer<typeof collectionIdParamsSchema>,
+  ): Promise<CollectionDto> {
+    return this.collections.restore(actor, params.collectionId);
+  }
+
   @Put('collections/:collectionId/assets/:assetId')
   @Endpoint({
     summary: 'Add an asset of the same project to a collection (editor; idempotent)',

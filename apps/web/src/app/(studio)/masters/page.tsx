@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 
 import type { ContentMasterDetailDto, ContentMasterDto, ProjectDto } from '@acf/contracts';
 
+import { ArchiveAction } from '@/components/archive-action';
 import { NewMasterButton } from '@/components/forms';
 import { RelativeTime } from '@/components/local-time';
 import { apiGet } from '@/lib/api-server';
@@ -34,6 +35,8 @@ export default async function MastersPage(props: { readonly searchParams: Promis
     getT(),
   ]);
   const only = param(query, 'project');
+  // `?archived=1`: the archived masters, to restore them.
+  const showArchived = param(query, 'archived') === '1';
   const projects =
     all.kind === 'ok' && only
       ? {
@@ -51,7 +54,9 @@ export default async function MastersPage(props: { readonly searchParams: Promis
   }
   const lists = await Promise.all(
     projects.data.items.map((p) =>
-      apiGetAll<ContentMasterDto>(`/projects/${p.id}/content-masters`),
+      apiGetAll<ContentMasterDto>(
+        `/projects/${p.id}/content-masters${showArchived ? '?includeArchived=true' : ''}`,
+      ),
     ),
   );
   const masters: MasterRow[] = lists
@@ -60,8 +65,9 @@ export default async function MastersPage(props: { readonly searchParams: Promis
         ? list.data.items.map((m) => ({ ...m, projectName: projects.data.items[i]?.name ?? '' }))
         : [],
     )
+    .filter((m) => (m.archivedAt !== null) === showArchived)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  const featuredId = masters[0]?.id;
+  const featuredId = showArchived ? undefined : masters[0]?.id;
   const featured = featuredId
     ? await apiGet<ContentMasterDetailDto>(`/content-masters/${featuredId}`)
     : null;
@@ -85,6 +91,15 @@ export default async function MastersPage(props: { readonly searchParams: Promis
               {t('masters.showAll')}
             </Link>
           )}
+          <Link
+            className="btn"
+            href={`/masters?${new URLSearchParams({
+              ...(only ? { project: only } : {}),
+              ...(showArchived ? {} : { archived: '1' }),
+            }).toString()}`}
+          >
+            {showArchived ? t('arc.hideArchived') : t('arc.showArchived')}
+          </Link>
           <NewMasterButton projects={writableProjects(projects.data.items)} />
         </div>
       </div>
@@ -129,7 +144,7 @@ export default async function MastersPage(props: { readonly searchParams: Promis
       <section className="card variant-table" aria-labelledby="all-masters">
         <div className="section-head" style={{ padding: '14px 0 0' }}>
           <div>
-            <h2 id="all-masters">{t('masters.all')}</h2>
+            <h2 id="all-masters">{showArchived ? t('projects.archived') : t('masters.all')}</h2>
             <p>{t('masters.allHint')}</p>
           </div>
         </div>
@@ -140,7 +155,7 @@ export default async function MastersPage(props: { readonly searchParams: Promis
           </div>
         ) : (
           <div className="table-wrap">
-            <table className="table" aria-label={t('masters.title')}>
+            <table className="table stack-mobile" aria-label={t('masters.title')}>
               <thead>
                 <tr>
                   <th scope="col">{t('masters.colMaster')}</th>
@@ -148,6 +163,11 @@ export default async function MastersPage(props: { readonly searchParams: Promis
                   <th scope="col">{t('masters.colVariants')}</th>
                   <th scope="col">{t('masters.colBrief')}</th>
                   <th scope="col">{t('table.updated')}</th>
+                  {showArchived && (
+                    <th scope="col">
+                      <span className="sr-only">{t('arc.restore')}</span>
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -157,12 +177,25 @@ export default async function MastersPage(props: { readonly searchParams: Promis
                       <Link href={`/masters/${m.id}`}>{m.title}</Link>
                       <span className="subline">{m.brief.topic}</span>
                     </td>
-                    <td>{m.projectName}</td>
-                    <td>{m.activeVariantCount}</td>
-                    <td>{t('masters.revisionShort', { revision: m.briefRevision })}</td>
-                    <td>
+                    <td data-label={t('table.project')}>{m.projectName}</td>
+                    <td data-label={t('masters.colVariants')}>{m.activeVariantCount}</td>
+                    <td data-label={t('masters.colBrief')}>
+                      {t('masters.revisionShort', { revision: m.briefRevision })}
+                    </td>
+                    <td data-label={t('table.updated')}>
                       <RelativeTime iso={m.updatedAt} />
                     </td>
+                    {showArchived && (
+                      <td>
+                        <ArchiveAction
+                          kind="master"
+                          path={`/content-masters/${m.id}`}
+                          name={m.title}
+                          archived
+                          small
+                        />
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

@@ -102,6 +102,19 @@ export class ChannelsService {
     );
   }
 
+  /** Brings an archived channel back (editor, idempotent). */
+  async restore(actor: Actor, channelId: string): Promise<ChannelDto> {
+    const channel = await this.load(channelId);
+    await this.access.require(actor, channel.projectId, 'editor', { mutation: true });
+    await this.prisma.client.channel.updateMany({
+      where: { id: channelId, archivedAt: { not: null } },
+      data: { archivedAt: null },
+    });
+    return toChannelDto(
+      await this.prisma.client.channel.findUniqueOrThrow({ where: { id: channelId } }),
+    );
+  }
+
   /** Loads the row to derive its project; callers must then check access (404 either way). */
   private async load(channelId: string): Promise<Channel> {
     const channel = await this.prisma.client.channel.findUnique({ where: { id: channelId } });

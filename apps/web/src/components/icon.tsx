@@ -45,6 +45,9 @@ import {
   ShieldCheck,
   MessageSquare,
   Lock,
+  Archive,
+  ArchiveRestore,
+  UserMinus,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -101,6 +104,9 @@ const ICONS = {
   shield: ShieldCheck,
   message: MessageSquare,
   lock: Lock,
+  archive: Archive,
+  restore: ArchiveRestore,
+  userMinus: UserMinus,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

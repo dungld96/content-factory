@@ -66,3 +66,28 @@ export const loadWorkspace = cache(async (): Promise<ApiResult<Workspace>> => {
   content.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return { kind: 'ok', data: { projects: projects.data.items, content, truncated } };
 });
+
+/**
+ * Archived content items of the caller's active projects, most recently updated first: the
+ * Productions › Archived view, where they can be restored.
+ */
+export async function loadArchivedContent(
+  projects: readonly ProjectDto[],
+): Promise<ApiResult<WorkspaceContent[]>> {
+  const lists = await Promise.all(
+    projects.map((p) =>
+      apiGetAll<ContentItemDto>(`/projects/${p.id}/content?includeArchived=true`),
+    ),
+  );
+  const archived: WorkspaceContent[] = [];
+  for (const [i, list] of lists.entries()) {
+    const project = projects[i];
+    if (!project) continue;
+    if (list.kind !== 'ok') return list;
+    for (const item of list.data.items) {
+      if (item.archivedAt) archived.push({ ...item, projectName: project.name });
+    }
+  }
+  archived.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return { kind: 'ok', data: archived };
+}

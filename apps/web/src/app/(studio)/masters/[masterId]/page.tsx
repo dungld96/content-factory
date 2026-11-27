@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 
 import type { ContentMasterDetailDto, ProjectDto } from '@acf/contracts';
 
+import { ArchiveAction } from '@/components/archive-action';
 import { EditMasterButton, NewVariantButton } from '@/components/forms';
 import { ProductPhotos } from '@/components/product-photos';
 import { ContentStatusPill, Pill } from '@/components/status-pill';
@@ -41,7 +42,10 @@ export default async function MasterPage({
   }
   const m = master.data;
   const project = await apiGet<ProjectDto>(`/projects/${m.projectId}`);
-  const canEdit = project.kind === 'ok' && project.data.role !== 'viewer' && m.archivedAt === null;
+  // Archive and restore need an editor of an active project (also on an archived master).
+  const canManage =
+    project.kind === 'ok' && project.data.role !== 'viewer' && project.data.archivedAt === null;
+  const canEdit = canManage && m.archivedAt === null;
   const approved = m.variants.filter((v) => isFinished(v.status)).length;
 
   return (
@@ -60,6 +64,20 @@ export default async function MasterPage({
         <div className="actions">
           {m.archivedAt && <Pill tone="gray">{t('projects.archived')}</Pill>}
           {canEdit && <EditMasterButton master={m} />}
+          {canManage && (
+            <ArchiveAction
+              kind="master"
+              path={`/content-masters/${m.id}`}
+              name={m.title}
+              archived={m.archivedAt !== null}
+              afterArchive="/masters"
+              blockedReason={
+                m.activeVariantCount > 0
+                  ? t('arc.blocked.variants', { count: m.activeVariantCount })
+                  : null
+              }
+            />
+          )}
         </div>
       </div>
 
@@ -133,14 +151,25 @@ export default async function MasterPage({
                       </span>
                     </td>
                     <td>
-                      <Link
-                        href={`/content/${v.id}`}
-                        className="row-arrow"
-                        aria-hidden="true"
-                        tabIndex={-1}
-                      >
-                        →
-                      </Link>
+                      <span className="actions">
+                        {canManage && m.archivedAt === null && (
+                          <ArchiveAction
+                            kind="content"
+                            path={`/content/${v.id}`}
+                            name={v.title}
+                            archived={v.archivedAt !== null}
+                            small
+                          />
+                        )}
+                        <Link
+                          href={`/content/${v.id}`}
+                          className="row-arrow"
+                          aria-hidden="true"
+                          tabIndex={-1}
+                        >
+                          →
+                        </Link>
+                      </span>
                     </td>
                   </tr>
                 ))}

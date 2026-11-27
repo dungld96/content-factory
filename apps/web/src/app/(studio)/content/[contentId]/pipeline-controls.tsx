@@ -59,7 +59,7 @@ export function BriefCheck({ contentId }: { readonly contentId: string }) {
         <ul role="alert">
           {result.errors.map((e) => (
             <li key={e.path}>
-              <Pill tone="red">{t('pc.error')}</Pill> {briefIssueText(e)}
+              <Pill tone="red">{t('pc.error')}</Pill> {briefIssueText(e, t)}
             </li>
           ))}
         </ul>
@@ -67,7 +67,7 @@ export function BriefCheck({ contentId }: { readonly contentId: string }) {
       {result.warnings.length > 0 && (
         <ul>
           {result.warnings.map((w) => (
-            <li key={w.path}>{briefIssueText(w)}</li>
+            <li key={w.path}>{briefIssueText(w, t)}</li>
           ))}
         </ul>
       )}

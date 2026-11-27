@@ -140,6 +140,21 @@ describe('Scenes board (UX review U1)', () => {
     expect(rows[2]?.runningSince).toBe('2026-11-21T10:00:00.000Z');
   });
 
+  it('says what to do about a failure instead of showing the raw error code', () => {
+    const f = fixture();
+    const clips = f.videos as unknown as { scenes: { lastJob: unknown }[] };
+    const scene = clips.scenes[1]; // scene 2
+    if (scene)
+      scene.lastJob = {
+        ...(scene.lastJob as object),
+        finishable: false,
+        errorCode: 'MODEL_NOT_FOUND',
+      };
+    const rows = buildSceneRows(f.images, f.videos, f.voiceovers);
+    const cell = rows.find((r) => r.sceneNumber === 2)?.cells[1];
+    expect([cell?.label, cell?.sub]).toEqual(['Failed', 'Ask an operator']);
+  });
+
   it('filters rows', () => {
     const f = fixture();
     const rows = buildSceneRows(f.images, f.videos, f.voiceovers);

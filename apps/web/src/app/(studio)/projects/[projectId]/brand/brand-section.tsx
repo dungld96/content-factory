@@ -5,6 +5,7 @@ import { useEffect, useState, type SyntheticEvent } from 'react';
 
 import type { Page, VersionDto, VersionedEntityDto } from '@acf/contracts';
 
+import { ArchiveAction } from '@/components/archive-action';
 import { AssetPicker } from '@/components/asset-picker';
 import { useT } from '@/components/i18n-provider';
 import { LocalTime } from '@/components/local-time';
@@ -49,6 +50,8 @@ export function BrandSection(props: {
   readonly projectId: string;
   readonly entities: readonly VersionedEntityDto[];
   readonly canEdit: boolean;
+  /** Editor of an active project: may archive and restore. */
+  readonly canManage: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -103,7 +106,8 @@ export function BrandSection(props: {
               kind={props.kind}
               entity={e}
               projectId={props.projectId}
-              canEdit={props.canEdit}
+              canEdit={props.canEdit && e.archivedAt === null}
+              canManage={props.canManage}
             />
           ))}
         </ul>
@@ -158,6 +162,7 @@ function EntityRow(props: {
   readonly entity: VersionedEntityDto;
   readonly projectId: string;
   readonly canEdit: boolean;
+  readonly canManage: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -214,6 +219,7 @@ function EntityRow(props: {
       >
         <summary>
           <b>{entity.name}</b> <code>{entity.slug}</code>{' '}
+          {entity.archivedAt && <Pill tone="gray">{t('projects.archived')}</Pill>}{' '}
           {entity.master ? (
             <Pill tone="green">{t('brand.master', { version: entity.master.version })}</Pill>
           ) : (
@@ -264,6 +270,17 @@ function EntityRow(props: {
           </p>
         )}
       </details>
+      {props.canManage && (
+        <div className="row-actions">
+          <ArchiveAction
+            kind={props.kind === 'characters' ? 'character' : 'environment'}
+            path={`/${props.kind}/${entity.id}`}
+            name={entity.name}
+            archived={entity.archivedAt !== null}
+            small
+          />
+        </div>
+      )}
       {drafting && (
         <NewVersion
           kind={props.kind}

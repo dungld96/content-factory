@@ -55,6 +55,21 @@ export function mulUsd(amount: string, count: number): string {
 }
 
 /**
+ * A summary figure (sidebar spend, To-do line): cents, half-up ("$1.65"); a non-zero amount under
+ * a cent is "<$0.01". Exact amounts stay on the Costs pages (formatUsd).
+ */
+export function formatUsdSummary(amount: string): string {
+  const { units, scale } = parse(amount);
+  if (units === 0n) return '$0.00';
+  const cents =
+    scale >= 2
+      ? (units + (5n * 10n ** BigInt(scale - 2)) / 10n) / 10n ** BigInt(scale - 2)
+      : units * 10n ** BigInt(2 - scale);
+  if (cents === 0n) return '<$0.01';
+  return `$${scaled(cents, 2)}`;
+}
+
+/**
  * An estimate for display, rounded up so it never understates: three decimals below ten cents
  * ("~$0.002"), two above ("~$2.40"). Zero is "$0.00".
  */

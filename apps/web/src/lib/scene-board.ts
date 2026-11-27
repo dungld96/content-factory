@@ -7,6 +7,13 @@ import type {
 } from '@acf/contracts';
 
 import { translator, type MessageKey, type Translate } from './i18n';
+import { JOB_ERROR_GROUP_LABEL, jobError } from './job-errors';
+
+/** What to do about a failed job, in a few words (the full text is in the job details). */
+function failureHint(t: Translate, code: string | null): string {
+  const group = code ? jobError(code).group : null;
+  return group ? t(JOB_ERROR_GROUP_LABEL[group]) : t('cell.failed');
+}
 
 /**
  * The Scenes board (UX review U1, P3e): one row per scene with the state of its keyframe, clip
@@ -87,7 +94,7 @@ function cell(
       label: scene.lastJob.finishable ? t('cell.checkFailed') : t('cell.failed'),
       sub: scene.lastJob.finishable
         ? t('cell.outputKept')
-        : (scene.lastJob.errorCode ?? t('cell.failed')),
+        : failureHint(t, scene.lastJob.errorCode),
     };
   }
   const pickable = (scene?.candidates ?? []).filter((a) => a.approvalStatus !== 'rejected');

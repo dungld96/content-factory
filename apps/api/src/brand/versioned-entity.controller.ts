@@ -144,6 +144,22 @@ export function createVersionedController(routes: VersionedRoutes): Type {
       return this.service.archive(actor, idOf(params));
     }
 
+    @Post(`${plural}/:${idParam}/restore`)
+    @HttpCode(200)
+    @Endpoint({
+      summary: `Restore an archived ${label} (editor)`,
+      tags,
+      params: parentParams,
+      responses: { 200: { description: 'Restored', schema: versionedEntitySchema } },
+      errors: [400, 401, 403, 404, 409],
+    })
+    restore(
+      @CurrentActor() actor: Actor,
+      @ValidParams() params: Record<string, string>,
+    ): Promise<VersionedEntityDto> {
+      return this.service.restore(actor, idOf(params));
+    }
+
     @Post(`${plural}/:${idParam}/versions`)
     @Endpoint({
       summary: `Create a draft version (editor); basedOnVersionId copies an older version`,

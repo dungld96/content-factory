@@ -335,5 +335,20 @@ describe('collections (P2b L5)', () => {
       await ctx.as('viewer', 'GET', `/projects/${f.projectId}/collections`),
     );
     expect(list.data.map((c) => c.id)).not.toContain(collection.id);
+
+    // Restore: refused while an active collection took the name, then allowed.
+    const taken = await ctx.as('editor', 'POST', `/projects/${f.projectId}/collections`, {
+      body: { name: 'Hero shots' },
+    });
+    const clash = await ctx.as('editor', 'POST', `/collections/${collection.id}/restore`);
+    expect([clash.status, codeOf(clash)]).toEqual([409, 'NAME_TAKEN']);
+    await ctx.as('editor', 'PATCH', `/collections/${bodyOf<{ id: string }>(taken).id}`, {
+      body: { name: 'Hero shots 2' },
+    });
+    const back = await ctx.as('editor', 'POST', `/collections/${collection.id}/restore`);
+    expect([back.status, bodyOf<{ archivedAt: string | null }>(back).archivedAt]).toEqual([
+      200,
+      null,
+    ]);
   });
 });

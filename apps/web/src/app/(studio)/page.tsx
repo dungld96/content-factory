@@ -9,7 +9,7 @@ import { isFinished, isGenerating, statusInfo, type Stage } from '@/lib/content-
 import { jobErrorText } from '@/lib/format';
 import type { MessageKey, Translate } from '@/lib/i18n';
 import { getLocale, getT } from '@/lib/i18n/server';
-import { formatUsd } from '@/lib/money';
+import { formatUsd, formatUsdSummary } from '@/lib/money';
 import { loadOpsSummary } from '@/lib/ops-summary';
 import { loadMonthSpend } from '@/lib/spend';
 import { buildTodo, type TodoItem, type TodoKind } from '@/lib/todo';
@@ -125,8 +125,8 @@ export default async function TodoPage(props: {
               : t('todo.lead')}
             {monthSpend &&
               ` · ${t('todo.summarySpend', {
-                spent: formatUsd(monthSpend.spentUsd),
-                limit: formatUsd(monthSpend.limitUsd),
+                spent: formatUsdSummary(monthSpend.spentUsd),
+                limit: formatUsdSummary(monthSpend.limitUsd),
               })}`}
           </p>
         </div>

@@ -25,6 +25,7 @@ import type {
   StoryboardVersionDto,
 } from '@acf/contracts';
 
+import { ArchiveAction } from '@/components/archive-action';
 import { Icon, type IconName } from '@/components/icon';
 import { ProductPhotos } from '@/components/product-photos';
 import { PageCrumbs } from '@/components/shell/page-crumbs';
@@ -39,7 +40,7 @@ import { jobErrorText, platformLabel, wordCount } from '@/lib/format';
 import type { Locale, Translate } from '@/lib/i18n';
 import { getLocale, getT } from '@/lib/i18n/server';
 import { usableModels } from '@/lib/model-options';
-import { addUsd, formatUsd, sumJobCosts } from '@/lib/money';
+import { addUsd, formatUsd, formatUsdSummary, sumJobCosts } from '@/lib/money';
 import { statusInfo } from '@/lib/content-status';
 import { loadOpsSummary } from '@/lib/ops-summary';
 import { buildTodo } from '@/lib/todo';
@@ -254,6 +255,9 @@ export default async function ContentPage({
           label: m.displayName,
         }))
       : [];
+  // Archive and restore: editors of an active project, also on an archived item.
+  const canManage =
+    project.kind === 'ok' && project.data.role !== 'viewer' && project.data.archivedAt === null;
   const canEdit =
     project.kind === 'ok' && project.data.role !== 'viewer' && content.archivedAt === null;
   const scriptList = scripts.kind === 'ok' ? scripts.data.data : [];
@@ -1205,6 +1209,7 @@ export default async function ContentPage({
               <Icon name={TONE_ICON[info.tone] ?? 'history'} size={13} />
               {t(info.label)}
             </span>
+            {content.archivedAt && <span className="badge neutral">{t('projects.archived')}</span>}
           </div>
           <p>
             <Link href={`/projects/${content.projectId}`}>{projectName}</Link>
@@ -1219,19 +1224,28 @@ export default async function ContentPage({
             <div className="col ws-spend">
               <span className="num">
                 <b>
-                  {formatUsd(addUsd(totalCost.reportedUsd, totalCost.estimatedUsd))}
+                  {formatUsdSummary(addUsd(totalCost.reportedUsd, totalCost.estimatedUsd))}
                   {totalCost.unknownCalls > 0 ? ' + ?' : ''}
                 </b>{' '}
                 <span className="muted">{t('ws.spent')}</span>
               </span>
               {budget.kind === 'ok' && (
                 <span className="t-12 muted">
-                  {t('ws.budgetLeft', { amount: formatUsd(budget.data.remainingUsd) })}
+                  {t('ws.budgetLeft', { amount: formatUsdSummary(budget.data.remainingUsd) })}
                 </span>
               )}
             </div>
           )}
           <HistoryDrawer>{historyPanel}</HistoryDrawer>
+          {canManage && (
+            <ArchiveAction
+              kind="content"
+              path={`/content/${content.id}`}
+              name={content.title}
+              archived={content.archivedAt !== null}
+              afterArchive="/productions"
+            />
+          )}
         </div>
       </div>
 

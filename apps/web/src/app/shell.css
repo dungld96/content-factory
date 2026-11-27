@@ -43,6 +43,8 @@
 
 .ds .proj-switch {
   width: 100%;
+  /* The wrapper carries the margin (ds.css also sets it on the button: 4 px overflow). */
+  margin: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -500,6 +502,19 @@
   gap: 14px;
 }
 
+/* Format fields: wide enough for the duration buttons on one line (four in Vietnamese). */
+.ds .brief-section .fgrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr));
+}
+
+.ds .brief-section .seg {
+  flex-wrap: wrap;
+}
+
+.ds .brief-section .seg button {
+  white-space: nowrap;
+}
+
 .ds .fgrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
@@ -596,7 +611,9 @@
 
 .ds .audio-text {
   gap: 2px;
-  flex: 1 1 240px;
+  /* Narrow enough to stay beside the switch on a phone. */
+  flex: 1 1 160px;
+  min-width: 0;
 }
 
 .ds .audio-profile {
@@ -970,9 +987,51 @@
   width: 34px;
 }
 
+/* Month bars: labels wrap inside narrow columns (6 months on a phone). */
+.ds .bar-col > span {
+  max-width: 100%;
+  text-align: center;
+}
+
+@media (width <= 760px) {
+  .ds .plot {
+    gap: 6px;
+  }
+
+  .ds .bar-col > span {
+    font-size: 11px;
+  }
+}
+
+/* Stage rail: a long step name ("Storyboard") shortens; the gate chip keeps its place. */
+.ds .rail .st {
+  min-width: 0;
+}
+
+.ds .rail .st .lbl {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds .rail .gate {
+  flex: none;
+}
+
 .ds .bcard .row {
   flex-wrap: wrap;
   row-gap: 6px;
+}
+
+/* Narrow board columns: long state labels ("Chờ duyệt kịch bản") wrap inside the card. */
+.ds .bcard .badge {
+  height: auto;
+  min-height: 22px;
+  max-width: 100%;
+  padding-block: 3px;
+  line-height: 1.25;
+  white-space: normal;
 }
 
 .ds .bcard-text {
@@ -1976,6 +2035,7 @@ body.focus-open {
 
 .ds .bar-col {
   flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2122,6 +2182,34 @@ body.focus-open {
     display: none;
   }
 
+  /* One row: long breadcrumbs ("Cài đặt › Nhà cung cấp AI") shrink with an ellipsis instead of
+     pushing the New button onto a second row. */
+  .ds .topbar {
+    flex-wrap: nowrap;
+  }
+
+  .ds .topbar .crumbs {
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+
+  .ds .topbar .crumbs > * {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Phone: only the current page; the menu and section pickers lead back up. */
+  .ds .topbar .crumbs > :not(:last-child) {
+    display: none;
+  }
+
+  /* The brief's autosave note: the page title needs the room on a phone (saving still runs). */
+  .ds .topbar .saved-note {
+    display: none;
+  }
+
   .ds .todo-main .irow {
     flex-direction: column;
     align-items: stretch;
@@ -2151,6 +2239,15 @@ body.focus-open {
   .ds .page-head .seg {
     width: 100%;
     overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  /* One line per tab: Vietnamese labels ("Đang theo dõi") wrapped inside the 30 px height. */
+  .ds .page-head .seg a,
+  .ds .page-head .seg button {
+    flex: 1 0 auto;
+    justify-content: center;
+    white-space: nowrap;
   }
 }
 

@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import type { AssetDto, CollectionListDto, Page, ProjectDto } from '@acf/contracts';
 
 import { UploadAssetButton } from '@/components/forms';
+import { ArchiveAction } from '@/components/archive-action';
 import { Icon, type IconName } from '@/components/icon';
 import { QueryFilters } from '@/components/query-filters';
 import { PageCrumbs } from '@/components/shell/page-crumbs';
@@ -50,9 +51,13 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
   // P2b L5: collections are per project, so they are offered once a project is chosen.
   const selectedProject = projectId ? scope[0] : undefined;
   const collections = selectedProject
-    ? await apiGet<CollectionListDto>(`/projects/${selectedProject.id}/collections`)
+    ? await apiGet<CollectionListDto>(
+        `/projects/${selectedProject.id}/collections?includeArchived=true`,
+      )
     : null;
-  const collectionList = collections?.kind === 'ok' ? collections.data.data : [];
+  const allCollections = collections?.kind === 'ok' ? collections.data.data : [];
+  const collectionList = allCollections.filter((c) => c.archivedAt === null);
+  const archivedCollections = allCollections.filter((c) => c.archivedAt !== null);
   const collectionId = collectionList.find((c) => c.id === param(query, 'collection'))?.id;
   // P2b L1: the API filters and pages; one page per project.
   const filters = new URLSearchParams({ limit: String(PAGE_SIZE) });
@@ -98,6 +103,8 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
       ? t(`library.type.${type}`)
       : t('library.allAssets');
   const list = param(query, 'view') === 'list';
+  const canManageCollections =
+    selectedProject !== undefined && writable.some((p) => p.id === selectedProject.id);
 
   return (
     <>
@@ -134,8 +141,24 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
           ) : (
             <p className="t-12 muted coll-hint">{t('library.pickProject')}</p>
           )}
-          {selectedProject && writable.some((p) => p.id === selectedProject.id) && (
-            <NewCollectionForm projectId={selectedProject.id} />
+          {canManageCollections && <NewCollectionForm projectId={selectedProject.id} />}
+          {canManageCollections && archivedCollections.length > 0 && (
+            <>
+              <span className="eyebrow">{t('projects.archived')}</span>
+              {archivedCollections.map((c) => (
+                <span key={c.id} className="coll archived">
+                  <Icon name="folder" />
+                  <span className="coll-name">{c.name}</span>
+                  <ArchiveAction
+                    kind="collection"
+                    path={`/collections/${c.id}`}
+                    name={c.name}
+                    archived
+                    small
+                  />
+                </span>
+              ))}
+            </>
           )}
           <div className="divider" />
           <span className="eyebrow">{t('library.generated')}</span>
@@ -156,6 +179,16 @@ export default async function AssetsPage(props: { readonly searchParams: Promise
           <div className="row wrap lib-head">
             <h1>{heading}</h1>
             <span className="badge neutral">{assets.length}</span>
+            {activeCollection && canManageCollections && (
+              <ArchiveAction
+                kind="collection"
+                path={`/collections/${activeCollection.id}`}
+                name={activeCollection.name}
+                archived={false}
+                afterArchive={href({ collection: null })}
+                small
+              />
+            )}
             <span className="spacer" />
             <Link className={!review ? 'chip on' : 'chip'} href={href({ review: null })}>
               {t('library.chip.all')}

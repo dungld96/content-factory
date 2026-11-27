@@ -1,15 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 
-import type {
-  ContentItemDto,
-  ContentStatus,
-  CreateContentRequest,
-  Page,
-  UpdateContentRequest,
+import {
+  ApiErrorCode,
+  type ContentItemDto,
+  type ContentStatus,
+  type CreateContentRequest,
+  type Page,
+  type UpdateContentRequest,
 } from '@acf/contracts';
 import { INITIAL_BRIEF_REVISION } from '@acf/content-domain';
 
 import type { Actor } from '../auth/actor.js';
+import { ApiError } from '../common/api-error.js';
 import { definedOnly } from '../common/defined-only.js';
 import {
   archived,
@@ -173,14 +175,53 @@ export class ContentService {
     return toContentItemDto(current);
   }
 
+  /**
+   * Archives (hides) the item; nothing is deleted, so costs, jobs and assets stay traceable.
+   * Refused while a job is queued or running (`409 CONTENT_HAS_ACTIVE_JOBS`): the job would
+   * keep running, and spending, on an item nobody sees.
+   */
   async archive(actor: Actor, contentId: string): Promise<ContentItemDto> {
     const item = await this.load(contentId);
     await this.access.require(actor, item.projectId, 'editor', { mutation: true });
+    const active = await this.prisma.client.generationJob.count({
+      where: { contentItemId: contentId, status: { in: ['queued', 'running'] } },
+    });
+    if (active > 0) {
+      throw new ApiError({
+        status: HttpStatus.CONFLICT,
+        code: ApiErrorCode.ContentHasActiveJobs,
+        message: `Cancel or wait for the item's ${String(active)} active job(s) first.`,
+      });
+    }
     const { count } = await this.prisma.client.contentItem.updateMany({
       where: { id: contentId, archivedAt: null },
       data: { archivedAt: new Date() },
     });
     if (count === 0) throw archived('content item');
+    return toContentItemDto(
+      await this.prisma.client.contentItem.findUniqueOrThrow({
+        where: { id: contentId },
+        include: CONTENT_ITEM_LINKS,
+      }),
+    );
+  }
+
+  /**
+   * Brings an archived item back. Idempotent for an active item. Its project must be active and
+   * its content master too (`409 ARCHIVED`): a variant never outlives its master.
+   */
+  async restore(actor: Actor, contentId: string): Promise<ContentItemDto> {
+    const item = await this.load(contentId);
+    await this.access.require(actor, item.projectId, 'editor', { mutation: true });
+    const master = await this.prisma.client.contentMaster.findUnique({
+      where: { id: item.contentMasterId },
+      select: { archivedAt: true },
+    });
+    if (master?.archivedAt) throw archived('content master');
+    await this.prisma.client.contentItem.updateMany({
+      where: { id: contentId, archivedAt: { not: null } },
+      data: { archivedAt: null },
+    });
     return toContentItemDto(
       await this.prisma.client.contentItem.findUniqueOrThrow({
         where: { id: contentId },

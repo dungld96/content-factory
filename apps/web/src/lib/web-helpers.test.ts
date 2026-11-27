@@ -9,7 +9,7 @@ import {
   weeklyCreation,
 } from './content-status';
 import { countedLines, initials, specLabel } from './format';
-import { addUsd, formatUsd, sumJobCosts } from './money';
+import { addUsd, formatUsd, formatUsdSummary, sumJobCosts } from './money';
 
 describe('money', () => {
   it('adds decimal strings exactly', () => {
@@ -29,6 +29,15 @@ describe('money', () => {
     expect(formatUsd('1.5')).toBe('$1.50');
     expect(formatUsd('0.0840')).toBe('$0.084');
     expect(formatUsd('0.000123')).toBe('$0.000123');
+  });
+
+  it('rounds summary figures to cents, half-up; tiny amounts are <$0.01', () => {
+    expect(formatUsdSummary('1.651570623')).toBe('$1.65');
+    expect(formatUsdSummary('1.655')).toBe('$1.66');
+    expect(formatUsdSummary('20')).toBe('$20.00');
+    expect(formatUsdSummary('0')).toBe('$0.00');
+    expect(formatUsdSummary('0.004')).toBe('<$0.01');
+    expect(formatUsdSummary('0.005')).toBe('$0.01');
   });
 
   it('keeps reported, estimated and unknown cost apart', () => {

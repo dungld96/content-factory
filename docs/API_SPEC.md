@@ -154,7 +154,10 @@ Get project details.
 Update `name`, `slug`, `description`, `defaultLanguage`, `timezone` (owner).
 
 ### `POST /projects/:projectId/archive`
-Archive the project (owner). It becomes read-only; there is no unarchive.
+Archive the project (owner). It becomes read-only and leaves the default list.
+
+### `POST /projects/:projectId/restore`
+Restore an archived project (owner, idempotent); it becomes writable again.
 
 ### Members
 - `GET /projects/:projectId/members` → `{ "data": [{ "userId", "email", "displayName", "role", … }] }`.
@@ -169,7 +172,8 @@ Archive the project (owner). It becomes read-only; there is no unarchive.
   `platform` is `tiktok`, `instagram_reels`, `youtube_shorts` or `other`; `slug` is unique per
   project (`409 SLUG_TAKEN`).
 - `GET /projects/:projectId/channels` (paginated, `includeArchived`), `GET /channels/:channelId`,
-  `PATCH /channels/:channelId`, `POST /channels/:channelId/archive`.
+  `PATCH /channels/:channelId`, `POST /channels/:channelId/archive`,
+  `POST /channels/:channelId/restore` (idempotent).
 - Sending `""` for an optional text field clears it.
 
 ## 4. Characters and environments
@@ -184,7 +188,7 @@ Reads need viewer; everything else needs editor. Changes under an archived chara
 |---|---|
 | `POST /projects/:projectId/characters` | `{ name, slug, description? }`; slug unique per project |
 | `GET /projects/:projectId/characters` | paginated; each item includes `master: { id, version, approvedAt } \| null` |
-| `GET /characters/:characterId`, `PATCH`, `POST …/archive` | name/slug/description only; the master is never client-writable |
+| `GET /characters/:characterId`, `PATCH`, `POST …/archive`, `POST …/restore` | name/slug/description only; the master is never client-writable; restore is idempotent |
 | `POST /characters/:characterId/versions` | new **draft**: `{ description, rules?, primaryAssetId?, assets? }`, or `{ basedOnVersionId }` to copy an older version (fields given override the copy) |
 | `GET /characters/:characterId/versions` | paginated, newest first |
 | `GET /character-versions/:versionId` | includes `assets: [{ assetId, sortOrder, note }]` |
@@ -253,7 +257,12 @@ List content items, newest first, paginated. Filters: `channelId`, `status`, `in
 Get item details and current production status.
 
 ### `POST /content/:contentId/archive`
-Archive the content item (editor).
+Archive the content item (editor). Nothing is deleted. Refused with `409 CONTENT_HAS_ACTIVE_JOBS`
+while one of its jobs is queued or running.
+
+### `POST /content/:contentId/restore`
+Restore an archived item (editor, idempotent). `409 ARCHIVED` while its content master (or
+project) is archived: restore the master first.
 
 ### `PATCH /content/:contentId`
 Update `title`, `channelId` (or `null`), `targetPlatform`, `targetDurationSeconds`,
@@ -273,6 +282,7 @@ renders carry the audio block with the voice layer off). `format` and `status` a
 | `POST /content-masters/:masterId/variants` | 403 | 201 | `{ format, targetDurationSeconds, aspectRatio, title?, language?, channelId?, targetPlatform? }`; copies the master brief; `409 ARCHIVED` for an archived master |
 | `POST /content/:contentId/brief/resync` | 403 | ✓ | Copies the master's current brief into the item; `If-Match` |
 | `POST /content-masters/:masterId/archive` | 403 | ✓ | `409 MASTER_HAS_ACTIVE_VARIANTS` until every variant is archived |
+| `POST /content-masters/:masterId/restore` | 403 | ✓ | Idempotent; its variants stay archived until restored one by one |
 
 ## 6. Production runs and jobs
 
@@ -463,7 +473,7 @@ Schemas: `packages/contracts/src/assets.ts`.
 | `GET /projects/:projectId/assets` | viewer | paginated; filters `assetType`, `contentItemId`, `includeArchived`, `purpose` (`voiceover`/`music`), `approvalStatus`, `q` (file name or label, case-insensitive), `collectionId` |
 | `GET /projects/:projectId/collections` | viewer | Collections with `itemCount` (`includeArchived`) |
 | `POST /projects/:projectId/collections` | editor | `{ name }`; `409 NAME_TAKEN` for an active collection with the same name (case-insensitive) |
-| `PATCH /collections/:collectionId`, `POST …/archive` | editor | Rename; archive (never deleted) |
+| `PATCH /collections/:collectionId`, `POST …/archive`, `POST …/restore` | editor | Rename; archive (never deleted); restore (idempotent; `409 NAME_TAKEN` when an active collection took the name) |
 | `PUT /collections/:collectionId/assets/:assetId`, `DELETE …` | editor | Add (idempotent; same project only, else `422`) / remove a membership (`204`). Collections only organise the Library: no production path reads them |
 | `GET /assets/:assetId` | viewer | |
 | `GET /assets/:assetId/lineage` | viewer | `?direction=ancestors\|descendants&depth=1..50`; descendants are breadth-first and paginated (`limit`, `cursor`) |

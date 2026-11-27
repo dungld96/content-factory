@@ -312,7 +312,7 @@ function NewContentFormInner(props: {
 
   const topbar: ReactNode = (
     <>
-      {savedText && <span className="t-13 muted">{savedText}</span>}
+      {savedText && <span className="t-13 muted saved-note">{savedText}</span>}
       <Link className="btn" href="/productions">
         {t('common.cancel')}
       </Link>

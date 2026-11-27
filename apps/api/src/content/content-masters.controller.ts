@@ -138,4 +138,20 @@ export class ContentMastersController {
   ): Promise<ContentMasterDto> {
     return this.masters.archive(actor, params.masterId);
   }
+
+  @Post('content-masters/:masterId/restore')
+  @HttpCode(200)
+  @Endpoint({
+    summary: 'Restore an archived content master (editor); its variants stay archived',
+    tags: ['content'],
+    params: contentMasterIdParamsSchema,
+    responses: { 200: { description: 'Restored', schema: contentMasterSchema } },
+    errors: [400, 401, 403, 404, 409],
+  })
+  restore(
+    @CurrentActor() actor: Actor,
+    @ValidParams() params: MasterParams,
+  ): Promise<ContentMasterDto> {
+    return this.masters.restore(actor, params.masterId);
+  }
 }

@@ -138,4 +138,17 @@ export class ProjectsService {
     });
     return toProjectDto(project, grant.role);
   }
+
+  /** Makes an archived project writable again (owner, idempotent). */
+  async restore(actor: Actor, projectId: string): Promise<ProjectDto> {
+    const grant = await this.access.require(actor, projectId, 'owner');
+    await this.prisma.client.project.updateMany({
+      where: { id: projectId, archivedAt: { not: null } },
+      data: { archivedAt: null },
+    });
+    const project = await this.prisma.client.project.findUniqueOrThrow({
+      where: { id: projectId },
+    });
+    return toProjectDto(project, grant.role);
+  }
 }

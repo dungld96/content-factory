@@ -128,4 +128,20 @@ export class ContentController {
   ): Promise<ContentItemDto> {
     return this.content.archive(actor, params.contentId);
   }
+
+  @Post('content/:contentId/restore')
+  @HttpCode(200)
+  @Endpoint({
+    summary: 'Restore an archived content item (editor); its master must be active',
+    tags: ['content'],
+    params: contentIdParamsSchema,
+    responses: { 200: { description: 'Restored', schema: contentItemSchema } },
+    errors: [400, 401, 403, 404, 409],
+  })
+  restore(
+    @CurrentActor() actor: Actor,
+    @ValidParams() params: ContentParams,
+  ): Promise<ContentItemDto> {
+    return this.content.restore(actor, params.contentId);
+  }
 }

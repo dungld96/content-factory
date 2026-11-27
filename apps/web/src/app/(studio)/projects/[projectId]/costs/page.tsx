@@ -10,7 +10,7 @@ import { apiGet } from '@/lib/api-server';
 import { jobKindLabel } from '@/lib/format';
 import type { Translate } from '@/lib/i18n';
 import { getT } from '@/lib/i18n/server';
-import { formatUsd } from '@/lib/money';
+import { formatUsd, formatUsdSummary } from '@/lib/money';
 
 import { BudgetEditor } from './budget-editor';
 
@@ -121,14 +121,14 @@ export default async function ProjectCostsPage(props: {
         <p className="notice" role="status">
           {formatUsd(b.monthly.limitUsd) === '$0'
             ? t('pcosts.zeroBudget')
-            : t('pcosts.warning', { left: formatUsd(b.remainingUsd) })}
+            : t('pcosts.warning', { left: formatUsdSummary(b.remainingUsd) })}
         </p>
       )}
 
       <section className="stats" aria-label={t('pcosts.budget')}>
         <div className="card stat">
           <div className="stat-top">{t('costs.total')}</div>
-          <div className="stat-value">{formatUsd(c.total.totalUsd)}</div>
+          <div className="stat-value">{formatUsdSummary(c.total.totalUsd)}</div>
           <div className="stat-foot">
             {t('pcosts.ofLimit', {
               limit: formatUsd(c.budget.limitUsd),
@@ -141,17 +141,17 @@ export default async function ProjectCostsPage(props: {
           <>
             <div className="card stat">
               <div className="stat-top">{t('costs.reserved')}</div>
-              <div className="stat-value">{formatUsd(b.reservedUsd)}</div>
+              <div className="stat-value">{formatUsdSummary(b.reservedUsd)}</div>
               <div className="stat-foot">{t('costs.reservedFoot')}</div>
             </div>
             <div className="card stat">
               <div className="stat-top">{t('costs.held')}</div>
-              <div className="stat-value">{formatUsd(b.heldUsd)}</div>
+              <div className="stat-value">{formatUsdSummary(b.heldUsd)}</div>
               <div className="stat-foot">{t('costs.heldFoot')}</div>
             </div>
             <div className="card stat">
               <div className="stat-top">{t('pcosts.remaining')}</div>
-              <div className="stat-value">{formatUsd(b.remainingUsd)}</div>
+              <div className="stat-value">{formatUsdSummary(b.remainingUsd)}</div>
               <div className="stat-foot">
                 {b.unknownCalls > 0
                   ? t('costs.unknownPart', { count: b.unknownCalls })
@@ -162,13 +162,13 @@ export default async function ProjectCostsPage(props: {
         )}
         <div className="card stat">
           <div className="stat-top">{t('pcosts.retries')}</div>
-          <div className="stat-value">{formatUsd(c.retryCost.totalUsd)}</div>
+          <div className="stat-value">{formatUsdSummary(c.retryCost.totalUsd)}</div>
           <div className="stat-foot">{t('pcosts.retriesFoot')}</div>
         </div>
         <div className="card stat">
           <div className="stat-top">{t('pcosts.perVideo')}</div>
           <div className="stat-value">
-            {c.costPerApprovedVideo ? formatUsd(c.costPerApprovedVideo.perVideoUsd) : '—'}
+            {c.costPerApprovedVideo ? formatUsdSummary(c.costPerApprovedVideo.perVideoUsd) : '—'}
           </div>
           <div className="stat-foot">
             {c.costPerApprovedVideo
@@ -195,7 +195,7 @@ export default async function ProjectCostsPage(props: {
                 title={`${point.month}: ${formatUsd(point.cost.totalUsd)}`}
               />
               <span className="bar-label">
-                {point.month} · {formatUsd(point.cost.totalUsd)}
+                {point.month} · {formatUsdSummary(point.cost.totalUsd)}
               </span>
             </Link>
           ))}

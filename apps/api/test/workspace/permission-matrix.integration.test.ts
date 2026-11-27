@@ -239,6 +239,11 @@ const ROWS: Record<string, Row> = {
     path: (f) => `/projects/${f.projectId}/archive`,
     expect: [401, 404, 403, 403, 200],
   },
+  'POST /projects/:projectId/restore': {
+    method: 'POST',
+    path: (f) => `/projects/${f.projectId}/restore`,
+    expect: [401, 404, 403, 403, 200],
+  },
   'GET /projects/:projectId/members': {
     method: 'GET',
     path: (f) => `/projects/${f.projectId}/members`,
@@ -288,6 +293,11 @@ const ROWS: Record<string, Row> = {
     path: (f) => `/channels/${f.channelId}/archive`,
     expect: [401, 404, 403, 200, 200],
   },
+  'POST /channels/:channelId/restore': {
+    method: 'POST',
+    path: (f) => `/channels/${f.channelId}/restore`,
+    expect: [401, 404, 403, 200, 200],
+  },
   'POST /projects/:projectId/content': {
     method: 'POST',
     path: (f) => `/projects/${f.projectId}/content`,
@@ -313,6 +323,11 @@ const ROWS: Record<string, Row> = {
   'POST /content/:contentId/archive': {
     method: 'POST',
     path: (f) => `/content/${f.contentId}/archive`,
+    expect: [401, 404, 403, 200, 200],
+  },
+  'POST /content/:contentId/restore': {
+    method: 'POST',
+    path: (f) => `/content/${f.contentId}/restore`,
     expect: [401, 404, 403, 200, 200],
   },
   // Scene images (M4d). The fixture storyboard is pending (not approved), so estimate and
@@ -601,6 +616,11 @@ const ROWS: Record<string, Row> = {
     path: (f) => `/content-masters/${f.contentMasterId}/archive`,
     expect: [401, 404, 403, 409, 409],
   },
+  'POST /content-masters/:masterId/restore': {
+    method: 'POST',
+    path: (f) => `/content-masters/${f.contentMasterId}/restore`,
+    expect: [401, 404, 403, 200, 200],
+  },
   ...versionedRows('characters', 'characterId', 'character-versions', (f) => [
     f.characterId,
     f.characterVersionId,
@@ -656,6 +676,11 @@ const ROWS: Record<string, Row> = {
   'POST /collections/:collectionId/archive': {
     method: 'POST',
     path: () => `/collections/${UNKNOWN_ID}/archive`,
+    expect: [401, 404, 404, 404, 404],
+  },
+  'POST /collections/:collectionId/restore': {
+    method: 'POST',
+    path: () => `/collections/${UNKNOWN_ID}/restore`,
     expect: [401, 404, 404, 404, 404],
   },
   'PUT /collections/:collectionId/assets/:assetId': {
@@ -721,6 +746,11 @@ function versionedRows(
     [`POST /${plural}/:${idParam}/archive`]: {
       method: 'POST',
       path: (f) => `/${plural}/${parent(f)}/archive`,
+      expect: [401, 404, 403, 200, 200],
+    },
+    [`POST /${plural}/:${idParam}/restore`]: {
+      method: 'POST',
+      path: (f) => `/${plural}/${parent(f)}/restore`,
       expect: [401, 404, 403, 200, 200],
     },
     [`POST /${plural}/:${idParam}/versions`]: {
